@@ -228,14 +228,25 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
 
   useEffect(() => {
     clearPoll();
-    const active = bool(optimization.active) || bool(optimization.should_poll);
+    /*
+     * 轮询必须同时覆盖「质检进行中」和「优化进行中」。
+     *
+     * 原先这里只看 `optimization` —— 于是点「重新质检」后，面板抓到一次进度
+     * （比如 18%）就**再也不刷新**，而质检实际上十几秒就跑完了。
+     * 用户看到的是进度条卡住不动 = 「质检好慢」；提交时的提示还写着
+     * 「结果会自动更新」，等于给了一个不会兑现的承诺。
+     */
+    const currentQualityStatus = text(quality.effective_status || quality.status).toLowerCase();
+    const qualityInProgress = ['queued', 'running', 'pending', 'checking'].includes(currentQualityStatus);
+    const optimizationInProgress = bool(optimization.active) || bool(optimization.should_poll);
+    const active = qualityInProgress || optimizationInProgress;
     if (!active || !mounted.current) return undefined;
     const delay = Math.max(1500, number(snapshot?.next_poll_ms) || 2500);
     pollTimer.current = setTimeout(() => {
       void refresh(null).catch(() => undefined);
     }, delay);
     return clearPoll;
-  }, [clearPoll, optimization, refresh, snapshot?.next_poll_ms]);
+  }, [clearPoll, optimization, quality, refresh, snapshot?.next_poll_ms]);
 
   const configVersion = number(quality.config_version) || article.aiQualityConfigVersion || 0;
   const qualityStatus = text(quality.effective_status || quality.status).toLowerCase();
