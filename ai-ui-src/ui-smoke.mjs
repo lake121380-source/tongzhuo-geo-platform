@@ -43,8 +43,8 @@ function readAdminPassword() {
   return match[1].trim().replace(/^["']|["']$/g, '');
 }
 
-/** 期望的一级导航（顺序即断言顺序）。 */
-const TOP_LEVEL_NAV = ['总览', 'GEO 诊断', '内容中心', '发布中心', 'GEO 效果', '设置'];
+/** 期望的一级导航（顺序即断言顺序）。2026-09-13：AI 助手从「设置」里提出来，紧跟总览。 */
+const TOP_LEVEL_NAV = ['总览', 'AI 助手', 'GEO 诊断', '内容中心', '发布中心', 'GEO 效果', '设置'];
 
 /** 曾经在侧边栏出现过的静态副标签，重构后必须一个都不剩。 */
 const FORBIDDEN_BADGES = ['聚合', '核心', 'Schema', 'Spec', '资产', '闭环', '权限', '运维'];
@@ -158,8 +158,10 @@ async function main() {
     const navLabels = await page.evaluate(() => {
       const aside = document.querySelector('aside');
       if (!aside) return [];
+      // 一级入口 = 带 aria-expanded 的分组头，或「总览 / AI 助手」这两个单页入口
+      const SINGLE_PAGE = ['总览', 'AI 助手'];
       return [...aside.querySelectorAll('button')]
-        .filter((b) => b.getAttribute('aria-expanded') !== null || b.innerText.trim() === '总览')
+        .filter((b) => b.getAttribute('aria-expanded') !== null || SINGLE_PAGE.includes(b.innerText.trim()))
         .map((b) => b.innerText.trim().replace(/\s+/g, ' ').replace(/[▾▸]/g, '').trim());
     });
     record(

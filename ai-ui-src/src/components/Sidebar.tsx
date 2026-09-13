@@ -129,7 +129,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'admin-settings', label: zh ? '系统设置' : 'System Settings', icon: Settings },
         { id: 'system-updates', label: zh ? '备份与更新' : 'Backup & Update', icon: RefreshCw },
         { id: 'preview', label: zh ? '站点预览' : 'Site Preview', icon: Eye },
-        { id: 'ai-workspace', label: zh ? 'AI 助手' : 'AI Assistant', icon: Bot },
       ],
     },
   ];
@@ -212,7 +211,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </button>
 
-        {/* ②–⑥ 其余五个一级入口可展开/收起 */}
+        {/* ② AI 助手 —— 单页，紧跟总览（哥哥 2026-09-13：从「设置」里提出来） */}
+        <button
+          type="button"
+          onClick={() => onSelectTab('ai-workspace')}
+          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+            currentTab === 'ai-workspace'
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+              : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
+          }`}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <Bot className={`w-[18px] h-[18px] shrink-0 ${currentTab === 'ai-workspace' ? 'text-white' : 'text-slate-400'}`} />
+            <span className="truncate">{zh ? 'AI 助手' : 'AI Assistant'}</span>
+          </div>
+        </button>
+
+        {/* ③–⑦ 其余分组可展开/收起 */}
         {navGroups.map((group) => {
           const GroupIcon = group.icon;
           const open = isOpen(group);
