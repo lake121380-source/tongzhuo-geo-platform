@@ -17,15 +17,25 @@ return static function (array $welcomeState): array {
     $summaryEn = trim((string) ($payload['summary_en'] ?? ''));
     $tipZh = trim((string) ($payload['upgrade_tip_zh'] ?? ''));
     $tipEn = trim((string) ($payload['upgrade_tip_en'] ?? ''));
-    $releaseDate = trim((string) ($payload['release_date'] ?? ''));
-    $releaseType = trim((string) ($payload['release_type'] ?? 'feature'));
+    // `release_date` / `release_type` 由 `AdminUpdateMetadataService::fetchState()` 放在
+    // **state 顶层**（与 `releaseNotice()` 读的位置一致）；早先这里从 `payload` 里取，
+    // 而清单并不把这两项放进 payload，于是更新弹窗恒显示「发布日期：暂未标注」。
+    // 这里以 state 顶层为准，并保留 payload 兼容旧清单。
+    $releaseDate = trim((string) ($updateState['release_date'] ?? $payload['release_date'] ?? ''));
+    $releaseType = trim((string) ($updateState['release_type'] ?? $payload['release_type'] ?? 'feature'));
 
     $releaseTypeMapZh = [
+        'major' => '重大更新',
+        'minor' => '功能更新',
+        'patch' => '问题修复',
         'feature' => '功能更新',
         'fix' => '问题修复',
         'security' => '安全更新',
     ];
     $releaseTypeMapEn = [
+        'major' => 'Major release',
+        'minor' => 'Feature update',
+        'patch' => 'Bug fix',
         'feature' => 'Feature update',
         'fix' => 'Bug fix',
         'security' => 'Security update',

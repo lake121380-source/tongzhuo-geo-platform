@@ -59,22 +59,22 @@ class ReleaseVersionMappingTest extends TestCase
 
         $this->assertSame("v{$version}", $tag);
         $this->assertSame(
-            "https://github.com/yaojingang/GEOFlow/releases/download/{$tag}/GEOFlow-{$tag}.zip",
+            "https://github.com/lake121380-source/tongzhuo-geo-platform/releases/download/{$tag}/tongzhuo-geo-{$tag}.zip",
             $manifest['archive_url'],
         );
         $this->assertSame(
-            "https://github.com/yaojingang/GEOFlow/releases/tag/{$tag}",
+            "https://github.com/lake121380-source/tongzhuo-geo-platform/releases/tag/{$tag}",
             $payload['release_url'],
         );
         $this->assertSame(
-            "https://github.com/yaojingang/GEOFlow/blob/{$tag}/docs/CHANGELOG.md",
+            "https://github.com/lake121380-source/tongzhuo-geo-platform/blob/{$tag}/geoflow-src/docs/CHANGELOG.md",
             $payload['changelog_url_zh'],
         );
         $this->assertSame(
-            "https://github.com/yaojingang/GEOFlow/blob/{$tag}/docs/CHANGELOG_en.md",
+            "https://github.com/lake121380-source/tongzhuo-geo-platform/blob/{$tag}/geoflow-src/docs/CHANGELOG_en.md",
             $payload['changelog_url_en'],
         );
-        $this->assertSame("GEOFlow v{$version}", $payload['title_zh']);
-        $this->assertSame("GEOFlow v{$version}", $payload['title_en']);
+        $this->assertSame("桐灼GEO v{$version}", $payload['title_zh']);
+        $this->assertSame("TongzhuoGEO v{$version}", $payload['title_en']);
     }
 }

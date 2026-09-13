@@ -1,7 +1,7 @@
 {
   "manifest_version": "1.0.0",
   "knowledge_key": "ai_workspace_manual",
-  "captured_app_version": "3.0.0",
+  "captured_app_version": "1.0.1",
   "assets": [
     {
       "file": "01-ai-workspace-start.webp",
