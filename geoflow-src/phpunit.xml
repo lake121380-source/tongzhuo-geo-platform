@@ -34,6 +34,13 @@
         <env name="GEOFLOW_ADMIN_EMAIL" value="admin@example.com" force="true"/>
         <env name="GEOFLOW_ADMIN_PASSWORD" value="password" force="true"/>
         <env name="GEOFLOW_UPDATE_CHECK_ENABLED" value="false" force="true"/>
+        <!--
+            测试必须与本地 .env 隔离：AI 工作台的运行时开关在开发机上可能被打开
+            （2026-09-13 就是如此），而 AiWorkspaceApiTest 有一条用例专测「关闭时
+            状态接口报未就绪」。不 force 的话，本地一改 .env 这条就红。
+            需要打开的场景由用例自己 config()->set(...) 覆盖。
+        -->
+        <env name="GEOFLOW_AI_WORKSPACE_RUNTIME_ENABLED" value="false" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

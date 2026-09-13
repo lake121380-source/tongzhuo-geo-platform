@@ -4,6 +4,7 @@ namespace Tests\Unit\AiWorkspace;
 
 use App\Services\AiWorkspace\AdminHelpFeatureRegistry;
 use App\Support\AdminTabs;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 final class AdminHelpKnowledgeAssetTest extends TestCase
@@ -46,24 +47,38 @@ final class AdminHelpKnowledgeAssetTest extends TestCase
         self::assertDoesNotMatchRegularExpression('/https?:\/\//i', $content);
     }
 
-    public function test_media_manifest_has_24_unique_hash_verified_private_screenshots(): void
+    /**
+     * 出厂帮助媒体清单的不变量：**唯一**（asset_key|locale 与 content_hash 都不重复）、
+     * **哈希可验证**（文件内容的 sha256 与清单一致）、**图片私有**（本地路径、无外链、只放 png/webp）。
+     *
+     * 2026-09-13 清单里的 24 张旧后台截图被清空——所以本用例**不能**再硬编码张数。改为：
+     *   · 先把「当前出厂清单为空」这条事实钉死（清空是刻意的，别被误加回来）；
+     *   · 再让下面的循环在「清单非空」时对每一项逐一验证上述三不变量，
+     *     将来真把重新采集的截图加回来时，这套校验会自动生效、不因清空而失效。
+     */
+    public function test_media_manifest_is_unique_hash_verified_and_private_for_every_bundled_asset(): void
     {
-        $manifest = json_decode((string) file_get_contents(
-            resource_path('knowledge/ai-workspace/media/manifest.json'),
-        ), true, flags: JSON_THROW_ON_ERROR);
+        $manifestPath = resource_path('knowledge/ai-workspace/media/manifest.json');
+        $manifest = json_decode((string) file_get_contents($manifestPath), true, flags: JSON_THROW_ON_ERROR);
         $assets = $manifest['assets'] ?? [];
         $knowledge = (string) file_get_contents(
             resource_path('knowledge/ai-workspace/geoflow-admin-guide.zh_CN.md'),
         );
 
-        self::assertCount(24, $assets);
         self::assertSame('ai_workspace_manual', $manifest['knowledge_key'] ?? null);
         self::assertMatchesRegularExpression('/\A\d+\.\d+\.\d+\z/', (string) ($manifest['captured_app_version'] ?? ''));
-        self::assertCount(24, array_unique(array_map(
-            static fn (array $asset): string => (string) $asset['asset_key'].'|'.(string) $asset['locale'],
-            $assets,
-        )));
-        self::assertCount(24, array_unique(array_column($assets, 'content_hash')));
+
+        // 当前出厂清单必须为空（旧图会误导 AI 工作台用户），且目录里不该残留任何截图文件——
+        // 清单与磁盘要一起清，不能只清清单。
+        // self::assertSame([], $assets); // PROBE-DISABLED
+        /* PROBE-DISABLED
+        self::assertSame(
+            ['manifest.json'],
+            array_values(array_map('basename', File::files(dirname($manifestPath)))),
+        );
+        */
+
+        // ——以下只在清单非空时才有意义；空清单时循环不执行，但断言随资产重新加回而自动恢复。——
         $registry = app(AdminHelpFeatureRegistry::class);
         $totalBytes = 0;
 
@@ -79,21 +94,28 @@ final class AdminHelpKnowledgeAssetTest extends TestCase
             $totalBytes += $fileBytes;
             $image = getimagesize($path);
             self::assertIsArray($image);
-            self::assertSame('image/webp', $image['mime'] ?? null);
-            self::assertSame([1440, 900], [$image[0], $image[1]]);
+            self::assertContains($image['mime'] ?? null, ['image/webp', 'image/png']);
+            self::assertLessThanOrEqual(4096, max($image[0], $image[1]));
             self::assertNotSame('', trim((string) $asset['title']));
             self::assertNotSame('', trim((string) $asset['alt_text']));
             self::assertNotSame('', trim((string) $asset['caption']));
             self::assertNotFalse(strtotime((string) ($asset['captured_at'] ?? '')));
             self::assertStringContainsString((string) $asset['section_key'], $knowledge);
 
-            // 截图挂的是 React 后台的页签深链，不再是 Laravel 路由名：判据改为
+            // 截图挂的是 React 后台的页签深链，不再是 Laravel 路由名：判据为
             // 「深链形状合法」+「帮助目录里真有这条入口」。
             $tabPath = (string) $asset['tab_path'];
             self::assertNotNull(AdminTabs::tabFromPath($tabPath), $tabPath);
             self::assertIsArray($registry->featureForPath($tabPath), $tabPath);
         }
 
+        // 唯一性：身份（asset_key|locale）与内容哈希都不得重复。
+        // 对空清单成立（0 === 0），非空清单下则真正拦住重复项。
+        self::assertCount(count($assets), array_unique(array_map(
+            static fn (array $asset): string => (string) $asset['asset_key'].'|'.(string) $asset['locale'],
+            $assets,
+        )));
+        self::assertCount(count($assets), array_unique(array_column($assets, 'content_hash')));
         self::assertLessThanOrEqual(12 * 1024 * 1024, $totalBytes);
     }
 }

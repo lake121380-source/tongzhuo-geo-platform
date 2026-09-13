@@ -15,6 +15,7 @@ use App\Services\AiWorkspace\SystemKnowledgeMediaManager;
 use App\Services\Api\ApiTokenService;
 use Generator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -152,11 +153,28 @@ final class AiWorkspaceApiTest extends TestCase
         config()->set('geoflow.admin_ui_v3_enabled', true);
         Queue::fake();
         Storage::fake('local');
-        app(SystemKnowledgeBaseManager::class)->sync();
-        app(SystemKnowledgeMediaManager::class)->syncBundled();
-        $asset = KnowledgeMediaAsset::query()->where('asset_key', 'tasks.index')->firstOrFail();
+        // 出厂帮助媒体（resources/knowledge/ai-workspace/media/）已于 2026-09-13 清空，
+        // syncBundled() 此时导入 0 张。本用例守的是「媒体私有 + Bearer 可取」这条**存取链路**，
+        // 与图片是否出厂无关，因此改为直接经由与出厂导入相同的 importBytes 路径造一张受保护条目下的资产。
         $admin = $this->admin('workspace-media');
         $admin->forceFill(['role' => 'super_admin'])->save();
+        $knowledgeBase = app(SystemKnowledgeBaseManager::class)->sync()['knowledge_base'];
+        $asset = app(SystemKnowledgeMediaManager::class)->replace(
+            $knowledgeBase,
+            $admin,
+            UploadedFile::fake()->createWithContent('tasks.png', $this->tinyPng()),
+            [
+                'asset_key' => 'tasks.index',
+                'section_key' => '任务管理与内容生产',
+                'tab_path' => '/geo_admin?tab=tasks',
+                'title' => '任务列表页',
+                'alt_text' => '任务管理列表页',
+                'caption' => '在这里查看全部任务及其状态。',
+                'keywords' => ['任务', '列表'],
+                'locale' => 'zh_CN',
+                'sort_order' => 2,
+            ],
+        );
         $token = $admin->createToken('workspace-media', ['workspace:read'])->plainTextToken;
 
         $this->get('/api/v1/ai-workspace/media/'.$asset->id)->assertUnauthorized();
@@ -203,6 +221,12 @@ final class AiWorkspaceApiTest extends TestCase
             'role' => 'admin',
             'status' => 'active',
         ]);
+    }
+
+    /** 1×1 透明 PNG——仅用于让媒体导入/缩略图链路拿到一张合法图片，不参与任何视觉断言。 */
+    private function tinyPng(): string
+    {
+        return (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', true);
     }
 }
 

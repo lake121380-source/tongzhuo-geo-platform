@@ -13,6 +13,7 @@ use App\Services\AiWorkspace\SystemKnowledgeMediaManager;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\LazilyRefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -22,6 +23,20 @@ final class AiWorkspaceKnowledgeMediaTest extends TestCase
 {
     use LazilyRefreshDatabase;
 
+    /**
+     * 出厂媒体目录（resources/knowledge/ai-workspace/media/）已于 2026-09-13 清空——
+     * 原先 24 张帮助截图拍的是已退役的旧后台，会误导 AI 工作台的用户。
+     *
+     * 但本文件守着的是「出厂媒体导入 / 就绪度门禁 / 主版本复核标记」这套**机制**，
+     * 与具体张数无关。于是需要出厂媒体的用例自建夹具：把一份临时 manifest 与几张
+     * 临时图片挂在一个临时 app 根下，再走与出厂完全相同的导入路径。
+     * 由于 resource_path() 是写死的，这里用 setBasePath() 把根指过去——不改仓库里的任何文件，
+     * 其余目录（database / storage / lang / vendor …）用符号链接回真实目录。
+     */
+    private ?string $bundledMediaRoot = null;
+
+    private string $originalBasePath = '';
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -29,21 +44,33 @@ final class AiWorkspaceKnowledgeMediaTest extends TestCase
         config()->set('geoflow.admin_ui_v3_enabled', true);
     }
 
-    public function test_bundled_media_manifest_imports_24_verified_assets_idempotently(): void
+    protected function tearDown(): void
+    {
+        if ($this->bundledMediaRoot !== null) {
+            $this->app->setBasePath($this->originalBasePath);
+            File::deleteDirectory($this->bundledMediaRoot);
+            $this->bundledMediaRoot = null;
+        }
+
+        parent::tearDown();
+    }
+
+    public function test_bundled_media_manifest_imports_all_verified_assets_idempotently(): void
     {
         Queue::fake();
         Storage::fake('local');
+        $this->useBundledMediaFixture();
         $manager = app(SystemKnowledgeMediaManager::class);
 
         $this->artisan('geoflow:sync-system-knowledge', [
             '--key' => 'ai_workspace_manual',
             '--media' => true,
-        ])->expectsOutputToContain('24 imported')->assertSuccessful();
+        ])->expectsOutputToContain('2 imported')->assertSuccessful();
         $second = $manager->syncBundled();
 
-        self::assertSame(['imported' => 0, 'updated' => 0, 'unchanged' => 24, 'total' => 24], $second);
-        self::assertSame(24, KnowledgeMediaAsset::query()->where('is_active', true)->count());
-        self::assertSame(24, KnowledgeMediaAsset::query()->distinct()->count('content_hash'));
+        self::assertSame(['imported' => 0, 'updated' => 0, 'unchanged' => 2, 'total' => 2], $second);
+        self::assertSame(2, KnowledgeMediaAsset::query()->where('is_active', true)->count());
+        self::assertSame(2, KnowledgeMediaAsset::query()->distinct()->count('content_hash'));
         self::assertTrue(KnowledgeMediaAsset::query()->get()->every(
             fn (KnowledgeMediaAsset $asset): bool => $manager->isReadable($asset),
         ));
@@ -68,6 +95,7 @@ final class AiWorkspaceKnowledgeMediaTest extends TestCase
     {
         Queue::fake();
         Storage::fake('local');
+        $this->useBundledMediaFixture();
         $manager = app(SystemKnowledgeMediaManager::class);
         $knowledgeBase = app(SystemKnowledgeBaseManager::class)->sync()['knowledge_base'];
         $manager->syncBundled();
@@ -81,7 +109,7 @@ final class AiWorkspaceKnowledgeMediaTest extends TestCase
             [...$this->metadata(), 'asset_key' => 'custom.extra'],
         );
 
-        self::assertSame(24, KnowledgeMediaAsset::query()->where('is_active', true)->count());
+        self::assertSame(2, KnowledgeMediaAsset::query()->where('is_active', true)->count());
         $pendingCommand = app(SystemUpdateManualCommandService::class)->manualCommands()[0];
         self::assertSame('pending', $pendingCommand['status']);
         self::assertSame(
@@ -103,6 +131,7 @@ final class AiWorkspaceKnowledgeMediaTest extends TestCase
     {
         Queue::fake();
         Storage::fake('local');
+        $this->useBundledMediaFixture();
         $knowledgeManager = app(SystemKnowledgeBaseManager::class);
         $mediaManager = app(SystemKnowledgeMediaManager::class);
         $binding = $knowledgeManager->sync()['binding'];
@@ -168,13 +197,17 @@ final class AiWorkspaceKnowledgeMediaTest extends TestCase
     {
         Queue::fake();
         Storage::fake('local');
-        config()->set('geoflow.app_version', '4.0.0');
+        // 先把夹具里的 captured_app_version 落成当前版本，再把运行版本抬一个大版本，
+        // 这样每张出厂图都会因「主版本不一致」被标记复核——与版本号具体是几无关。
+        $this->useBundledMediaFixture();
+        $capturedMajor = (int) strtok((string) config('geoflow.app_version'), '.');
+        config()->set('geoflow.app_version', ($capturedMajor + 1).'.0.0');
         $knowledgeBase = app(SystemKnowledgeBaseManager::class)->sync()['knowledge_base'];
         $manager = app(SystemKnowledgeMediaManager::class);
 
         $manager->syncBundled();
 
-        self::assertSame(24, KnowledgeMediaAsset::query()->where('needs_review', true)->count());
+        self::assertSame(2, KnowledgeMediaAsset::query()->where('needs_review', true)->count());
         $asset = KnowledgeMediaAsset::query()->firstOrFail();
         $superAdmin = $this->admin('media-reviewer', 'super_admin');
         $manager->updateMetadata($asset, $superAdmin, ['needs_review' => false]);
@@ -518,6 +551,93 @@ final class AiWorkspaceKnowledgeMediaTest extends TestCase
             'keywords' => ['任务', '创建', '模型'],
             'locale' => 'zh_CN',
             'sort_order' => 1,
+        ];
+    }
+
+    /**
+     * 在临时 app 根下写一份临时帮助媒体 manifest + 几张临时图片，并把 base path 指过去，
+     * 让 resource_path('knowledge/ai-workspace/media/...') 命中夹具，而不是（2026-09-13 已清空的）出厂目录。
+     * 导入路径本身不变——仍是 syncBundled() / `geoflow:sync-system-knowledge --media`。
+     */
+    private function useBundledMediaFixture(): void
+    {
+        $basePath = $this->app->basePath();
+        $root = rtrim(sys_get_temp_dir(), '/\\').'/geoflow-bundled-media-'.bin2hex(random_bytes(6));
+        if (! is_dir($root) && ! mkdir($root, 0o777, true) && ! is_dir($root)) {
+            self::fail('Unable to create the temporary bundled media root.');
+        }
+
+        // 除 resources 外的一切目录/文件链接回真实路径（database / storage / lang / vendor …），
+        // 保证只有「出厂帮助媒体」这一处被替换，迁移、日志、翻译等行为不受影响。
+        foreach (array_diff(scandir($basePath) ?: [], ['.', '..', 'resources']) as $entry) {
+            @symlink($basePath.DIRECTORY_SEPARATOR.$entry, $root.DIRECTORY_SEPARATOR.$entry);
+        }
+        File::copyDirectory($basePath.'/resources', $root.'/resources');
+
+        $mediaDir = $root.'/resources/knowledge/ai-workspace/media';
+        File::ensureDirectoryExists($mediaDir);
+
+        $manifest = [
+            'manifest_version' => '1.0.0',
+            'knowledge_key' => 'ai_workspace_manual',
+            'captured_app_version' => (string) config('geoflow.app_version', '3.0.0'),
+            'assets' => [],
+        ];
+
+        foreach ($this->bundledMediaAssets() as $asset) {
+            $bytes = (string) $asset['bytes'];
+            unset($asset['bytes']);
+            File::put($mediaDir.'/'.$asset['file'], $bytes);
+            $manifest['assets'][] = $asset + [
+                'locale' => 'zh_CN',
+                'content_hash' => 'sha256:'.hash('sha256', $bytes),
+                'captured_at' => now()->toIso8601String(),
+            ];
+        }
+
+        File::put(
+            $mediaDir.'/manifest.json',
+            json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+        );
+
+        $this->originalBasePath = $basePath;
+        $this->bundledMediaRoot = $root;
+        $this->app->setBasePath($root);
+    }
+
+    /**
+     * 夹具资产：都落在 `tasks` 页签、同一 section，够验证「导入幂等 / 就绪度门禁 / 主版本复核」三条机制即可。
+     * sort_order 越大越靠后——`tasks.create.basics` 必须先于 `tasks.index` 被选中。
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function bundledMediaAssets(): array
+    {
+        return [
+            [
+                'file' => 'tasks-create-basics.png',
+                'asset_key' => 'tasks.create.basics',
+                'section_key' => '任务管理与内容生产',
+                'tab_path' => '/geo_admin?tab=tasks',
+                'title' => '任务创建基础设置',
+                'alt_text' => '任务创建页的基础设置表单',
+                'caption' => '在这里填写任务的基础信息。',
+                'keywords' => ['任务', '创建'],
+                'sort_order' => 1,
+                'bytes' => $this->pngOne(),
+            ],
+            [
+                'file' => 'tasks-index.png',
+                'asset_key' => 'tasks.index',
+                'section_key' => '任务管理与内容生产',
+                'tab_path' => '/geo_admin?tab=tasks',
+                'title' => '任务列表页',
+                'alt_text' => '任务管理列表页',
+                'caption' => '在这里查看全部任务及其状态。',
+                'keywords' => ['任务', '列表'],
+                'sort_order' => 2,
+                'bytes' => $this->pngTwo(),
+            ],
         ];
     }
 
