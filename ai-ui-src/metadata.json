@@ -1,0 +1,6 @@
+{
+  "name": "桐灼GEO",
+  "description": "面向大模型生成式搜索 (GEO) 的内容工程与多端分发系统",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

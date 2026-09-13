@@ -1,0 +1,149 @@
+map "${GEOFLOW_NGINX_PUBLIC_SCHEME}" $geoflow_forwarded_proto {
+    default "${GEOFLOW_NGINX_PUBLIC_SCHEME}";
+}
+
+map "${GEOFLOW_NGINX_PUBLIC_PORT}" $geoflow_forwarded_port {
+    default "${GEOFLOW_NGINX_PUBLIC_PORT}";
+}
+
+limit_req_zone $binary_remote_addr zone=geoflow_hosted_surface:10m rate=30r/s;
+
+map $geoflow_forwarded_proto $geoflow_https {
+    default "";
+    https on;
+}
+
+server {
+    listen 80 default_server;
+    server_name _;
+    access_log off;
+    return 444;
+}
+
+server {
+    listen 80;
+    server_name ${GEOFLOW_NGINX_PRIMARY_HOST} ${GEOFLOW_NGINX_PRIMARY_ALIASES};
+
+    include /etc/nginx/snippets/geoflow-app.conf;
+
+    # 退役拉闸：旧 Blade 后台已由 React 后台 `/geo_admin` 取代。
+    # GEOFLOW_LEGACY_ADMIN_STATE=retired（默认）→ 整条前缀 404；=live → 透传（回滚）。
+    # 改 env 后 `docker compose up -d web` 生效，无需重建镜像。
+    # 取值只有 retired / live 两个，写错会让 nginx 因 include 不到文件而启动失败（fail-fast）。
+    include /etc/nginx/snippets/legacy-admin-${GEOFLOW_LEGACY_ADMIN_STATE}.conf;
+
+    location = /manifest.webmanifest {
+        access_log off;
+        default_type application/manifest+json;
+        add_header Cache-Control "no-cache, max-age=0, must-revalidate" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        try_files $uri =404;
+    }
+
+    location = /service-worker.js {
+        access_log off;
+        default_type application/javascript;
+        add_header Cache-Control "no-cache, max-age=0, must-revalidate" always;
+        add_header Service-Worker-Allowed "/" always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        try_files $uri =404;
+    }
+
+    location ^~ /build/assets/ {
+        expires 1y;
+        access_log off;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        try_files $uri =404;
+    }
+
+    location ~* \.(?:css|js|jpg|jpeg|gif|png|svg|ico|webp|avif|ttf|otf|woff|woff2)$ {
+        expires 5m;
+        access_log off;
+        add_header Cache-Control "public, max-age=300";
+        add_header X-Content-Type-Options nosniff always;
+        add_header X-Frame-Options SAMEORIGIN always;
+        add_header Referrer-Policy strict-origin-when-cross-origin always;
+        try_files $uri =404;
+    }
+
+    location ^~ /ai-ui/ {
+        try_files $uri =404;
+    }
+
+    # The standalone Express compatibility server is not part of the Laravel
+    # deployment and must never be downloadable from the static UI directory.
+    location = /ai-ui/server.cjs {
+        return 404;
+    }
+
+    location = /ai-ui/server.cjs.map {
+        return 404;
+    }
+
+    # Keep the enterprise website at `/`. The migrated -AI application is the
+    # administration surface, while API and public discovery routes stay on
+    # their original Laravel paths.
+    location = /geo_admin {
+        add_header Cache-Control "no-store" always;
+        try_files /ai-ui/index.html =404;
+    }
+
+    location ^~ /geo_admin/ {
+        add_header Cache-Control "no-store" always;
+        try_files /ai-ui/index.html =404;
+    }
+
+    location / {
+        add_header Cache-Control "no-store" always;
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    # Reverb is intentionally available only through the primary site entrance.
+    location ~ ^/reverb/(app|apps)/ {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $geoflow_forwarded_proto;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Port $geoflow_forwarded_port;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        set $reverb_upstream reverb:18080;
+        proxy_pass http://$reverb_upstream;
+    }
+}
+
+server {
+    listen 80;
+    server_name *.${GEOFLOW_NGINX_HOSTED_ROOT_DOMAIN};
+
+    limit_req zone=geoflow_hosted_surface burst=60 nodelay;
+
+    # Never expose the retired administrator surface on hosted domains.
+    # 正则补 `\?`：`$request_uri` 包含查询串，只写 `(?:/|$)` 会让 `/legacy-admin?x=1` 漏过去（实测 302）。
+    if ($request_uri ~ ^/legacy-admin(?:/|\?|$)) {
+        return 404;
+    }
+
+    # Every hosted request resolves its Host and lifecycle state in Laravel first.
+    location / {
+        add_header Cache-Control "no-store" always;
+        try_files /__geoflow_host_must_resolve__ /index.php?$query_string;
+    }
+
+    include /etc/nginx/snippets/geoflow-app.conf;
+
+    location ~ ^/(?:geo_admin|api|horizon|reverb|broadcasting|up|telescope|_debugbar)(?:/|$) {
+        return 404;
+    }
+}

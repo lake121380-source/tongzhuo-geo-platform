@@ -1,0 +1,43 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "private": true,
+    "license": "Apache-2.0",
+    "type": "module",
+    "scripts": {
+        "build": "vite build",
+        "build:integrated": "vite build --mode integrated --base=/ai-ui/",
+        "test:api": "tsx --test src/*.test.ts src/api/*.test.ts",
+        "test:smoke": "node smoke-test.cjs",
+        "typecheck": "tsc --noEmit -p tsconfig.json"
+    },
+    "devDependencies": {
+        "@tailwindcss/vite": "^4.0.0",
+        "@types/cors": "^2.8.19",
+        "@types/express": "^5.0.6",
+        "@types/node": "^22.20.2",
+        "@types/react": "^19.2.18",
+        "@types/react-dom": "^19.2.7",
+        "@vitejs/plugin-react": "5.1.4",
+        "axios": "^1.11.0",
+        "concurrently": "^9.0.1",
+        "cropperjs": "^1.6.2",
+        "esbuild": "^0.28.2",
+        "laravel-echo": "^2.3.4",
+        "laravel-vite-plugin": "^2.0.0",
+        "playwright": "^1.62.1",
+        "pusher-js": "^8.5.0",
+        "tailwindcss": "^4.0.0",
+        "tsx": "^4.23.13",
+        "typescript": "^7.0.2",
+        "vditor": "^3.11.2",
+        "vite": "^7.0.7"
+    },
+    "dependencies": {
+        "@google/genai": "^2.21.0",
+        "cors": "^2.8.6",
+        "express": "^5.2.1",
+        "lucide-react": "^1.40.0",
+        "react": "^19.2.8",
+        "react-dom": "^19.2.8"
+    }
+}

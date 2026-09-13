@@ -1,0 +1,41 @@
+# ── 本工作区里「不属于产品」的东西：本地笔记、历史材料、工具与备份 ──
+# 唯一例外是 README.md（产品说明），它要进仓库。
+AGENTS.md
+CLAUDE.md
+docs/
+old-geo-src/
+tools/
+.review/
+.smoke-out/
+geoflow.zip
+AUDIT_REPORT.md
+BASELINE_STATUS.md
+IMPLEMENTATION_PLAN.md
+webbridge-req-debug.json
+.claude/
+publish/
+
+# ── 兜底：子项目 .gitignore 已各自覆盖，这里再压一层防止误提交 ──
+node_modules/
+vendor/
+.npm-cache/
+.env
+.env.local
+.env.integrated
+.env.prod
+.env.production
+.env.backup
+docker-data/
+storage/logs/
+storage/app/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+public/build/
+public/hot
+public/storage
+public/uploads/
+dist/
+*.log
+.DS_Store
+Thumbs.db
