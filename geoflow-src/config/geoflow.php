@@ -6,9 +6,10 @@
  * 环境变量键名与默认值见各条目旁注释；修改后建议 `php artisan config:clear`。
  */
 // 2026-09-13 哥哥确认：更新检查指向**自己的发布仓库**（不再是上游 yaojingang/GEOFlow）。
+// 2026-09-13 迁移到产品单仓后改指 `tongzhuo-geo-platform`（原为 `-AI`）。
 // 取的是「最新 release 里的 version.json 资产」——**仓库里必须先发布带该资产的 release**，否则只会得到 status=error。
 // 上游地址仍保留在 `AboutController` / `AdminWelcomeModalService` 的归属链接里（AGPL 归属声明，不随品牌改名移除）。
-$defaultUpdateMetadataUrl = 'https://github.com/lake121380-source/-AI/releases/latest/download/version.json';
+$defaultUpdateMetadataUrl = 'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/latest/download/version.json';
 $updateMetadataUrl = trim((string) env('GEOFLOW_UPDATE_METADATA_URL', $defaultUpdateMetadataUrl));
 $updateMetadataUrl = $updateMetadataUrl !== '' ? $updateMetadataUrl : $defaultUpdateMetadataUrl;
 $versionManifestPath = __DIR__.'/../version.json';

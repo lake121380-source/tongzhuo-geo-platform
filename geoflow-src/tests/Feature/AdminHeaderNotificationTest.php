@@ -53,8 +53,8 @@ class AdminHeaderNotificationTest extends TestCase
     public function test_official_release_metadata_follows_the_github_release_asset_redirects(): void
     {
         Cache::flush();
-        $metadataUrl = 'https://github.com/lake121380-source/GEOFlow/releases/latest/download/version.json';
-        $taggedAssetUrl = 'https://github.com/lake121380-source/GEOFlow/releases/download/v3.0.0/version.json';
+        $metadataUrl = 'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/latest/download/version.json';
+        $taggedAssetUrl = 'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/download/v3.0.0/version.json';
         $releaseAssetUrl = 'https://release-assets.githubusercontent.com/github-production-release-asset/version.json';
         config([
             'geoflow.app_version' => '2.3.0',
@@ -86,7 +86,7 @@ class AdminHeaderNotificationTest extends TestCase
     public function test_official_release_metadata_rejects_redirects_outside_github_release_assets(): void
     {
         Cache::flush();
-        $metadataUrl = 'https://github.com/lake121380-source/GEOFlow/releases/latest/download/version.json';
+        $metadataUrl = 'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/latest/download/version.json';
         config([
             'geoflow.app_version' => '2.3.0',
             'geoflow.update_check_enabled' => true,
@@ -110,7 +110,7 @@ class AdminHeaderNotificationTest extends TestCase
     public function test_missing_release_metadata_asset_does_not_advertise_an_update(): void
     {
         Cache::flush();
-        $metadataUrl = 'https://github.com/lake121380-source/GEOFlow/releases/latest/download/version.json';
+        $metadataUrl = 'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/latest/download/version.json';
         config([
             'geoflow.app_version' => '2.3.0',
             'geoflow.update_check_enabled' => true,
@@ -151,7 +151,7 @@ class AdminHeaderNotificationTest extends TestCase
         $notification = app(AdminUpdateMetadataService::class)->buildNotificationPayload();
 
         $this->assertSame(
-            'https://github.com/lake121380-source/GEOFlow/releases/tag/v2.1.0',
+            'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/tag/v2.1.0',
             $notification['links']['release'] ?? null,
         );
     }
@@ -171,7 +171,7 @@ class AdminHeaderNotificationTest extends TestCase
                 'version' => '2.1.0',
                 'tag' => 'v2.1.0',
                 'payload' => [
-                    'release_url' => 'https://github.com/lake121380-source/GEOFlow/releases/tag/v2.1.0/../../../../../evil/repository',
+                    'release_url' => 'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/tag/v2.1.0/../../../../../evil/repository',
                 ],
             ]),
         ]);
@@ -179,7 +179,7 @@ class AdminHeaderNotificationTest extends TestCase
         $notification = app(AdminUpdateMetadataService::class)->buildNotificationPayload();
 
         $this->assertSame(
-            'https://github.com/lake121380-source/GEOFlow/releases/tag/v2.1.0',
+            'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/tag/v2.1.0',
             $notification['links']['release'] ?? null,
         );
     }
@@ -208,11 +208,11 @@ class AdminHeaderNotificationTest extends TestCase
         $notification = app(AdminUpdateMetadataService::class)->buildNotificationPayload();
 
         $this->assertSame(
-            'https://github.com/lake121380-source/GEOFlow/blob/v2.1.0/docs/CHANGELOG.md',
+            'https://github.com/lake121380-source/tongzhuo-geo-platform/blob/v2.1.0/docs/CHANGELOG.md',
             $notification['links']['changelog']['zh-CN'] ?? null,
         );
         $this->assertSame(
-            'https://github.com/lake121380-source/GEOFlow/blob/v2.1.0/docs/CHANGELOG_en.md',
+            'https://github.com/lake121380-source/tongzhuo-geo-platform/blob/v2.1.0/docs/CHANGELOG_en.md',
             $notification['links']['changelog']['en'] ?? null,
         );
     }

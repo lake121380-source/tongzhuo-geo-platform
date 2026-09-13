@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
  */
 class AdminUpdateMetadataService
 {
-    private const GITHUB_REPOSITORY_URL = 'https://github.com/lake121380-source/-AI';
+    private const GITHUB_REPOSITORY_URL = 'https://github.com/lake121380-source/tongzhuo-geo-platform';
 
     private const OFFICIAL_RELEASE_METADATA_URL = self::GITHUB_REPOSITORY_URL.'/releases/latest/download/version.json';
 

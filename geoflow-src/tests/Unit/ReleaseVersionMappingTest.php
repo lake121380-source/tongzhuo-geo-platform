@@ -34,7 +34,7 @@ class ReleaseVersionMappingTest extends TestCase
     public function test_default_update_metadata_uses_the_latest_published_release_asset(): void
     {
         $this->assertSame(
-            'https://github.com/lake121380-source/GEOFlow/releases/latest/download/version.json',
+            'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/latest/download/version.json',
             config('geoflow.update_metadata_url'),
         );
         $this->assertStringNotContainsString(
