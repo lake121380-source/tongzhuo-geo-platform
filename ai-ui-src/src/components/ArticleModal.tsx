@@ -64,6 +64,8 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   const [showAuditor, setShowAuditor] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
+  /** 质检面板的位置，供「发布被拦下」时把用户带过去。 */
+  const qualitySectionRef = useRef<HTMLDivElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState('');
@@ -467,22 +469,63 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
             </div>
 
             {apiMode && apiClient && (
-              <ArticleQualityPanel
-                article={article}
-                apiClient={apiClient}
-                onArticleStateChange={onArticleStateChange}
-                lang={lang}
-              />
+              <div ref={qualitySectionRef}>
+                <ArticleQualityPanel
+                  article={article}
+                  apiClient={apiClient}
+                  onArticleStateChange={onArticleStateChange}
+                  lang={lang}
+                />
+              </div>
             )}
           </div>
+
+          {/*
+            发布被门禁拦下时：给出**原因 + 出口**。
+            原先这条只渲染在页脚右侧一个 max-w-xs 的小红框里，用户只看到一句
+            「AI 质检发现严重问题，文章禁止发布」，既不知道去哪改、也不知道怎么改。
+          */}
+          {publishError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="mx-4 mb-3 rounded-xl border border-amber-500/40 bg-amber-950/20 px-4 py-3"
+            >
+              <div className="text-sm font-bold text-amber-100">
+                {lang === 'zh' ? '这篇文章现在还不能发布' : 'This article cannot be published yet'}
+              </div>
+              <div className="mt-1 text-xs leading-relaxed text-amber-100">{publishError}</div>
+              <div className="mt-2 text-xs leading-relaxed text-amber-100">
+                {lang === 'zh'
+                  ? '可以这样处理：① 到下方「AI 质检」区点『启动 AI 优化』，让模型重写正文后重新质检；② 或点『编辑文章』自己改；③ 处理完再回来点一次「通过终审并上线」。'
+                  : 'Next steps: ① open the AI quality section below and click "Start AI optimization" to rewrite and re-check; ② or click "Edit article" to fix it yourself; ③ then press "Approve & Publish" again.'}
+              </div>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => qualitySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                  className="rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/40"
+                >
+                  {lang === 'zh' ? '去 AI 质检区优化 →' : 'Go to AI quality →'}
+                </button>
+                <button
+                  type="button"
+                  onClick={beginEditing}
+                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700/60"
+                >
+                  {lang === 'zh' ? '编辑文章' : 'Edit article'}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Modal Footer */}
           <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between">
             <div className="text-xs text-slate-400">ID: {article.id}</div>
             <div className="flex items-center gap-2">
-              {(publishError || editError || actionNotice) && (
+              {(editError || actionNotice) && (
                 <div role="alert" aria-live="polite" className="max-w-xs rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-1.5 text-xs text-red-200">
-                  {editError || publishError || actionNotice}
+                  {editError || actionNotice}
                 </div>
               )}
               {isEditing ? (
