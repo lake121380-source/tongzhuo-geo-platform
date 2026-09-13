@@ -19,7 +19,6 @@ import {
   Layers,
   Award,
   TrendingUp,
-  CheckCircle2,
   ChevronDown,
   Activity,
   Settings,
@@ -43,6 +42,26 @@ interface SidebarProps {
   mode?: 'demo' | 'geoflow';
 }
 
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  /** 只有「需要用户处理的数量」才配数字徽标。 */
+  badge?: number;
+}
+
+interface NavGroup {
+  groupKey: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  items: NavItem[];
+}
+
+/**
+ * 一级导航按「用户要完成的任务」组织，不按系统实现分层。
+ * 共 6 个一级入口：总览（单页）+ 5 个可折叠分组。
+ * tab id 一律不动 —— 深链、权限 scope 与路由都挂在 id 上。
+ */
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
@@ -51,280 +70,191 @@ export const Sidebar: React.FC<SidebarProps> = ({
   disabledTabs = [],
   mode = 'demo',
 }) => {
-  // 3-Stage Workflow Grouping
-  const workflowGroups = [
+  const zh = lang === 'zh';
+
+  const navGroups: NavGroup[] = [
     {
-      groupKey: 'foundation',
-      title: lang === 'zh' ? '阶段一 · 底层基准与合规' : 'Phase 1 · Foundation & Crawlers',
-      subtitle: lang === 'zh' ? 'SEO筑基、爬虫策略与实体消歧' : 'SEO, Robots & Entity EEAT',
+      groupKey: 'diagnosis',
+      label: zh ? 'GEO 诊断' : 'Diagnosis',
+      icon: Activity,
       items: [
-        {
-          id: 'seo_dashboard',
-          label: lang === 'zh' ? 'SEO 综合决策大盘' : 'SEO Dashboard',
-          icon: Activity,
-          badgeText: lang === 'zh' ? '聚合' : 'Hub',
-        },
-        {
-          id: 'seo_foundation',
-          label: lang === 'zh' ? 'SEO 筑基与双轨地图' : 'SEO & Dual Sitemap',
-          icon: Layers,
-          badgeText: lang === 'zh' ? '核心' : 'Core',
-        },
-        {
-          id: 'robots_policy',
-          label: lang === 'zh' ? 'AI 爬虫访问防线' : 'Crawler Policy',
-          icon: ShieldCheck,
-        },
-        {
-          id: 'brand_entity',
-          label: lang === 'zh' ? '品牌实体与 E-E-A-T' : 'Entity & EEAT',
-          icon: Award,
-          badgeText: 'Schema',
-        },
-        {
-          id: 'url_scanner',
-          label: lang === 'zh' ? '全站 URL 渲染体检' : 'URL Inspector',
-          icon: Globe,
-        },
+        { id: 'brand_entity', label: zh ? '品牌实体' : 'Brand Entity', icon: Award },
+        { id: 'seo_dashboard', label: zh ? 'SEO 总览' : 'SEO Overview', icon: Activity },
+        { id: 'url_scanner', label: zh ? '页面体检' : 'Page Inspector', icon: Globe },
+        { id: 'seo_foundation', label: zh ? '站点 SEO' : 'Site SEO', icon: Layers },
+        { id: 'robots_policy', label: zh ? '爬虫策略' : 'Crawler Policy', icon: ShieldCheck },
+        { id: 'llmstxt', label: zh ? 'llms.txt' : 'llms.txt', icon: FileCode2 },
       ],
     },
     {
-      groupKey: 'content_engine',
-      title: lang === 'zh' ? '阶段二 · 核心语料与生产' : 'Phase 2 · Content Engine',
-      subtitle: lang === 'zh' ? '原子切片、知识库与/llms.txt' : 'Chunks, Knowledge & /llms.txt',
+      groupKey: 'content',
+      label: zh ? '内容中心' : 'Content',
+      icon: Sparkles,
       items: [
-        {
-          id: 'dashboard',
-          label: lang === 'zh' ? '概览大盘' : 'Dashboard',
-          icon: LayoutDashboard,
-        },
-        {
-          id: 'ai-workspace',
-          label: lang === 'zh' ? 'AI 工作台' : 'AI Workspace',
-          icon: Bot,
-          badgeText: lang === 'zh' ? '真实' : 'Live',
-        },
-        {
-          id: 'generator',
-          label: lang === 'zh' ? 'AI 内容工坊' : 'AI Studio',
-          icon: Sparkles,
-        },
-        {
-          id: 'articles',
-          label: lang === 'zh' ? '内容与审核' : 'Content & Review',
-          icon: FileText,
-          badge: badgeCounts.articles,
-        },
-        {
-          id: 'llmstxt',
-          label: lang === 'zh' ? '/llms.txt 规范管理' : '/llms.txt Hub',
-          icon: FileCode2,
-          badgeText: 'Spec',
-        },
-        {
-          id: 'knowledge',
-          label: lang === 'zh' ? '知识库与 RAG' : 'Knowledge & RAG',
-          icon: Database,
-        },
-        {
-          id: 'materials',
-          label: lang === 'zh' ? '素材库管理' : 'Material libraries',
-          icon: FolderKanban,
-          badgeText: lang === 'zh' ? '资产' : 'Assets',
-        },
-        {
-          id: 'tasks',
-          label: lang === 'zh' ? '任务与调度' : 'Tasks & Pipeline',
-          icon: Workflow,
-          badge: badgeCounts.tasks,
-        },
-        {
-          id: 'distribution',
-          label: lang === 'zh' ? '多端分发中台' : 'Distribution Hub',
-          icon: Radio,
-          badge: badgeCounts.channels,
-        },
-        {
-          id: 'manual-publications',
-          label: lang === 'zh' ? '手动发布工单' : 'Manual publishing',
-          icon: ClipboardCheck,
-          badgeText: lang === 'zh' ? '闭环' : 'Governed',
-        },
+        { id: 'generator', label: zh ? '写文章' : 'Write', icon: Sparkles },
+        { id: 'articles', label: zh ? '文章与审核' : 'Articles & Review', icon: FileText, badge: badgeCounts.articles },
+        { id: 'knowledge', label: zh ? '知识库' : 'Knowledge', icon: Database },
+        { id: 'materials', label: zh ? '素材库' : 'Materials', icon: FolderKanban },
       ],
     },
     {
-      groupKey: 'intelligence',
-      title: lang === 'zh' ? '阶段三 · 监测洞察与归因' : 'Phase 3 · Intelligence & Attribution',
-      subtitle: lang === 'zh' ? '问答雷达、沙盒与转化漏斗' : 'Radar, Sandbox & Funnel',
+      groupKey: 'publish',
+      label: zh ? '发布中心' : 'Publishing',
+      icon: Radio,
       items: [
-        {
-          id: 'attribution_funnel',
-          label: lang === 'zh' ? 'AI 转化漏斗与归因' : 'AI Traffic Funnel',
-          icon: TrendingUp,
-          badgeText: lang === 'zh' ? '闭环' : 'ROI',
-        },
-        {
-          id: 'query_radar',
-          label: lang === 'zh' ? '查询雷达' : 'Query Radar',
-          icon: Search,
-        },
-        {
-          id: 'competitor',
-          label: lang === 'zh' ? '竞品声量雷达' : 'Competitor Radar',
-          icon: Flame,
-        },
-        {
-          id: 'sandbox',
-          label: lang === 'zh' ? 'AI 命中模拟沙盒' : 'AI Citation Sandbox',
-          icon: Compass,
-        },
-        {
-          id: 'analytics',
-          label: lang === 'zh' ? 'GEO 指标与大盘' : 'GEO & Analytics',
-          icon: BarChart3,
-        },
-        {
-          id: 'leads',
-          label: lang === 'zh' ? '表单与线索' : 'Forms & Leads',
-          icon: ContactRound,
-          badgeText: lang === 'zh' ? '真实' : 'Live',
-        },
-        {
-          id: 'ai-models',
-          label: lang === 'zh' ? '模型与提示词' : 'Models & Prompts',
-          icon: Sliders,
-        },
-        {
-          id: 'admin-settings',
-          label: lang === 'zh' ? '系统设置与安全' : 'Settings & Security',
-          icon: Settings,
-          badgeText: lang === 'zh' ? '权限' : 'Access',
-        },
-        {
-          id: 'system-updates',
-          label: lang === 'zh' ? '更新、备份与恢复' : 'Update & Recovery',
-          icon: RefreshCw,
-          badgeText: lang === 'zh' ? '运维' : 'Ops',
-        },
-        {
-          id: 'preview',
-          label: lang === 'zh' ? '前台站点预览' : 'Site Preview',
-          icon: Eye,
-        },
+        { id: 'distribution', label: zh ? '分发渠道' : 'Channels', icon: Radio, badge: badgeCounts.channels },
+        { id: 'tasks', label: zh ? '生成任务' : 'Generation Tasks', icon: Workflow, badge: badgeCounts.tasks },
+        { id: 'manual-publications', label: zh ? '手动发布' : 'Manual Publish', icon: ClipboardCheck },
+      ],
+    },
+    {
+      groupKey: 'results',
+      label: zh ? 'GEO 效果' : 'Results',
+      icon: TrendingUp,
+      items: [
+        { id: 'query_radar', label: zh ? 'AI 问答监测' : 'AI Answer Tracking', icon: Search },
+        { id: 'competitor', label: zh ? '竞品对比' : 'Competitors', icon: Flame },
+        { id: 'sandbox', label: zh ? '引用测试' : 'Citation Test', icon: Compass },
+        { id: 'analytics', label: zh ? '数据分析' : 'Analytics', icon: BarChart3 },
+        { id: 'attribution_funnel', label: zh ? 'AI 引流与转化' : 'AI Traffic & Conversion', icon: TrendingUp },
+        { id: 'leads', label: zh ? '线索' : 'Leads', icon: ContactRound },
+      ],
+    },
+    {
+      groupKey: 'settings',
+      label: zh ? '设置' : 'Settings',
+      icon: Settings,
+      items: [
+        { id: 'ai-models', label: zh ? 'AI 模型与提示词' : 'Models & Prompts', icon: Sliders },
+        { id: 'admin-settings', label: zh ? '系统设置' : 'System Settings', icon: Settings },
+        { id: 'system-updates', label: zh ? '备份与更新' : 'Backup & Update', icon: RefreshCw },
+        { id: 'preview', label: zh ? '站点预览' : 'Site Preview', icon: Eye },
+        { id: 'ai-workspace', label: zh ? 'AI 助手' : 'AI Assistant', icon: Bot },
       ],
     },
   ];
 
+  // 用户手动展开/收起会覆盖默认；默认只展开「当前页所在的那一组」。
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const containsActive = (group: NavGroup) => group.items.some((item) => item.id === currentTab);
+  const isOpen = (group: NavGroup) => overrides[group.groupKey] ?? containsActive(group);
+  const toggle = (group: NavGroup) =>
+    setOverrides((prev) => ({ ...prev, [group.groupKey]: !(prev[group.groupKey] ?? containsActive(group)) }));
+
+  const renderItem = (item: NavItem) => {
+    const Icon = item.icon;
+    const isActive = currentTab === item.id;
+    const isDisabled = disabledTabs.includes(item.id);
+    return (
+      <button
+        key={item.id}
+        type="button"
+        disabled={isDisabled}
+        onClick={() => onSelectTab(item.id)}
+        title={
+          isDisabled
+            ? zh
+              ? '数据口径与业务语义正在核验'
+              : 'Data semantics are under verification'
+            : undefined
+        }
+        className={`w-full flex items-center justify-between pl-8 pr-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
+          isActive
+            ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+            : isDisabled
+              ? 'cursor-not-allowed text-slate-600 opacity-60'
+              : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+        }`}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+          <span className="truncate">{item.label}</span>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          {item.badge !== undefined && item.badge > 0 && (
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
+                isActive ? 'bg-indigo-700 text-white' : 'bg-slate-800 text-slate-300'
+              }`}
+            >
+              {item.badge}
+            </span>
+          )}
+          {isDisabled && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-600 border border-slate-700">
+              {zh ? '核验中' : 'Verifying'}
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  };
+
+  const overviewActive = currentTab === 'dashboard';
+
   return (
     <aside className="w-64 border-r border-slate-800 bg-slate-900/90 p-3 flex flex-col justify-between shrink-0 h-full overflow-hidden select-none">
-      {/* Scrollable Workflow Navigation List */}
-      <div className="space-y-4 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-        {workflowGroups.map((group, groupIdx) => (
-          <div key={group.groupKey} className="space-y-1">
-            {/* Section Header */}
-            <div className="px-2 pt-2 pb-1 border-b border-slate-800/80 mb-1.5 flex items-center justify-between">
-              <div>
-                <div className="text-[11px] font-bold text-slate-300 tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0"></span>
-                  <span>{group.title}</span>
-                </div>
-                <div className="text-[10px] text-slate-400 font-normal pl-3">
-                  {group.subtitle}
-                </div>
-              </div>
-            </div>
-
-            {/* Menu Items within Group */}
-            <div className="space-y-0.5">
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const isActive = currentTab === item.id;
-                const isDisabled = disabledTabs.includes(item.id);
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => onSelectTab(item.id)}
-                    title={isDisabled
-                      ? (lang === 'zh' ? '数据口径与业务语义正在核验' : 'Data semantics are under verification')
-                      : undefined}
-                    className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
-                      isActive
-                        ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
-                        : isDisabled
-                          ? 'cursor-not-allowed text-slate-600 opacity-60'
-                          : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Icon
-                        className={`w-4 h-4 shrink-0 ${
-                          isActive ? 'text-white' : 'text-slate-400'
-                        }`}
-                      />
-                      <span className="truncate">{item.label}</span>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0 ml-1">
-                      {/* Badge counter */}
-                      {item.badge !== undefined && item.badge > 0 && (
-                        <span
-                          className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold tabular-nums ${
-                            isActive ? 'bg-indigo-700 text-white' : 'bg-slate-800 text-slate-300'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-
-                      {/* Pill Tag (e.g. Core, Schema, ROI) */}
-                      {item.badgeText && !isDisabled && (
-                        <span
-                          className={`text-[9px] px-1.5 py-0.2 rounded tracking-tight font-semibold uppercase ${
-                            isActive
-                              ? 'bg-indigo-700/80 text-white'
-                              : 'bg-indigo-950/80 text-indigo-300 border border-indigo-800/60'
-                          }`}
-                        >
-                          {item.badgeText}
-                        </span>
-                      )}
-                      {isDisabled && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-600 border border-slate-700">
-                          {lang === 'zh' ? '核验中' : 'Verifying'}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+      <div className="space-y-1 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+        {/* ① 总览 —— 单页，直接进入 */}
+        <button
+          type="button"
+          onClick={() => onSelectTab('dashboard')}
+          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+            overviewActive
+              ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
+              : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
+          }`}
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <LayoutDashboard className={`w-4 h-4 shrink-0 ${overviewActive ? 'text-white' : 'text-slate-400'}`} />
+            <span className="truncate">{zh ? '总览' : 'Overview'}</span>
           </div>
-        ))}
+        </button>
+
+        {/* ②–⑥ 其余五个一级入口可展开/收起 */}
+        {navGroups.map((group) => {
+          const GroupIcon = group.icon;
+          const open = isOpen(group);
+          const active = containsActive(group);
+          return (
+            <div key={group.groupKey}>
+              <button
+                type="button"
+                onClick={() => toggle(group)}
+                aria-expanded={open}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  active && !open
+                    ? 'text-white bg-slate-800/60'
+                    : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <GroupIcon className={`w-4 h-4 shrink-0 ${active ? 'text-indigo-300' : 'text-slate-400'}`} />
+                  <span className="truncate">{group.label}</span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 shrink-0 text-slate-500 transition-transform ${open ? '' : '-rotate-90'}`}
+                />
+              </button>
+
+              {open && <div className="space-y-0.5 mt-0.5">{group.items.map(renderItem)}</div>}
+            </div>
+          );
+        })}
       </div>
 
       {/* System Status Footer */}
       <div className="pt-3 border-t border-slate-800 shrink-0">
         <div className="p-2.5 bg-slate-800/50 rounded-lg border border-slate-800 text-xs">
-          <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               <span className="text-slate-200 font-semibold text-xs">
-                {lang === 'zh'
-                  ? (mode === 'geoflow' ? '桐灼GEO API 已认证' : '演示模式')
-                  : (mode === 'geoflow' ? '桐灼GEO API Authenticated' : 'Demo mode')}
+                {mode === 'geoflow' ? (zh ? '已连接后台服务' : 'Backend connected') : zh ? '演示模式' : 'Demo mode'}
               </span>
             </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
-               {mode === 'geoflow' ? 'API v1' : 'v2.5'}
-            </span>
           </div>
-             <p className="text-[10px] text-slate-400 leading-tight">
-              {lang === 'zh'
-               ? (mode === 'geoflow' ? '真实 API → 质量门禁 → 可追溯发布' : 'SEO筑基 → 原子切片 → AI引流归因')
-               : (mode === 'geoflow' ? 'Real API → Quality gates → Audited publishing' : 'SEO Base → Atomic Chunks → Attribution')}
-          </p>
         </div>
       </div>
     </aside>
