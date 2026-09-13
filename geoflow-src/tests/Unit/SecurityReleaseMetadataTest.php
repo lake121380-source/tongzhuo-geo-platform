@@ -6,41 +6,38 @@ use Tests\TestCase;
 
 class SecurityReleaseMetadataTest extends TestCase
 {
-    public function test_current_manifest_uses_immutable_release_urls_and_upgrade_guidance(): void
+    public function test_v300_manifest_uses_immutable_release_urls_and_major_upgrade_guidance(): void
     {
         $manifest = json_decode((string) file_get_contents(base_path('version.json')), true, flags: JSON_THROW_ON_ERROR);
         $payload = $manifest['payload'];
 
-        $this->assertSame('1.0.1', $manifest['version']);
-        $this->assertSame('v1.0.1', $manifest['tag']);
-        $this->assertSame('2026-09-13', $manifest['release_date']);
+        $this->assertSame('3.0.0', $manifest['version']);
+        $this->assertSame('2026-09-05', $manifest['release_date']);
         $this->assertSame('major', $manifest['release_type']);
         $this->assertSame(
-            'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/download/v1.0.1/tongzhuo-geo-v1.0.1.zip',
+            'https://github.com/yaojingang/GEOFlow/releases/download/v3.0.0/GEOFlow-v3.0.0.zip',
             $manifest['archive_url'],
         );
         $this->assertSame(
-            'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/tag/v1.0.1',
+            'https://github.com/yaojingang/GEOFlow/releases/tag/v3.0.0',
             $payload['release_url'],
         );
         $this->assertSame(
-            'https://github.com/lake121380-source/tongzhuo-geo-platform/blob/v1.0.1/geoflow-src/docs/CHANGELOG.md',
+            'https://github.com/yaojingang/GEOFlow/blob/v3.0.0/docs/CHANGELOG.md',
             $payload['changelog_url_zh'],
         );
         $this->assertSame(
-            'https://github.com/lake121380-source/tongzhuo-geo-platform/blob/v1.0.1/geoflow-src/docs/CHANGELOG_en.md',
+            'https://github.com/yaojingang/GEOFlow/blob/v3.0.0/docs/CHANGELOG_en.md',
             $payload['changelog_url_en'],
         );
 
-        // 安全属性（与上一版同源，只换了目标仓库）：发布元数据必须指向**不可变**的
-        // tag 固定地址，绝不能指向会漂移的分支——否则「最新版本」可被任意提交改写。
         $encoded = json_encode($manifest, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $this->assertStringNotContainsString('/main.zip', $encoded);
         $this->assertStringNotContainsString('/blob/main/', $encoded);
-        foreach (['migrate', 'security-audit', 'queue', 'back up'] as $requiredText) {
+        foreach (['migrate', 'security-audit', 'queue', 'wildcard dns'] as $requiredText) {
             $this->assertStringContainsString($requiredText, strtolower($payload['upgrade_tip_en']));
         }
-        foreach (['备份', '排空', 'security-audit'] as $requiredText) {
+        foreach (['备份', '排空', '泛 DNS', 'readiness'] as $requiredText) {
             $this->assertStringContainsString($requiredText, $payload['upgrade_tip_zh']);
         }
     }
