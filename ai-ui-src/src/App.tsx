@@ -29,9 +29,6 @@ import { SeoConfigurationView } from './components/SeoConfigurationView';
 import { RealSeoDashboardView } from './components/RealSeoDashboardView';
 import { BrandEntityEeatView } from './components/BrandEntityEeatView';
 import { AiAttributionFunnelView } from './components/AiAttributionFunnelView';
-import { ExecutiveScorecardModal } from './components/ExecutiveScorecardModal';
-import { PlainGlossaryModal } from './components/PlainGlossaryModal';
-import { DevHandoffModal } from './components/DevHandoffModal';
 import { Article, Category, Task, KnowledgeBase, KnowledgeChunk, DistributionChannel, AiModelConfig, PromptTemplate, AnalyticsOverview } from './types';
 import { LoginView } from './components/LoginView';
 import { ApiUnavailableView } from './components/ApiUnavailableView';
@@ -180,9 +177,6 @@ export default function App() {
 
   // Selected Article for modal reader
   const [activeArticleModal, setActiveArticleModal] = useState<Article | null>(null);
-  const [showScorecardModal, setShowScorecardModal] = useState(false);
-  const [showGlossaryModal, setShowGlossaryModal] = useState(false);
-  const [showDevHandoffModal, setShowDevHandoffModal] = useState(false);
   const taskPollTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const taskPollAttempts = useRef<Map<string, number>>(new Map());
   const taskPollFailures = useRef<Map<string, number>>(new Map());
@@ -890,6 +884,17 @@ export default function App() {
     } catch (error) {
       reportApiError(error, '分发任务重试失败');
     }
+  };
+
+  /**
+   * 分发任务列表的轮询读取入口。
+   *
+   * 「排队中/发送中」的任务不会自己走到终态，而列表只在启动和用户操作时刷新，
+   * 所以 DistributionView 在存在未终态任务时按需调用这里重新拉取（请求与启动一致）。
+   */
+  const handleRefreshDistributionJobs = async () => {
+    const page = await apiClient.listDistributionJobs({ page: 1, per_page: 100 });
+    setDistributionJobs(page.items || []);
   };
 
   const handleCreateTask = async (taskData: Partial<Task> & Record<string, unknown>) => {
@@ -1658,9 +1663,6 @@ export default function App() {
         onLogout={apiEnabled ? handleApiLogout : undefined}
         onQuickGenerate={() => navigateToTab('generator')}
         onOpenPreview={() => navigateToTab('preview')}
-        onOpenScorecard={apiEnabled ? undefined : () => setShowScorecardModal(true)}
-        onOpenGlossary={apiEnabled ? undefined : () => setShowGlossaryModal(true)}
-        onOpenDevHandoff={apiEnabled ? undefined : () => setShowDevHandoffModal(true)}
       />
 
       {/* Main Body */}
@@ -1707,8 +1709,6 @@ export default function App() {
                 tasks={tasks}
                 onNavigate={navigateToTab}
                 onSelectArticle={handleSelectArticle}
-                onOpenGlossary={() => setShowGlossaryModal(true)}
-                onOpenDevHandoff={() => setShowDevHandoffModal(true)}
                 lang={lang}
                 apiMode={apiEnabled}
                 analyticsOverview={analyticsOverview}
@@ -1819,6 +1819,7 @@ export default function App() {
                 channels={channels}
                 hostedSites={hostedSites}
                 distributionJobs={distributionJobs}
+                onRefreshDistributionJobs={apiEnabled ? handleRefreshDistributionJobs : undefined}
                 onAddChannel={handleAddChannel}
                 onSyncChannel={handleSyncChannel}
                 onRetryDistribution={handleRetryDistribution}
@@ -2057,28 +2058,6 @@ export default function App() {
         }) : undefined}
         lang={lang}
         apiMode={apiEnabled}
-      />
-
-      {/* Global Executive Scorecard Modal */}
-      <ExecutiveScorecardModal
-        isOpen={showScorecardModal}
-        onClose={() => setShowScorecardModal(false)}
-        lang={lang}
-        onNavigateTab={navigateToTab}
-      />
-
-      {/* Beginner Plain Glossary Modal */}
-      <PlainGlossaryModal
-        isOpen={showGlossaryModal}
-        onClose={() => setShowGlossaryModal(false)}
-        lang={lang}
-      />
-
-      {/* Developer Handoff Package Modal */}
-      <DevHandoffModal
-        isOpen={showDevHandoffModal}
-        onClose={() => setShowDevHandoffModal(false)}
-        lang={lang}
       />
     </div>
   );

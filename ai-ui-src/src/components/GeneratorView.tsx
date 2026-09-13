@@ -873,8 +873,8 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
               </h3>
               <p className="text-xs text-slate-400 max-w-sm">
                 {lang === 'zh'
-                  ? '在左侧配置标题、关键词与知识库后，点击“立即开始 AI 生成”即可实时产出 GEO 规范文章。'
-                  : 'Configure the topic on the left and click Generate to see the grounded GEO article.'}
+                  ? '在左侧配置标题、关键词与知识库后，点击“立即开始 AI 生成”会创建一条生成任务；调度器会在一分钟内产出草稿，届时到「文章与审核」查看。'
+                  : 'Configure the topic on the left and click Generate; it creates a generation task, and the draft appears under “Articles & Review” within about a minute.'}
               </p>
             </div>
           )}

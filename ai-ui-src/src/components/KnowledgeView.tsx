@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Database, Plus, Search, Layers, CheckCircle2, FileCode, Zap, AlertTriangle, RefreshCw, History, ImagePlus, Power } from 'lucide-react';
 import { KnowledgeBase, KnowledgeChunk } from '../types';
 import PermissionNotice from './PermissionNotice';
 import { describeApiError } from '../api/permissions';
 import { GeoFlowApiClient } from '../api/geoflowClient';
+import { mapKnowledgeBase } from '../api/mappers';
 import KnowledgeFactWorkbench from './KnowledgeFactWorkbench';
 import EnterpriseKnowledgeView from './EnterpriseKnowledgeView';
 
@@ -64,6 +65,11 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [mediaForm, setMediaForm] = useState({ asset_key: '', section_key: '', route_name: '', title: '', alt_text: '', caption: '', keywords: '' });
+  // 切片生成中的轮询计时器；见下方 kbPollTimer 对应的 effect。
+  const kbPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 回调存进 ref：父组件每次渲染都会生成新的内联函数，写进依赖会不停重置计时器。
+  const knowledgeChangedRef = useRef(onKnowledgeBasesChanged);
+  useEffect(() => { knowledgeChangedRef.current = onKnowledgeBasesChanged; }, [onKnowledgeBasesChanged]);
 
   // Semantic Search Tester
   const [searchQuery, setSearchQuery] = useState('HubSpot 对比传统 CRM');
@@ -114,6 +120,46 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
       .catch((error) => { if (!cancelled) setAssetError(describeApiError(error, lang === 'zh' ? '无法读取知识资产详情' : 'Unable to load knowledge assets', lang)); });
     return () => { cancelled = true; };
   }, [activeKb?.id, apiClient, apiMode, canRead, lang]);
+
+  /**
+   * 「重建切片」只 reload 一次，状态会停在 processing，文案却是「请稍后刷新」——
+   * 用户不会一直手动刷，界面就永远停在「切片正在由后端生成」。
+   *
+   * processing 期间轮询单条详情：后端跑完（状态离开 processing）就停，并同步一次外壳，
+   * 让列表状态和新切片落到界面上。
+   *
+   * 刻意不拿 onKnowledgeBasesChanged 当每轮的刷新源：它会整页重载并弹出启动遮罩，
+   * 每 3s 闪一次比状态不动更糟。轮询只用一次轻量 GET，收敛后才同步一次。
+   */
+  useEffect(() => {
+    if (kbPollTimer.current) clearTimeout(kbPollTimer.current);
+    kbPollTimer.current = null;
+    if (!apiMode || !apiClient || !canRead || !activeKb?.id || activeKb.status !== 'processing') return undefined;
+    const kbId = activeKb.id;
+    const client = apiClient;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const value = await client.getKnowledgeBase(kbId);
+        if (cancelled) return;
+        const item = value && typeof value === 'object' && !Array.isArray(value) ? value.item : undefined;
+        const status = mapKnowledgeBase(item && typeof item === 'object' ? item as Record<string, unknown> : {}).status;
+        if (status !== 'processing') {
+          await knowledgeChangedRef.current?.();
+          return;
+        }
+      } catch {
+        // 单轮读取失败不该把面板打成错误态；下一轮再试。
+      }
+      if (!cancelled) kbPollTimer.current = setTimeout(() => void poll(), 3000);
+    };
+    kbPollTimer.current = setTimeout(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      if (kbPollTimer.current) clearTimeout(kbPollTimer.current);
+      kbPollTimer.current = null;
+    };
+  }, [activeKb?.id, activeKb?.status, apiClient, apiMode, canRead]);
 
   const handleTestSearch = async () => {
     if (!canRead) {

@@ -1,15 +1,10 @@
 import React from 'react';
 import {
-  Bot,
   Globe,
   Shield,
   Sparkles,
   Radio,
   CheckCircle2,
-  AlertCircle,
-  Activity,
-  BookOpen,
-  FileCode2,
   LogOut,
   Server,
   Moon,
@@ -23,9 +18,6 @@ interface HeaderProps {
   hasGeminiKey: boolean;
   onQuickGenerate?: () => void;
   onOpenPreview?: () => void;
-  onOpenScorecard?: () => void;
-  onOpenGlossary?: () => void;
-  onOpenDevHandoff?: () => void;
   mode?: 'demo' | 'geoflow';
   adminName?: string;
   adminRole?: string;
@@ -38,9 +30,6 @@ export const Header: React.FC<HeaderProps> = ({
   hasGeminiKey,
   onQuickGenerate,
   onOpenPreview,
-  onOpenScorecard,
-  onOpenGlossary,
-  onOpenDevHandoff,
   mode = 'demo',
   adminName,
   adminRole,
@@ -82,60 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Center Actions / Status */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Executive Readiness Scorecard Button */}
-        {!isApiMode && onOpenScorecard && (
-          <button
-            onClick={onOpenScorecard}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 shadow-sm transition-all"
-            title={lang === 'zh' ? '点击查看全站 GEO/SEO 综合就绪度记分卡' : 'View Executive Scorecard'}
-          >
-            <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>{lang === 'zh' ? 'GEO 健康度' : 'GEO Health'}:</span>
-            <span className="font-mono text-emerald-200 tabular-nums">94分 (A+)</span>
-          </button>
-        )}
-
-        {/* Plain Glossary Trigger Button for Beginners */}
-        {!isApiMode && onOpenGlossary && (
-          <button
-            onClick={onOpenGlossary}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-indigo-950/70 text-indigo-300 border border-slate-700 hover:border-indigo-500/40 transition shadow-sm"
-            title={lang === 'zh' ? '点击查看小白白话词典，扫除专业黑话' : 'Open Plain Glossary'}
-          >
-            <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{lang === 'zh' ? '白话词典' : 'Glossary'}</span>
-          </button>
-        )}
-
-        {/* Dev Handoff Trigger Button */}
-        {!isApiMode && onOpenDevHandoff && (
-          <button
-            onClick={onOpenDevHandoff}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-emerald-950/70 text-emerald-300 border border-slate-700 hover:border-emerald-500/40 transition shadow-sm"
-            title={lang === 'zh' ? '一键导出面向技术人员的上线交接单' : 'Dev Handoff Package'}
-          >
-            <FileCode2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{lang === 'zh' ? '技术交接单' : 'Dev Handoff'}</span>
-          </button>
-        )}
-
-        {/* Gemini Status Pill */}
-        {!isApiMode && <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300">
-          <Bot className="w-3.5 h-3.5 text-blue-400" />
-          <span>Gemini:</span>
-          {hasGeminiKey ? (
-            <span className="text-emerald-400 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              {lang === 'zh' ? '已连接 (API Key)' : 'Active Key'}
-            </span>
-          ) : (
-            <span className="text-amber-400 flex items-center gap-1" title="可在环境或系统设置中提供 GEMINI_API_KEY">
-              <AlertCircle className="w-3 h-3" />
-              {lang === 'zh' ? '内置合成引擎' : 'Built-in Engine'}
-            </span>
-          )}
-        </div>}
-
         {isApiMode && (
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300">
             <Server className="w-3.5 h-3.5 text-emerald-400" />

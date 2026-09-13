@@ -10,18 +10,14 @@ import {
   Clock,
   ExternalLink,
   Edit,
-  Sparkles,
   Tag,
   X,
   Loader2,
-  Lightbulb,
   AlertCircle,
   ShieldCheck,
   CheckSquare,
 } from 'lucide-react';
 import { Article, Category, DistributionChannel } from '../types';
-import { GeoAuditorModal } from './GeoAuditorModal';
-import { auditGeoReadiness } from '../utils/geoAuditor';
 
 interface ArticlesViewProps {
   articles: Article[];
@@ -73,7 +69,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'published' | 'review' | 'draft'>('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [distributeTargetArticle, setDistributeTargetArticle] = useState<Article | null>(null);
-  const [auditTargetArticle, setAuditTargetArticle] = useState<Article | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showTrash, setShowTrash] = useState(false);
@@ -88,9 +83,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   // Automated Tagging & SEO Keywords state
   const [newTags, setNewTags] = useState<string[]>(['GEO优化']);
   const [tagInput, setTagInput] = useState('');
-  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
-  const [isSuggestingTags, setIsSuggestingTags] = useState(false);
-  const [suggestionReasoning, setSuggestionReasoning] = useState<string | null>(null);
   const [tagError, setTagError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -179,79 +171,16 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
     }
   };
 
-  const handleSuggestTags = async () => {
-    // 桐灼GEO API v1 does not expose a keyword-suggestion endpoint.  Keep
-    // manual tag editing available, but never let API mode call the legacy
-    // demo route below (including if a stale event fires during a mode switch).
-    if (apiMode) return;
-    if (!newTitle.trim() && !newContent.trim()) {
-      setTagError(
-        lang === 'zh'
-          ? '请先填写文章标题或正文内容，以便 AI 提炼 SEO 关键词。'
-          : 'Please enter a title or content first to suggest keywords.'
-      );
-      return;
-    }
-    setTagError(null);
-    setIsSuggestingTags(true);
-
-    try {
-      const res = await fetch('/api/articles/suggest-keywords', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newTitle,
-          content: newContent,
-          category: newCategory,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.keywords) && data.keywords.length > 0) {
-          const incoming: string[] = data.keywords;
-          // If tags list is default or empty, prefill all
-          if (newTags.length === 0 || (newTags.length === 1 && newTags[0] === 'GEO优化')) {
-            setNewTags(incoming);
-            setSuggestedTags([]);
-          } else {
-            // Otherwise offer unselected suggestions
-            const unselected = incoming.filter((k: string) => !newTags.includes(k));
-            setSuggestedTags(unselected);
-          }
-          if (data.reasoning) {
-            setSuggestionReasoning(data.reasoning);
-          }
-        }
-      } else {
-        const err = await res.json().catch(() => ({ error: 'Failed' }));
-        setTagError(err.error || (lang === 'zh' ? '关键词提取失败' : 'Failed to suggest tags'));
-      }
-    } catch (err) {
-      console.error('Suggest tags error:', err);
-      setTagError(lang === 'zh' ? '网络请求异常，请稍后重试' : 'Network error, please retry');
-    } finally {
-      setIsSuggestingTags(false);
-    }
-  };
-
   const handleAddTag = (tag: string) => {
     const trimmed = tag.trim();
     if (!trimmed || newTags.includes(trimmed)) return;
     setNewTags([...newTags, trimmed]);
-    setSuggestedTags((prev) => prev.filter((t) => t !== trimmed));
     setTagInput('');
     setTagError(null);
   };
 
   const handleRemoveTag = (tagToRemove: string) => {
     setNewTags(newTags.filter((t) => t !== tagToRemove));
-  };
-
-  const handleAddAllSuggestions = () => {
-    const combined = Array.from(new Set([...newTags, ...suggestedTags]));
-    setNewTags(combined);
-    setSuggestedTags([]);
   };
 
   const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -281,8 +210,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
       setNewContent('');
       setNewTags(['GEO优化']);
       setTagInput('');
-      setSuggestedTags([]);
-      setSuggestionReasoning(null);
       setTagError(null);
       setIsNewModalOpen(false);
     } catch (error) {
@@ -459,7 +386,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                 </tr>
               ) : (
                 filteredArticles.map((art) => {
-                  const audit = apiMode ? null : auditGeoReadiness(art.title, art.content, art.seoKeywords || []);
                   return (
                     <tr
                       key={art.id}
@@ -510,32 +436,15 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                         </span>
                       </td>
                       <td className="py-3.5 px-3 whitespace-nowrap">
-                        {apiMode ? (
-                          <button
-                            type="button"
-                            onClick={() => onSelectArticle(art)}
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-700 text-slate-400 transition hover:border-red-500/40 hover:text-red-300"
-                            title={lang === 'zh' ? '查看服务端质检、复检与优化操作' : 'View server quality, recheck and optimization actions'}
-                          >
-                            <ShieldCheck className="w-3 h-3" />
-                            <span>{art.aiQualityStatus || (lang === 'zh' ? '后端未质检' : 'Not inspected')}</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setAuditTargetArticle(art)}
-                            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border transition hover:opacity-80 ${
-                              (audit?.overallScore || 0) >= 85
-                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                : (audit?.overallScore || 0) >= 70
-                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                            }`}
-                            title={lang === 'zh' ? '点击查看 GEO 深度体检报告' : 'Click to view GEO audit report'}
-                          >
-                            <ShieldCheck className="w-3 h-3" />
-                            <span>{audit?.overallScore} ({audit?.grade})</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => onSelectArticle(art)}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-700 text-slate-400 transition hover:border-red-500/40 hover:text-red-300"
+                          title={lang === 'zh' ? '查看服务端质检、复检与优化操作' : 'View server quality, recheck and optimization actions'}
+                        >
+                          <ShieldCheck className="w-3 h-3" />
+                          <span>{art.aiQualityStatus || (lang === 'zh' ? '后端未质检' : 'Not inspected')}</span>
+                        </button>
                       </td>
                       <td className="py-3.5 px-3 whitespace-nowrap">
                         {art.distributedTo && art.distributedTo.length > 0 ? (
@@ -555,8 +464,8 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                       </td>
                       <td className="py-3.5 px-4 text-right whitespace-nowrap space-x-2">
                         <button
-                          onClick={() => (apiMode ? onSelectArticle(art) : setAuditTargetArticle(art))}
-                          className={`${apiMode ? 'text-blue-400 hover:text-blue-300' : 'text-red-400 hover:text-red-300'} p-1 hover:bg-slate-800 rounded transition`}
+                          onClick={() => onSelectArticle(art)}
+                          className="text-blue-400 hover:text-blue-300 p-1 hover:bg-slate-800 rounded transition"
                           title={lang === 'zh' ? 'GEO 深度体检与一键优化' : 'GEO Auditor'}
                         >
                           <ShieldCheck className="w-4 h-4" />
@@ -752,27 +661,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                     </span>
                   </div>
 
-                  {!apiMode && (
-                    <button
-                      type="button"
-                      onClick={handleSuggestTags}
-                      disabled={isSuggestingTags}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 disabled:opacity-50 text-white shadow-md shadow-red-950/40 transition cursor-pointer self-start sm:self-auto"
-                      title={lang === 'zh' ? '基于标题与正文通过 Gemini 自动提炼高意图 SEO 关键词' : 'Extract high-intent SEO keywords using Gemini'}
-                    >
-                      {isSuggestingTags ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          <span>{lang === 'zh' ? 'Gemini 智能分析中...' : 'Gemini Analyzing...'}</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>{lang === 'zh' ? 'AI 智能生成标签' : 'Suggest SEO Tags'}</span>
-                        </>
-                      )}
-                    </button>
-                  )}
                   {apiMode && (
                     <span className="text-[11px] text-slate-500">
                       {lang === 'zh'
@@ -829,45 +717,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                   </div>
                 </div>
 
-                {/* Suggested tags shelf */}
-                {!apiMode && suggestedTags.length > 0 && (
-                  <div className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/80 space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-amber-400/90 flex items-center gap-1 font-medium">
-                        <Lightbulb className="w-3 h-3" />
-                        <span>{lang === 'zh' ? 'AI 候选建议标签 (点击快速加入)' : 'Suggested Tags (Click to add)'}:</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleAddAllSuggestions}
-                        className="text-[10px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30 transition cursor-pointer"
-                      >
-                        {lang === 'zh' ? '一键采纳全部' : 'Add All'}
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {suggestedTags.map((stag) => (
-                        <button
-                          type="button"
-                          key={stag}
-                          onClick={() => handleAddTag(stag)}
-                          className="text-xs px-2 py-0.5 rounded-md bg-slate-800/80 hover:bg-red-950/40 text-slate-300 hover:text-red-300 border border-slate-700/80 hover:border-red-500/50 flex items-center gap-1 transition cursor-pointer"
-                        >
-                          <Plus className="w-3 h-3 text-red-400" />
-                          <span>{stag}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* AI Reasoning */}
-                {!apiMode && suggestionReasoning && (
-                  <div className="text-[11px] text-slate-400 bg-slate-900/40 p-2 rounded-lg border border-slate-800/60 flex items-start gap-1.5">
-                    <Sparkles className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
-                    <span>{suggestionReasoning}</span>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -896,18 +745,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
           </form>
         </div>
       )}
-
-      {/* GEO Auditor Modal */}
-      {!apiMode && <GeoAuditorModal
-        article={auditTargetArticle}
-        isOpen={Boolean(auditTargetArticle)}
-        onClose={() => setAuditTargetArticle(null)}
-        onApplyOptimizedArticle={(updated) => {
-          onCreateArticle(updated);
-          setAuditTargetArticle(null);
-        }}
-        lang={lang}
-      />}
     </div>
   );
 };

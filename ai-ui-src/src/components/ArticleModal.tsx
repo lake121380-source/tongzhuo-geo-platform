@@ -1,8 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { FileText, Eye, Radio, Send, CheckCircle2, X, Tag, ShieldCheck, Loader2, Pencil, Save, RefreshCw, Copy, Upload, Sparkles, Square } from 'lucide-react';
+import { FileText, Eye, Send, CheckCircle2, X, Tag, ShieldCheck, Loader2, Pencil, Save, RefreshCw, Copy, Upload, Sparkles, Square } from 'lucide-react';
 import { Article } from '../types';
-import { GeoAuditorModal } from './GeoAuditorModal';
-import { auditGeoReadiness } from '../utils/geoAuditor';
 import { GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import { ArticleQualityPanel } from './ArticleQualityPanel';
@@ -61,7 +59,6 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   onEditorGenerate,
   editorAssistantCatalog,
 }) => {
-  const [showAuditor, setShowAuditor] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
   /** 质检面板的位置，供「发布被拦下」时把用户带过去。 */
@@ -174,14 +171,6 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     } finally {
       setAssistantBusy(false);
       generateAbort.current = null;
-    }
-  };
-
-  const audit = apiMode ? null : auditGeoReadiness(article.title, article.content, article.seoKeywords || []);
-
-  const handleApplyOptimized = (updated: Article) => {
-    if (onUpdateArticle) {
-      onUpdateArticle(updated);
     }
   };
 
@@ -327,26 +316,10 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               >
                 {article.status}
               </span>
-              {apiMode ? (
-                <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-slate-700 text-slate-500">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>{article.aiQualityStatus || (lang === 'zh' ? '后端未质检' : 'Not inspected')}</span>
-                </span>
-              ) : (
-                <button
-                  onClick={() => setShowAuditor(true)}
-                  className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 border transition hover:opacity-90 ${
-                    (audit?.overallScore || 0) >= 85
-                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                      : (audit?.overallScore || 0) >= 70
-                      ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                      : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                  }`}
-                >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>GEO 体检: {audit?.overallScore}分 ({audit?.grade})</span>
-                </button>
-              )}
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-slate-700 text-slate-500">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>{article.aiQualityStatus || (lang === 'zh' ? '后端未质检' : 'Not inspected')}</span>
+              </span>
               {apiMode && onRiskRecheck && (
                 <button type="button" onClick={() => void handleRiskRecheck()} disabled={actionBusy !== null} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50" title={lang === 'zh' ? '重新执行风险扫描' : 'Run risk scan again'}>
                   {actionBusy === 'risk' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
@@ -379,13 +352,6 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                     {article.title}
                   </h1>
                 )}
-                {!apiMode && !isEditing && <button
-                  onClick={() => setShowAuditor(true)}
-                  className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 flex items-center gap-1.5 transition"
-                >
-                  <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
-                  <span>{lang === 'zh' ? '开启 GEO 深度体检' : 'Open GEO Auditor'}</span>
-                </button>}
               </div>
               <div className="flex items-center gap-4 text-xs text-slate-400 mt-2">
                 <span>{lang === 'zh' ? '作者' : 'Author'}: {article.author}</span>
@@ -570,29 +536,10 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                   )}
                 </>
               )}
-              {!apiMode && <button
-                onClick={() => {
-                  onDistribute(article.id);
-                  onClose();
-                }}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-sm transition flex items-center gap-1.5"
-              >
-                <Radio className="w-3.5 h-3.5" />
-                <span>{lang === 'zh' ? '一键推送到多站点' : 'Distribute to Sites'}</span>
-              </button>}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Embedded GEO Auditor Modal */}
-      {!apiMode && <GeoAuditorModal
-        article={article}
-        isOpen={showAuditor}
-        onClose={() => setShowAuditor(false)}
-        onApplyOptimizedArticle={handleApplyOptimized}
-        lang={lang}
-      />}
     </>
   );
 };

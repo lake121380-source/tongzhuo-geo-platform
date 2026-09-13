@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, Loader2, RefreshCw } from 'lucide-react';
 import { ApiRecord } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
@@ -12,6 +12,13 @@ interface TaskMonitoringPanelProps {
 
 const record = (value: unknown): ApiRecord => value && typeof value === 'object' && !Array.isArray(value) ? value as ApiRecord : {};
 const text = (value: unknown): string => (value === undefined || value === null ? '' : String(value));
+const count = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+/** 非终态 = 这个面板要一直盯着它变的工作。终态项不该再触发轮询。 */
+const TERMINAL_RUN_STATUS = new Set(['completed', 'succeeded', 'success', 'failed', 'cancelled', 'canceled', 'skipped']);
 
 const RUN_STATUS: Record<string, { zh: string; en: string }> = {
   queued: { zh: '排队', en: 'Queued' },
@@ -37,6 +44,7 @@ const TaskMonitoringPanel: React.FC<TaskMonitoringPanelProps> = ({ onLoadHealth,
   const [runs, setRuns] = useState<ApiRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -52,12 +60,49 @@ const TaskMonitoringPanel: React.FC<TaskMonitoringPanelProps> = ({ onLoadHealth,
     }
   }, [onLoadHealth, onLoadRecentRuns, lang, zh]);
 
+  // load 的引用存进 ref：它的依赖是父组件传下来的内联函数，直接写进轮询依赖会不停重置计时器。
+  const loadRef = useRef(load);
+  useEffect(() => { loadRef.current = load; }, [load]);
+
   useEffect(() => { void load(); }, [load]);
 
   const summary = health ? record(health.task_summary) : {};
   const queue = health ? record(health.queue_overview) : {};
   const workers = health ? (Array.isArray(health.worker_overview) ? health.worker_overview as ApiRecord[] : []) : [];
   const staleWorkers = workers.filter((worker) => worker.is_stale === true).length;
+
+  // 队列里正在执行 / 还有积压 / 最近运行里有非终态项——三者之一成立才轮询。
+  const activeQueueCount = count(queue.running) + count(queue.pending ?? queue.size ?? queue.waiting);
+  const hasActiveRun = runs.some((run) => {
+    const status = text(run.status).trim().toLowerCase();
+    return status !== '' && !TERMINAL_RUN_STATUS.has(status);
+  });
+  const shouldPoll = health !== null && (activeQueueCount > 0 || hasActiveRun);
+
+  /**
+   * 这个面板原先只有挂载时 load() 一次 + 手动「刷新」按钮，所以「运行中 / 队列积压」
+   * 和最近运行状态不会自己变。有进行中的东西时按 3s 轮询（服务端 health 没有给
+   * next_poll_ms 之类的建议节奏）；全部空闲立即停——空闲常驻轮询只是拿性能换体验。
+   * 依赖只有 shouldPoll 这个布尔值，父组件的无关重渲染不会重置计时器；空闲时
+   * effect 重跑一次并停掉轮询；卸载时清理定时器。
+   */
+  useEffect(() => {
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+    pollTimer.current = null;
+    if (!shouldPoll) return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      await loadRef.current();
+      // load() 自己吞掉错误并写入 error 状态，所以失败也会继续下一轮，不会静默停摆。
+      if (!cancelled) pollTimer.current = setTimeout(() => void poll(), 3000);
+    };
+    pollTimer.current = setTimeout(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+    };
+  }, [shouldPoll]);
 
   return (
     <section className="space-y-3 rounded-2xl border border-slate-800 bg-slate-900/80 p-4">

@@ -42,8 +42,6 @@ interface DashboardViewProps {
   tasks: Task[];
   onNavigate: (tab: string) => void;
   onSelectArticle: (article: Article) => void;
-  onOpenGlossary?: () => void;
-  onOpenDevHandoff?: () => void;
   lang: 'zh' | 'en';
   /** In API mode, only values supplied by 桐灼GEO are shown; no demo formulas. */
   apiMode?: boolean;

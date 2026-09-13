@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Radio,
   Plus,
@@ -28,6 +28,13 @@ interface DistributionViewProps {
   /** Hosted sites are a separate lifecycle domain, not ordinary channels. */
   hostedSites?: Array<Record<string, unknown>>;
   distributionJobs?: Array<Record<string, unknown>>;
+  /**
+   * 重新拉取分发任务列表。
+   *
+   * 「排队中/发送中」的行不会自己走到终态，所以列表里有未终态行时组件会周期性调用它；
+   * 全部到达 synced/failed 后停止（见组件内的轮询 effect）。
+   */
+  onRefreshDistributionJobs?: () => Promise<void>;
   // `| void` in a returned union cannot be narrowed by a truthiness check, so
   // the "no payload" branch is typed as `undefined` instead.
   onAddChannel: (channel: Partial<DistributionChannel>) => Promise<{ one_time_secret?: { key_id: string; secret: string } } | undefined>;
@@ -81,6 +88,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
   channels,
   hostedSites = [],
   distributionJobs = [],
+  onRefreshDistributionJobs,
   onAddChannel,
   onSyncChannel,
   onRetryDistribution,
@@ -178,6 +186,46 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
   const [hostedDraft, setHostedDraft] = useState<Record<string, string>>({});
   const [hostedBusy, setHostedBusy] = useState<string>('');
   const [hostedArticleIds, setHostedArticleIds] = useState<Record<string, string>>({});
+
+  /**
+   * 分发任务目前只在应用启动时拉一次（App.tsx），之后只在用户点「分发/重试」时刷新。
+   * 于是「排队中/发送中」的行永远不会自己变成「已同步」——用户以为分发卡住了，
+   * 而他不知道该点刷新（界面上也没有刷新按钮）。
+   *
+   * 只要列表里还有未到终态（queued/sending/outcome_unknown）的行，就按固定节奏重拉一次；
+   * 全部到达 synced/failed 立即停——不做空闲常驻轮询。切走标签页会卸载组件并清掉定时器。
+   * （outcome_unknown 是「待对账」，后端只会由人工重试收敛，所以有这种行时轮询会一直保持——
+   *   它表示这个分发还没落定，不算空闲。没有未终态行时一次请求都不会发。）
+   */
+  const hasInFlightJobs = distributionJobs.some((job) => {
+    const status = String(job.status ?? '').trim().toLowerCase();
+    return status === 'queued' || status === 'sending' || status === 'outcome_unknown';
+  });
+  // 回调存进 ref：父组件每次渲染都会生成新的内联函数，写进依赖会让计时器不停被重置。
+  const refreshJobsRef = useRef(onRefreshDistributionJobs);
+  const jobsPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { refreshJobsRef.current = onRefreshDistributionJobs; }, [onRefreshDistributionJobs]);
+  useEffect(() => {
+    if (jobsPollTimer.current) clearTimeout(jobsPollTimer.current);
+    jobsPollTimer.current = null;
+    if (!apiMode || !hasInFlightJobs || !refreshJobsRef.current) return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        await refreshJobsRef.current?.();
+      } catch {
+        // 单轮失败不该打断轮询（也还没到终态）；下一轮再试。
+      }
+      if (!cancelled) jobsPollTimer.current = setTimeout(() => void poll(), 3000);
+    };
+    jobsPollTimer.current = setTimeout(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      if (jobsPollTimer.current) clearTimeout(jobsPollTimer.current);
+      jobsPollTimer.current = null;
+    };
+    // 依赖只有布尔值：父组件的无关重渲染不会重置计时；列表全到终态时 effect 重跑并停掉轮询。
+  }, [apiMode, hasInFlightJobs]);
 
   const newHostedDraft = (): Record<string, string> => ({
     name: '', hostname: '', topic: '', locale: 'zh_CN', timezone: 'Asia/Shanghai',
@@ -465,7 +513,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           </div>
           <p className="text-xs text-slate-400 mt-1">
             {lang === 'zh'
-              ? '通过 桐灼GEO Agent 协议，一键将生成文章安全推送到远端独立站与博客，并实时同步更新远端站点的 /llms.txt 与 sitemap.xml。'
+              ? '通过 桐灼GEO Agent 协议，把生成文章推送到远端独立站与博客；站点设置可在本页「预览 → 执行同步」两步推送到各渠道前端的 /llms.txt 与 sitemap.xml。'
               : 'Securely publish articles to remote static sites, WordPress blogs, and custom HTTP API endpoints.'}
           </p>
         </div>
@@ -1131,9 +1179,20 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                 <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={deleteState.ackHistory} onChange={(event) => setDeleteState((current) => current ? { ...current, ackHistory: event.target.checked } : current)} />确认历史记录将被清理</label>
                 {Number(deleteState.impact.stale_sending_count || 0) > 0 && <label className="flex items-center gap-2 text-xs text-amber-200"><input type="checkbox" checked={deleteState.forceSending} onChange={(event) => setDeleteState((current) => current ? { ...current, forceSending: event.target.checked } : current)} />确认处理过期发送任务</label>}
                 {Number(deleteState.impact.stale_operation_count || 0) > 0 && <label className="flex items-center gap-2 text-xs text-amber-200"><input type="checkbox" checked={deleteState.forceOperations} onChange={(event) => setDeleteState((current) => current ? { ...current, forceOperations: event.target.checked } : current)} />确认处理过期操作租约</label>}
+                {/*
+                  删除确认的校验错误必须显示在**弹窗内部**。
+                  原先 completeDelete() 只调 setActionError()，而那处渲染在页面顶部的
+                  502 行——位于本弹窗 z-50 的全屏遮罩后面，用户完全看不到：
+                  输错渠道名点「永久删除」时表现为「按钮点了没反应」。
+                */}
+                {actionError && (
+                  <div role="alert" className="rounded-lg border border-rose-500/40 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
+                    {actionError}
+                  </div>
+                )}
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => void cancelDelete()} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300">取消删除</button>
-                  <button type="button" onClick={() => void completeDelete()} disabled={busyAction.startsWith('delete-')} className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">永久删除</button>
+                  <button type="button" onClick={() => void cancelDelete()} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300">{lang === 'zh' ? '取消删除' : 'Cancel deletion'}</button>
+                  <button type="button" onClick={() => void completeDelete()} disabled={busyAction.startsWith('delete-')} className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">{lang === 'zh' ? '永久删除' : 'Delete permanently'}</button>
                 </div>
               </div>
             )}
