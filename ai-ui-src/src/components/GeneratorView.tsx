@@ -60,40 +60,65 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
   canRead = true,
   canWrite = true,
 }) => {
-  /** 标题库就绪度：`null` = 还没查到（或该模式下不适用）。 */
-  const [titleReadiness, setTitleReadiness] = useState<Record<string, unknown> | null>(null);
+  /** 每个标题库的就绪度：libId → report。 */
+  const [titleReadiness, setTitleReadiness] = useState<Record<string, Record<string, unknown>>>({});
+  /** 用户选中的标题库 id；`null` = 尚未定（预检完自动挑一个可用的）。 */
+  const [selectedLibraryId, setSelectedLibraryId] = useState<string | null>(null);
 
-  // 进页面就预检「这个标题库还有没有可用标题」，把前置条件摆在生成按钮上面，
-  // 而不是等用户点了生成才报错、且报错里没有去处。
+  // 用「库 id 列表」当依赖，避免 apiCatalog 每次渲染换引用导致重复请求。
+  const libraryKey = (apiCatalog?.titleLibraries ?? []).map((library) => String(library.id)).join(',');
+
+  // 进页面就把**每个**标题库都预检一遍。
+  //
+  // 原先只预检 `apiCatalog.titleLibraries[0]`：用户既看不到还有别的标题库、也无从切换，
+  // 哪怕第二个库有货，页面也只会说第一个库「已耗尽」。
   useEffect(() => {
     if (!apiMode || !onCheckTitleReadiness) {
-      setTitleReadiness(null);
+      setTitleReadiness({});
       return;
     }
-    const library = apiCatalog?.titleLibraries?.[0];
-    if (!library) {
-      setTitleReadiness(null);
+    const libraries = apiCatalog?.titleLibraries ?? [];
+    if (libraries.length === 0) {
+      setTitleReadiness({});
       return;
     }
     let alive = true;
     void (async () => {
-      try {
-        const report = await onCheckTitleReadiness({
-          title_library_id: Number(library.id),
-          article_limit: 1,
-          is_loop: 0,
-          status: 'active',
+      const entries = await Promise.all(
+        libraries.map(async (library): Promise<[string, Record<string, unknown> | null]> => {
+          try {
+            const report = await onCheckTitleReadiness({
+              title_library_id: Number(library.id),
+              article_limit: 1,
+              is_loop: 0,
+              status: 'active',
+            });
+            return [String(library.id), report];
+          } catch {
+            return [String(library.id), null];
+          }
+        }),
+      );
+      if (!alive) return;
+      const next: Record<string, Record<string, unknown>> = {};
+      for (const [id, report] of entries) if (report) next[id] = report;
+      setTitleReadiness(next);
+
+      // 默认挑「有可用标题」的第一个库；都没有才退回第一个。
+      setSelectedLibraryId((current) => {
+        if (current && next[current]) return current;
+        const usable = libraries.find((library) => {
+          const lib = (next[String(library.id)]?.library ?? {}) as Record<string, unknown>;
+          return Number(lib.available ?? 0) > 0;
         });
-        if (alive) setTitleReadiness(report);
-      } catch {
-        // 预检失败不阻断页面，只是不显示提示条。
-        if (alive) setTitleReadiness(null);
-      }
+        return String((usable ?? libraries[0]).id);
+      });
     })();
     return () => {
       alive = false;
     };
-  }, [apiMode, onCheckTitleReadiness, apiCatalog]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, onCheckTitleReadiness, libraryKey]);
   // 演示数据只在非 API（离线预览）模式出现；接入真实后端的部署里一律留空，
   // 由运营方填写真实标题与关键词，不能用样例内容冒充已配置的生成参数。
   const catalogCategories = apiCatalog?.categories ?? [];
@@ -192,7 +217,10 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
 
     try {
       if (apiMode) {
-        const titleLibrary = apiCatalog?.titleLibraries[0];
+        // 用用户选中的那个库；没选过就退回第一个（与旧行为一致）。
+        const libraryList = apiCatalog?.titleLibraries ?? [];
+        const titleLibrary =
+          libraryList.find((item) => String(item.id) === selectedLibraryId) ?? libraryList[0];
         const prompt = catalogPrompts.find((item) => String(item.id) === promptId) ?? catalogPrompts[0];
         const model = apiCatalog?.models.find((item) => !item.type || item.type === 'chat') || apiCatalog?.models[0];
         const categoryRecord = catalogCategories.find((item) => String(item.id) === category) ?? catalogCategories[0];
@@ -289,12 +317,16 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
     alert(lang === 'zh' ? `文章已成功保存为【${status === 'published' ? '已发布' : status === 'review' ? '待审核' : '草稿'}】！` : `Saved as ${status}!`);
   };
 
-  // 标题库就绪度的展示派生值。取的是后端 `title-readiness` 的 `library` 块。
-  const readinessLibrary = (titleReadiness?.library ?? {}) as Record<string, unknown>;
-  const readinessAvailable = Number(readinessLibrary.available ?? 0);
+  // 标题库展示派生值：全部取自**当前选中那个库**的就绪度报告。
+  const titleLibraries = apiCatalog?.titleLibraries ?? [];
+  const activeReadiness = selectedLibraryId ? titleReadiness[selectedLibraryId] : undefined;
+  const readinessLibrary = (activeReadiness?.library ?? {}) as Record<string, unknown>;
   const readinessTotal = Number(readinessLibrary.total ?? 0);
-  const readinessName = String(readinessLibrary.name ?? '');
-  const readinessBlocked = String(titleReadiness?.status ?? '') === 'blocked';
+  const readinessBlocked = String(activeReadiness?.status ?? '') === 'blocked';
+  const availableOf = (libraryId: string | number): number => {
+    const lib = (titleReadiness[String(libraryId)]?.library ?? {}) as Record<string, unknown>;
+    return Number(lib.available ?? 0);
+  };
 
   return (
     <div className="space-y-6">
@@ -315,29 +347,41 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
       {!canRead && <PermissionNotice lang={lang} mode="read" requiredScope="catalog:read" />}
       {canRead && !canWrite && <PermissionNotice lang={lang} requiredScope={apiMode ? 'tasks:write' : 'articles:write'} />}
 
-      {/* 标题库前置条件：进页面就摆出来，而不是等用户点了生成才报错 */}
-      {apiMode && titleReadiness && (
+      {/* 标题库：可切换 + 前置条件前置，而不是等点了生成才报错 */}
+      {apiMode && titleLibraries.length > 0 && (
         <div
-          className={`flex flex-col gap-2 rounded-lg border px-3.5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between ${
+          className={`flex flex-col gap-2.5 rounded-lg border px-3.5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between ${
             readinessBlocked
               ? 'border-amber-500/40 bg-amber-950/20 text-amber-100'
               : 'border-slate-700 bg-slate-800/40 text-slate-300'
           }`}
         >
-          <div className="min-w-0">
-            <span className="font-semibold">
-              {lang === 'zh' ? '标题库' : 'Title library'}：{readinessName || (lang === 'zh' ? '未指定' : 'none')}
-            </span>
-            <span className="ml-2 tabular-nums">
-              {lang === 'zh'
-                ? `可用 ${readinessAvailable} / 共 ${readinessTotal}`
-                : `${readinessAvailable} of ${readinessTotal} available`}
-            </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">{lang === 'zh' ? '标题库' : 'Title library'}</span>
+              <select
+                value={selectedLibraryId ?? ''}
+                onChange={(event) => setSelectedLibraryId(event.target.value)}
+                className="rounded-md border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-100 outline-none focus:border-indigo-500"
+              >
+                {titleLibraries.map((library) => (
+                  <option key={String(library.id)} value={String(library.id)}>
+                    {library.name}
+                    {lang === 'zh'
+                      ? `（可用 ${availableOf(library.id)}）`
+                      : ` (${availableOf(library.id)} available)`}
+                  </option>
+                ))}
+              </select>
+              <span className="tabular-nums">
+                {lang === 'zh' ? `共 ${readinessTotal} 条标题` : `${readinessTotal} titles`}
+              </span>
+            </div>
             {readinessBlocked && (
-              <div className="mt-1 leading-relaxed">
+              <div className="mt-1.5 leading-relaxed">
                 {lang === 'zh'
-                  ? '可用标题已用完。生成任务至少需要 1 个未使用的标题——先去标题库补几条，再回来生成。'
-                  : 'No unused titles left. A generation task needs at least one unused title — add some first.'}
+                  ? `「${String(readinessLibrary.name ?? '')}」可用标题已用完（生成任务至少需要 1 条未被使用的标题）。换一个标题库，或先去补充标题。`
+                  : `"${String(readinessLibrary.name ?? '')}" has no unused titles left (a task needs at least one). Pick another library or add titles.`}
               </div>
             )}
           </div>
