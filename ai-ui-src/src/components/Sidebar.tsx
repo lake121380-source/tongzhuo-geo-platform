@@ -158,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               : 'Data semantics are under verification'
             : undefined
         }
-        className={`w-full flex items-center justify-between pl-8 pr-2.5 py-2 rounded-lg text-xs font-medium transition-all ${
+        className={`w-full flex items-center justify-between pl-10 pr-3 py-2 rounded-lg text-xs font-medium transition-all ${
           isActive
             ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
             : isDisabled
@@ -195,19 +195,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside className="w-64 border-r border-slate-800 bg-slate-900/90 p-3 flex flex-col justify-between shrink-0 self-stretch overflow-hidden select-none">
-      <div className="space-y-1 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+      <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
         {/* ① 总览 —— 单页，直接进入 */}
         <button
           type="button"
           onClick={() => onSelectTab('dashboard')}
-          className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
             overviewActive
               ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/30'
               : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
           }`}
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <LayoutDashboard className={`w-4 h-4 shrink-0 ${overviewActive ? 'text-white' : 'text-slate-400'}`} />
+          <div className="flex items-center gap-3 min-w-0">
+            <LayoutDashboard className={`w-[18px] h-[18px] shrink-0 ${overviewActive ? 'text-white' : 'text-slate-400'}`} />
             <span className="truncate">{zh ? '总览' : 'Overview'}</span>
           </div>
         </button>
@@ -223,22 +223,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 type="button"
                 onClick={() => toggle(group)}
                 aria-expanded={open}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold transition-all ${
                   active && !open
                     ? 'text-white bg-slate-800/60'
                     : 'text-slate-200 hover:bg-slate-800/80 hover:text-white'
                 }`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <GroupIcon className={`w-4 h-4 shrink-0 ${active ? 'text-indigo-300' : 'text-slate-400'}`} />
+                <div className="flex items-center gap-3 min-w-0">
+                  <GroupIcon className={`w-[18px] h-[18px] shrink-0 ${active ? 'text-indigo-300' : 'text-slate-400'}`} />
                   <span className="truncate">{group.label}</span>
                 </div>
                 <ChevronDown
-                  className={`w-3.5 h-3.5 shrink-0 text-slate-500 transition-transform ${open ? '' : '-rotate-90'}`}
+                  className={`w-4 h-4 shrink-0 text-slate-500 transition-transform ${open ? '' : '-rotate-90'}`}
                 />
               </button>
 
-              {open && <div className="space-y-0.5 mt-0.5">{group.items.map(renderItem)}</div>}
+              {open && <div className="space-y-0.5 mt-1">{group.items.map(renderItem)}</div>}
             </div>
           );
         })}
