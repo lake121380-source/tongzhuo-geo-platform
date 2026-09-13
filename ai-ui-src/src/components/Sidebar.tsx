@@ -194,7 +194,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const overviewActive = currentTab === 'dashboard';
 
   return (
-    <aside className="w-64 border-r border-slate-800 bg-slate-900/90 p-3 flex flex-col justify-between shrink-0 h-full overflow-hidden select-none">
+    <aside className="w-64 border-r border-slate-800 bg-slate-900/90 p-3 flex flex-col justify-between shrink-0 self-stretch overflow-hidden select-none">
       <div className="space-y-1 overflow-y-auto pr-1 flex-1 custom-scrollbar">
         {/* ① 总览 —— 单页，直接进入 */}
         <button
