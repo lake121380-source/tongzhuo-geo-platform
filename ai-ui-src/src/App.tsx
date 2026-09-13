@@ -1723,6 +1723,8 @@ export default function App() {
                 apiMode={apiEnabled}
                 apiCatalog={apiTaskCatalog}
                 onCreateTask={apiEnabled ? handleCreateTask : undefined}
+                onCheckTitleReadiness={apiEnabled ? handleCheckTaskTitleReadiness : undefined}
+                onNavigate={navigateToTab}
                 canRead={hasScope(apiSession, 'catalog:read')}
                 canWrite={hasScope(apiSession, 'tasks:write')}
               />

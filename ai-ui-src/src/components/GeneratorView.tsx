@@ -31,6 +31,17 @@ interface GeneratorViewProps {
     authors: Array<{ id: string | number; name: string }>;
   };
   onCreateTask?: (task: Partial<Task> & Record<string, unknown>) => void | Promise<void>;
+  /**
+   * 标题库就绪度预检（`GET tasks/title-readiness`）。
+   *
+   * 之前这一页**写死用 `apiCatalog.titleLibraries[0]`**，用户既看不到用的是哪个标题库、
+   * 也不知道它还有没有可用标题——只有点了「立即开始 AI 生成」才会撞上
+   * 「当前标题库的可用标题已耗尽」，而且提示里没有任何去处的入口。
+   * 现在改为进入页面就预检，把前置条件摆在按钮上面。
+   */
+  onCheckTitleReadiness?: (params: Record<string, string | number | undefined>) => Promise<Record<string, unknown>>;
+  /** 跳到「内容中心 › 素材库」管理标题库。 */
+  onNavigate?: (tab: string) => void;
   /** Catalog/knowledge read capability required to assemble a real task. */
   canRead?: boolean;
   /** Task/article write capability used by the real API mode. */
@@ -44,9 +55,45 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
   apiMode = false,
   apiCatalog,
   onCreateTask,
+  onCheckTitleReadiness,
+  onNavigate,
   canRead = true,
   canWrite = true,
 }) => {
+  /** 标题库就绪度：`null` = 还没查到（或该模式下不适用）。 */
+  const [titleReadiness, setTitleReadiness] = useState<Record<string, unknown> | null>(null);
+
+  // 进页面就预检「这个标题库还有没有可用标题」，把前置条件摆在生成按钮上面，
+  // 而不是等用户点了生成才报错、且报错里没有去处。
+  useEffect(() => {
+    if (!apiMode || !onCheckTitleReadiness) {
+      setTitleReadiness(null);
+      return;
+    }
+    const library = apiCatalog?.titleLibraries?.[0];
+    if (!library) {
+      setTitleReadiness(null);
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      try {
+        const report = await onCheckTitleReadiness({
+          title_library_id: Number(library.id),
+          article_limit: 1,
+          is_loop: 0,
+          status: 'active',
+        });
+        if (alive) setTitleReadiness(report);
+      } catch {
+        // 预检失败不阻断页面，只是不显示提示条。
+        if (alive) setTitleReadiness(null);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [apiMode, onCheckTitleReadiness, apiCatalog]);
   // 演示数据只在非 API（离线预览）模式出现；接入真实后端的部署里一律留空，
   // 由运营方填写真实标题与关键词，不能用样例内容冒充已配置的生成参数。
   const catalogCategories = apiCatalog?.categories ?? [];
@@ -242,6 +289,13 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
     alert(lang === 'zh' ? `文章已成功保存为【${status === 'published' ? '已发布' : status === 'review' ? '待审核' : '草稿'}】！` : `Saved as ${status}!`);
   };
 
+  // 标题库就绪度的展示派生值。取的是后端 `title-readiness` 的 `library` 块。
+  const readinessLibrary = (titleReadiness?.library ?? {}) as Record<string, unknown>;
+  const readinessAvailable = Number(readinessLibrary.available ?? 0);
+  const readinessTotal = Number(readinessLibrary.total ?? 0);
+  const readinessName = String(readinessLibrary.name ?? '');
+  const readinessBlocked = String(titleReadiness?.status ?? '') === 'blocked';
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -260,6 +314,52 @@ export const GeneratorView: React.FC<GeneratorViewProps> = ({
       </div>
       {!canRead && <PermissionNotice lang={lang} mode="read" requiredScope="catalog:read" />}
       {canRead && !canWrite && <PermissionNotice lang={lang} requiredScope={apiMode ? 'tasks:write' : 'articles:write'} />}
+
+      {/* 标题库前置条件：进页面就摆出来，而不是等用户点了生成才报错 */}
+      {apiMode && titleReadiness && (
+        <div
+          className={`flex flex-col gap-2 rounded-lg border px-3.5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between ${
+            readinessBlocked
+              ? 'border-amber-500/40 bg-amber-950/20 text-amber-100'
+              : 'border-slate-700 bg-slate-800/40 text-slate-300'
+          }`}
+        >
+          <div className="min-w-0">
+            <span className="font-semibold">
+              {lang === 'zh' ? '标题库' : 'Title library'}：{readinessName || (lang === 'zh' ? '未指定' : 'none')}
+            </span>
+            <span className="ml-2 tabular-nums">
+              {lang === 'zh'
+                ? `可用 ${readinessAvailable} / 共 ${readinessTotal}`
+                : `${readinessAvailable} of ${readinessTotal} available`}
+            </span>
+            {readinessBlocked && (
+              <div className="mt-1 leading-relaxed">
+                {lang === 'zh'
+                  ? '可用标题已用完。生成任务至少需要 1 个未使用的标题——先去标题库补几条，再回来生成。'
+                  : 'No unused titles left. A generation task needs at least one unused title — add some first.'}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate?.('materials')}
+            className={`shrink-0 rounded-md border px-3 py-1.5 font-semibold transition ${
+              readinessBlocked
+                ? 'border-amber-500/40 text-amber-100 hover:bg-amber-900/40'
+                : 'border-slate-600 text-slate-200 hover:bg-slate-700/60'
+            }`}
+          >
+            {readinessBlocked
+              ? lang === 'zh'
+                ? '去补充标题 →'
+                : 'Add titles →'
+              : lang === 'zh'
+                ? '管理标题库 →'
+                : 'Manage titles →'}
+          </button>
+        </div>
+      )}
       {generationError && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{generationError}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
