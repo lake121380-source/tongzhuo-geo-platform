@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { UrlScanReport, UrlScanItem } from '../types';
 import { GeoFlowApiClient, GeoFlowApiError, UrlScanSummary } from '../api/geoflowClient';
+import { LoadingState } from './LoadingState';
 
 interface UrlScannerViewProps {
   lang: 'zh' | 'en';
@@ -62,6 +63,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
   const [history, setHistory] = useState<UrlScanSummary[]>([]);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const loadHistory = useCallback(async () => {
     if (!apiClient || !canRead) return;
@@ -70,6 +72,8 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
       setHistory(result.items || []);
     } catch (reason) {
       setError(reason instanceof GeoFlowApiError || reason instanceof Error ? reason.message : '扫描记录加载失败');
+    } finally {
+      setLoading(false);
     }
   }, [apiClient, canRead]);
 
@@ -295,7 +299,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
       {apiClient && canRead && (
         <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4">
           <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-bold text-white">{lang === 'zh' ? '最近扫描记录' : 'Recent scans'}</h3><button type="button" onClick={() => void loadHistory()} className="text-xs text-indigo-300 hover:text-indigo-200">{lang === 'zh' ? '刷新' : 'Refresh'}</button></div>
-          {history.length === 0 ? <p className="text-xs text-slate-500">{lang === 'zh' ? '暂无持久化扫描记录' : 'No persisted scans yet'}</p> : (
+          {loading && history.length === 0 ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取扫描记录…' : 'Loading scan history…'} /> : history.length === 0 ? <p className="text-xs text-slate-500">{lang === 'zh' ? '暂无持久化扫描记录' : 'No persisted scans yet'}</p> : (
             <div className="grid gap-2 md:grid-cols-2">
               {history.slice(0, 6).map((item) => <button type="button" key={item.id} onClick={() => void handleOpenHistory(item)} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-left hover:border-indigo-700"><span className="min-w-0"><span className="block truncate text-xs font-medium text-slate-200">{item.url}</span><span className="text-[11px] text-slate-500">{item.scanned_at || item.created_at || '—'}</span></span><span className={`ml-3 text-xs font-bold ${item.status === 'failed' ? 'text-rose-400' : 'text-indigo-300'}`}>{item.status === 'failed' ? (lang === 'zh' ? '失败' : 'Failed') : `${item.overall_score} · ${item.grade}`}</span></button>)}
             </div>

@@ -23,6 +23,7 @@ import {
 } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import PermissionNotice from './PermissionNotice';
+import { LoadingState } from './LoadingState';
 
 interface UrlImportPanelProps {
   apiClient: GeoFlowApiClient;
@@ -171,7 +172,7 @@ export const UrlImportPanel: React.FC<UrlImportPanelProps> = ({
   const [detail, setDetail] = useState<UrlImportDetailResponse | null>(null);
   const [form, setForm] = useState<ImportForm>({ ...DEFAULT_FORM, outputs: [...DEFAULT_FORM.outputs] });
   const [formOpen, setFormOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -398,7 +399,7 @@ export const UrlImportPanel: React.FC<UrlImportPanelProps> = ({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(220px,0.85fr)_minmax(0,1.5fr)]">
         <div className="min-w-0 space-y-2">
           <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider text-slate-500"><span>{lang === 'zh' ? '导入任务' : 'Import jobs'}</span><span>{jobs.length}</span></div>
-          {jobs.length === 0 ? <div className="rounded-xl border border-dashed border-slate-800 px-3 py-8 text-center text-xs text-slate-500">{loading ? (lang === 'zh' ? '读取任务…' : 'Loading jobs…') : (lang === 'zh' ? '暂无 URL 导入任务' : 'No URL import jobs yet')}</div> : <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">{jobs.map((job) => <JobRow key={job.id} job={job} selected={job.id === selectedId} lang={lang} onSelect={() => setSelectedId(job.id)} onRun={() => void runJob(job)} busy={busy === `run-${job.id}`} canWrite={canWrite} />)}</div>}
+          {jobs.length === 0 ? <div className="rounded-xl border border-dashed border-slate-800 px-3 py-8 text-center text-xs text-slate-500">{loading ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '读取任务…' : 'Loading jobs…'} /> : (lang === 'zh' ? '暂无 URL 导入任务' : 'No URL import jobs yet')}</div> : <div className="max-h-[440px] space-y-2 overflow-y-auto pr-1">{jobs.map((job) => <JobRow key={job.id} job={job} selected={job.id === selectedId} lang={lang} onSelect={() => setSelectedId(job.id)} onRun={() => void runJob(job)} busy={busy === `run-${job.id}`} canWrite={canWrite} />)}</div>}
         </div>
 
         <div className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/40 p-4">

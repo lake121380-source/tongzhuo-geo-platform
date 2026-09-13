@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { BrandEntityConfig, SameAsLink, EeatAuditReport } from '../types';
 import { GeoFlowApiClient } from '../api/geoflowClient';
+import { LoadingState } from './LoadingState';
 
 interface BrandEntityEeatViewProps {
   lang: 'zh' | 'en';
@@ -247,7 +248,7 @@ ${jsonLdScript}
           {loadState !== 'ready' && (
             <span className="text-[11px] text-amber-300">
               {loadState === 'loading'
-                ? lang === 'zh' ? '正在读取现有配置…' : 'Loading current configuration…'
+                ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取现有配置…' : 'Loading current configuration…'} />
                 : lang === 'zh' ? '未取到现有配置，已禁用保存以免覆盖线上实体' : 'Existing configuration unavailable; saving is disabled to avoid overwriting it'}
             </span>
           )}
@@ -258,7 +259,7 @@ ${jsonLdScript}
       {eeatReport === null ? (
         <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 text-xs text-slate-400">
           {loadState === 'loading'
-            ? lang === 'zh' ? '正在读取品牌实体报告…' : 'Loading brand entity report…'
+            ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取品牌实体报告…' : 'Loading brand entity report…'} />
             : lang === 'zh'
               ? '未取到品牌实体报告，因此不展示任何配置完整度或计数（不显示演示数据）。'
               : 'Brand entity report unavailable, so no completeness or count data is shown.'}

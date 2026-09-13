@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { BrainCircuit, CheckCircle2, FilePlus2, History, ImagePlus, Save, Send, ShieldCheck, Trash2 } from 'lucide-react';
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
+import { LoadingState } from './LoadingState';
 
 interface EnterpriseKnowledgeViewProps {
   apiClient: GeoFlowApiClient;
@@ -27,16 +28,21 @@ export const EnterpriseKnowledgeView: React.FC<EnterpriseKnowledgeViewProps> = (
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [validationItems, setValidationItems] = useState<ApiRecord[]>([]);
   const [requiresDangerConfirmation, setRequiresDangerConfirmation] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const loadProjects = useCallback(async () => {
     if (!canRead) return;
-    const result = asRecord(await apiClient.listEnterpriseKnowledge({ page: 1, per_page: 50 }));
-    const rows = Array.isArray(result.items) ? result.items.map(asRecord) : [];
-    setProjects(rows);
-    if (!selectedId && rows[0]) setSelectedId(asNumber(rows[0].id));
+    try {
+      const result = asRecord(await apiClient.listEnterpriseKnowledge({ page: 1, per_page: 50 }));
+      const rows = Array.isArray(result.items) ? result.items.map(asRecord) : [];
+      setProjects(rows);
+      if (!selectedId && rows[0]) setSelectedId(asNumber(rows[0].id));
+    } finally {
+      setLoading(false);
+    }
   }, [apiClient, canRead, selectedId]);
 
   const loadDetail = useCallback(async (id: number) => {
@@ -153,7 +159,7 @@ export const EnterpriseKnowledgeView: React.FC<EnterpriseKnowledgeViewProps> = (
     {error && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{error}</div>}
     {message && <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-200"><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />{message}</div>}
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-      <div className="space-y-2 lg:col-span-1">{projects.length === 0 ? <p className="text-xs text-slate-500">{zh ? '暂无企业知识项目' : 'No projects yet'}</p> : projects.map((project) => <button type="button" key={String(project.id)} onClick={() => setSelectedId(asNumber(project.id))} className={`w-full rounded-lg border p-2.5 text-left ${asNumber(project.id) === selectedId ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/40'}`}><div className="truncate text-xs font-semibold text-slate-200">{asString(project.name)}</div><div className="mt-1 text-[10px] text-slate-500">{asString(project.status)}</div></button>)}</div>
+      <div className="space-y-2 lg:col-span-1">{loading && projects.length === 0 ? <LoadingState lang={lang} variant="inline" label={zh ? '正在读取企业知识项目…' : 'Loading enterprise projects…'} /> : projects.length === 0 ? <p className="text-xs text-slate-500">{zh ? '暂无企业知识项目' : 'No projects yet'}</p> : projects.map((project) => <button type="button" key={String(project.id)} onClick={() => setSelectedId(asNumber(project.id))} className={`w-full rounded-lg border p-2.5 text-left ${asNumber(project.id) === selectedId ? 'border-indigo-500 bg-indigo-500/10' : 'border-slate-800 bg-slate-950/40'}`}><div className="truncate text-xs font-semibold text-slate-200">{asString(project.name)}</div><div className="mt-1 text-[10px] text-slate-500">{asString(project.status)}</div></button>)}</div>
       <div className="space-y-3 lg:col-span-3">
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2"><input value={name} onChange={(event) => setName(event.target.value)} disabled={!canWrite || Boolean(selectedId)} placeholder={zh ? '项目名称' : 'Project name'} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white" /><input value={description} onChange={(event) => setDescription(event.target.value)} disabled={!canWrite || Boolean(selectedId)} placeholder={zh ? '业务线/描述' : 'Description'} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white" /></div>
         {!selectedId && canWrite && <input type="file" accept=".txt,.md,.markdown,.docx" onChange={(event) => setSourceFile(event.target.files?.[0] || null)} className="block w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-[11px] text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-[10px] file:text-slate-200" />}

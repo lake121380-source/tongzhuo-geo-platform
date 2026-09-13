@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { KeyRound, Pencil, Plus, Save, Trash2, Loader2, Wifi} from 'lucide-react';
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
+import { LoadingState } from './LoadingState';
 
 interface AiSourceProvidersPanelProps {
   apiClient: GeoFlowApiClient;
@@ -34,6 +35,8 @@ export const AiSourceProvidersPanel: React.FC<AiSourceProvidersPanelProps> = ({ 
   const [busy, setBusy] = useState(false);
   const [probing, setProbing] = useState('');
   const [notice, setNotice] = useState('');
+  /** 首屏取数中。没有它时，等待期间会直接显示「尚未配置来源 Provider」，分不清加载与无数据。 */
+  const [loading, setLoading] = useState(true);
 
   const load = async () => {
     try {
@@ -41,6 +44,8 @@ export const AiSourceProvidersPanel: React.FC<AiSourceProvidersPanelProps> = ({ 
       setProviders(result.items || []);
     } catch (error) {
       setNotice(describeApiError(error, lang === 'zh' ? '无法读取来源 Provider' : 'Unable to load source providers', lang));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -147,7 +152,7 @@ export const AiSourceProvidersPanel: React.FC<AiSourceProvidersPanelProps> = ({ 
         <div className="grid grid-cols-3 gap-2"><label className="text-xs text-slate-400">{lang === 'zh' ? '日额度' : 'Daily limit'}<input type="number" min="0" value={value('daily_limit')} onChange={(event) => setValue('daily_limit', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white" /></label><label className="text-xs text-slate-400">{lang === 'zh' ? '结果数' : 'Count'}<input type="number" min="1" max="20" value={value('count')} onChange={(event) => setValue('count', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white" /></label><label className="text-xs text-slate-400">{lang === 'zh' ? '状态' : 'Status'}<select value={value('status')} onChange={(event) => setValue('status', event.target.value)} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white"><option value="active">active</option><option value="inactive">inactive</option></select></label></div>
         <div className="flex gap-2 md:col-span-2"><button type="button" disabled={busy} onClick={() => void save()} className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"><Save className="h-3.5 w-3.5" />{busy ? '…' : (lang === 'zh' ? '保存' : 'Save')}</button><button type="button" disabled={busy} onClick={() => { setDraft(null); setEditingId(null); }} className="text-xs text-slate-400">{lang === 'zh' ? '取消' : 'Cancel'}</button></div>
       </div>}
-      <div className="space-y-2">{providers.length === 0 ? <p className="py-3 text-xs text-slate-500">{lang === 'zh' ? '尚未配置来源 Provider。' : 'No source providers configured.'}</p> : providers.map((provider) => <div key={String(provider.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3"><div><div className="text-xs font-semibold text-white">{String(provider.name || 'Provider')} <span className="ml-1 text-[10px] text-slate-500">{String(provider.status || 'unknown')}</span></div><div className="mt-1 break-all text-[10px] text-slate-400">{String(provider.endpoint_url || '—')} · {lang === 'zh' ? '今日用量' : 'Used today'} {String(provider.used_today ?? 0)} / {String(provider.daily_limit ?? 0)}</div></div><div className="flex items-center gap-2"><button type="button" disabled={probing === String(provider.id)} onClick={() => void probe(String(provider.id))} className="text-xs text-emerald-300 disabled:opacity-50" title={lang === 'zh' ? '测试连接（会消耗一次额度）' : 'Test connection (uses quota)'}>{probing === String(provider.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wifi className="h-3.5 w-3.5" />}</button><button type="button" onClick={() => beginEdit(provider)} className="text-xs text-slate-300"><Pencil className="h-3.5 w-3.5" /></button><button type="button" disabled={busy} onClick={() => void remove(String(provider.id))} className="text-xs text-rose-300 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /></button></div></div>)}</div>
+      <div className="space-y-2">{loading && providers.length === 0 ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取来源 Provider…' : 'Loading source providers…'} /> : providers.length === 0 ? <p className="py-3 text-xs text-slate-500">{lang === 'zh' ? '尚未配置来源 Provider。' : 'No source providers configured.'}</p> : providers.map((provider) => <div key={String(provider.id)} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3"><div><div className="text-xs font-semibold text-white">{String(provider.name || 'Provider')} <span className="ml-1 text-[10px] text-slate-500">{String(provider.status || 'unknown')}</span></div><div className="mt-1 break-all text-[10px] text-slate-400">{String(provider.endpoint_url || '—')} · {lang === 'zh' ? '今日用量' : 'Used today'} {String(provider.used_today ?? 0)} / {String(provider.daily_limit ?? 0)}</div></div><div className="flex items-center gap-2"><button type="button" disabled={probing === String(provider.id)} onClick={() => void probe(String(provider.id))} className="text-xs text-emerald-300 disabled:opacity-50" title={lang === 'zh' ? '测试连接（会消耗一次额度）' : 'Test connection (uses quota)'}>{probing === String(provider.id) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wifi className="h-3.5 w-3.5" />}</button><button type="button" onClick={() => beginEdit(provider)} className="text-xs text-slate-300"><Pencil className="h-3.5 w-3.5" /></button><button type="button" disabled={busy} onClick={() => void remove(String(provider.id))} className="text-xs text-rose-300 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" /></button></div></div>)}</div>
     </section>
   );
 };

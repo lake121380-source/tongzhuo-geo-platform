@@ -4,6 +4,7 @@ import { Article } from '../types';
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import PermissionNotice from './PermissionNotice';
+import { LoadingState } from './LoadingState';
 import ManualPublicationSettingsPanel from './ManualPublicationSettingsPanel';
 import BrowserConnectPanel from './BrowserConnectPanel';
 
@@ -93,7 +94,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
   const [transitionStatus, setTransitionStatus] = useState('');
   const [completionUrl, setCompletionUrl] = useState('');
   const [resultNote, setResultNote] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
 
@@ -331,7 +332,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)]">
         <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900/50">
-          {items.length === 0 && !loading ? <div className="px-4 py-12 text-center text-xs text-slate-500">{zh ? '暂无手动发布工单' : 'No manual publication work orders'}</div> : <div className="divide-y divide-slate-800/80">{items.map((item) => {
+          {items.length === 0 ? (loading ? <div className="px-4 py-12 text-center"><LoadingState lang={lang} variant="inline" label={zh ? '正在读取发布工单…' : 'Loading work orders…'} /></div> : <div className="px-4 py-12 text-center text-xs text-slate-500">{zh ? '暂无手动发布工单' : 'No manual publication work orders'}</div>) : <div className="divide-y divide-slate-800/80">{items.map((item) => {
             const isSelected = String(selected?.id) === String(item.id);
             return <button type="button" key={String(item.id)} onClick={() => void openDetail(item)} className={`block w-full px-4 py-3 text-left transition hover:bg-slate-800/60 ${isSelected ? 'bg-indigo-950/40' : ''}`}>
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-semibold text-white">{text(record(item.article).title) || TYPE_LABELS[text(item.type)] || text(item.content).slice(0, 80)}</div><div className="mt-1 truncate text-[11px] text-slate-400">{TYPE_LABELS[text(item.type)] || text(item.type)} · {text(record(item.account).name) || text(record(item.persona).name) || '—'} · #{text(item.id)}</div></div><span className="shrink-0 rounded-full border border-slate-700 px-2 py-0.5 text-[10px] text-slate-300">{STATUS_LABELS[text(item.status)] || text(item.status)}</span></div>

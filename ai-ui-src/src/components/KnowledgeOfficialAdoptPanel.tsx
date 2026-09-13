@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, PackageCheck } from 'lucide-react';
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
+import { LoadingState } from './LoadingState';
 
 interface KnowledgeOfficialAdoptPanelProps {
   apiClient: GeoFlowApiClient;
@@ -30,6 +31,7 @@ const KnowledgeOfficialAdoptPanel: React.FC<KnowledgeOfficialAdoptPanelProps> = 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
@@ -38,10 +40,16 @@ const KnowledgeOfficialAdoptPanel: React.FC<KnowledgeOfficialAdoptPanelProps> = 
     } catch {
       // 读不到就不渲染这块——它只是详情里的一个附加操作。
       setItem(null);
+    } finally {
+      setLoading(false);
     }
   }, [apiClient, knowledgeBaseId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  if (loading && !item) {
+    return <LoadingState lang={lang} variant="panel" label={zh ? '正在读取官方版本…' : 'Loading official version…'} />;
+  }
 
   if (!item || item.is_system_managed !== true) return null;
 

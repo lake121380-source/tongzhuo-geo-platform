@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle2, RefreshCw, ShieldCheck, Radar, Bot, Link2, TrendingUp } from 'lucide-react';
 import { GeoFlowApiClient, GeoFlowApiError } from '../api/geoflowClient';
+import { LoadingState } from './LoadingState';
 
 interface RealSeoDashboardViewProps {
   lang: 'zh' | 'en';
@@ -74,6 +75,9 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
   const competitorSummary = record(competitor?.summary);
   const funnelStages = list(funnel?.stages);
 
+  // 首屏取数期间（五个接口都还没回来）才整块占位；已有任一数据后刷新不再替换。
+  const firstLoad = loading && !audit && !traffic && !radar && !competitor && !funnel;
+
   const card = 'rounded-xl border border-slate-800 bg-slate-900/80 p-5';
   const sectionTitle = 'flex items-center gap-2 text-sm font-bold text-white';
 
@@ -104,6 +108,10 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
 
       {error && <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</div>}
 
+      {firstLoad ? (
+        <LoadingState lang={lang} variant="panel" label={zh ? '正在读取 SEO 诊断…' : 'Loading SEO diagnostics…'} />
+      ) : (
+        <>
       {/* ① 可发现性 */}
       <section className={card}>
         <div className="flex items-center justify-between">
@@ -217,6 +225,8 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
           </div>
         )}
       </section>
+        </>
+      )}
     </div>
   );
 };
