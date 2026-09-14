@@ -59,7 +59,23 @@ class ArticleAiQualityEvidenceBuilder
         $factEvidenceKeys = [];
         $attemptedFactIds = [];
 
-        if ($generationEvidence === [] && $genericQuery !== '') {
+        // 先让生成期证据与事实配对，再决定要不要补一次广域检索。
+        $this->mapMatchingEvidence($factCandidates, $evidenceByKey, $factEvidenceKeys);
+
+        /*
+         * 广域检索（一次覆盖整个知识库）**不能只在"生成时没留证据"时才做**。
+         *
+         * 2026-09-14 实测（文章 22 / 检查 18）：该文生成时留了 3 条证据，于是这里被跳过，
+         * 只剩"逐事实检索"（上限 6 次）；而它有 19 条 high/medium 事实 → 11 条从未被检索过
+         * （`retrieval_status=budget_exceeded`）→ `coverage_status=insufficient`
+         * → 聚合出 `knowledge_coverage=insufficient` → scorer 判 needs_review
+         * → 门禁要求人工放行，**与文章质量、分数都无关**。
+         *
+         * 生成时留下的证据只有寥寥几条时，恰恰是最需要广域检索兜底的时候。
+         */
+        $needsBroadRetrieval = $generationEvidence === []
+            || $this->materialFactsWithoutEvidence($factCandidates, $factEvidenceKeys) !== [];
+        if ($needsBroadRetrieval && $genericQuery !== '') {
             $sourceKnowledgeBaseIds = array_values(array_unique(array_merge(
                 $sourceKnowledgeBaseIds,
                 array_map('intval', $knowledgeBaseIds),
@@ -110,7 +126,31 @@ class ArticleAiQualityEvidenceBuilder
         $promptInjectionRiskCount = collect($evidenceByKey)
             ->filter(fn (array $row): bool => $this->securityInspector->hasPromptInjectionRisk($row))
             ->count();
-        foreach ($evidenceByKey as $key => $row) {
+        /*
+         * 送进模型的证据是**有上限**的（条数 + 字符），而实质事实候选往往多于上限。
+         * 按原顺序截断，等于把预算花在"先检索到的"切片上，而不是"能兜住最多实质事实"的切片上。
+         *
+         * 2026-09-14 实测：一篇**正文就是知识库原文**的文章拿到 100 分，却因为 11 条实质事实里
+         * 有 2 条对应的切片被字符预算截掉，判出 `knowledge_coverage=insufficient` → 仍需人工放行。
+         * 所以先按"覆盖多少条 high/medium 事实"降序排列，再截断（同权重的保持原顺序，PHP 排序稳定）。
+         */
+        $coverageWeight = [];
+        foreach ($factCandidates as $candidate) {
+            if (! in_array((string) ($candidate['materiality'] ?? ''), ['high', 'medium'], true)) {
+                continue;
+            }
+            foreach (array_keys($factEvidenceKeys[(string) ($candidate['id'] ?? '')] ?? []) as $key) {
+                $coverageWeight[$key] = (int) ($coverageWeight[$key] ?? 0) + 1;
+            }
+        }
+        $orderedKeys = array_keys($evidenceByKey);
+        usort(
+            $orderedKeys,
+            static fn (string $a, string $b): int => ($coverageWeight[$b] ?? 0) <=> ($coverageWeight[$a] ?? 0),
+        );
+
+        foreach ($orderedKeys as $key) {
+            $row = $evidenceByKey[$key];
             if ($this->securityInspector->hasPromptInjectionRisk($row)) {
                 continue;
             }
@@ -229,6 +269,30 @@ class ArticleAiQualityEvidenceBuilder
      * @param  array<string,array<string,mixed>>  $evidenceByKey
      * @param  array<string,array<string,bool>>  $factEvidenceKeys
      */
+    /**
+     * 还没找到任何证据的 high/medium 事实候选（只关心实质事实：low 不参与覆盖度判定）。
+     *
+     * @param  list<array<string,mixed>>  $factCandidates
+     * @param  array<string,array<string,bool>>  $factEvidenceKeys
+     * @return list<string>
+     */
+    private function materialFactsWithoutEvidence(array $factCandidates, array $factEvidenceKeys): array
+    {
+        $factIds = [];
+        foreach ($factCandidates as $candidate) {
+            $factId = trim((string) ($candidate['id'] ?? ''));
+            if ($factId === '' || ($factEvidenceKeys[$factId] ?? []) !== []) {
+                continue;
+            }
+            if (! in_array((string) ($candidate['materiality'] ?? ''), ['high', 'medium'], true)) {
+                continue;
+            }
+            $factIds[] = $factId;
+        }
+
+        return $factIds;
+    }
+
     private function mapMatchingEvidence(array $factCandidates, array $evidenceByKey, array &$factEvidenceKeys): void
     {
         foreach ($factCandidates as $candidate) {

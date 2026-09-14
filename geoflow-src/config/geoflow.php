@@ -206,9 +206,16 @@ return [
     'ai_quality_sampled_auto_release_enabled' => filter_var(env('GEOFLOW_AI_QUALITY_SAMPLED_AUTO_RELEASE_ENABLED', true), FILTER_VALIDATE_BOOL),
     'ai_quality_max_output_tokens' => max(512, min(4096, (int) env('GEOFLOW_AI_QUALITY_MAX_OUTPUT_TOKENS', 2048))),
     'ai_quality_max_model_candidates' => max(1, min(2, (int) env('GEOFLOW_AI_QUALITY_MAX_MODEL_CANDIDATES', 2))),
-    'ai_quality_max_evidence' => max(4, min(24, (int) env('GEOFLOW_AI_QUALITY_MAX_EVIDENCE', 12))),
-    'ai_quality_max_evidence_characters' => max(2000, min(12000, (int) env('GEOFLOW_AI_QUALITY_MAX_EVIDENCE_CHARACTERS', 6000))),
-    'ai_quality_max_fact_retrievals' => max(0, min(12, (int) env('GEOFLOW_AI_QUALITY_MAX_FACT_RETRIEVALS', 6))),
+    'ai_quality_max_evidence' => max(4, min(48, (int) env('GEOFLOW_AI_QUALITY_MAX_EVIDENCE', 24))),
+    /*
+     * 证据预算上限。原上限 12000 字符会**卡住覆盖度**：一篇 11 条实质事实的文章，
+     * 命中证据的切片凑不满预算就被截断，未进清单的事实被判 `insufficient`
+     * → `knowledge_coverage` 永远到不了 `sufficient` → 自动放行不可达（2026-09-14 实测，
+     * 一篇正文即知识库原文、得分 100 的文章仍要求人工放行）。
+     * 放宽到 60000，由部署方按所用模型的实际上下文定预算。
+     */
+    'ai_quality_max_evidence_characters' => max(2000, min(60000, (int) env('GEOFLOW_AI_QUALITY_MAX_EVIDENCE_CHARACTERS', 32000))),
+    'ai_quality_max_fact_retrievals' => max(0, min(24, (int) env('GEOFLOW_AI_QUALITY_MAX_FACT_RETRIEVALS', 12))),
     'ai_quality_queue' => trim((string) env('GEOFLOW_AI_QUALITY_QUEUE', 'ai-quality')),
     'ai_quality_backfill_queue' => trim((string) env('GEOFLOW_AI_QUALITY_BACKFILL_QUEUE', 'ai-quality-backfill')),
     'ai_quality_persistence_reserve_seconds' => max(5, min(30, (int) env('GEOFLOW_AI_QUALITY_PERSISTENCE_RESERVE_SECONDS', 10))),

@@ -375,7 +375,24 @@ class ArticleAiQualityResultValidator
         return [
             'summary' => $this->summary((string) ($result['summary'] ?? ''), $issues, $uncertainties),
             'promotion_context' => $promotion,
-            'knowledge_coverage' => $evidence === [] ? 'insufficient' : 'partial',
+            /*
+             * 覆盖度**必须能给出 sufficient**——`sufficient` 是本字段三个合法取值之一，
+             * 而这里此前只会返回 `insufficient/partial`，**一个合法的枚举值永远不可能出现**。
+             *
+             * ⚠️ 但要说清楚：**这个返回值目前并不决定判定**。两条生产路径都在拿到校验结果后
+             * 立刻用证据构建器的 `aggregateCoverage()` 覆盖它
+             * （`ArticleAiQualityInspectionService` 全篇路径 :1234、抽样路径 :1891），
+             * 落库和打分的都是覆盖后的值。所以修好这里**不会**让文章自动放行——
+             * 真正卡住自动放行的是检索预算与广域检索那几处（见 `ArticleAiQualityEvidenceBuilder`）。
+             *
+             * 保留这处修改的理由：它是一处**潜伏缺陷**——哪天这个值被接进链路，写死的两档会立刻变成
+             * 「永远判 needs_review」。判据取自本方法已有的 `$generatedUncertainties`：
+             * 它就是「有高重要性事实没被模型核验」的清单，清单为空且提供了证据，才算覆盖充分。
+             * **不要**据此认为"修了校验器就修好了放行"（2026-09-14 我先把因果归到了这里，是错的）。
+             */
+            'knowledge_coverage' => $evidence === []
+                ? 'insufficient'
+                : ($generatedUncertainties === [] ? 'sufficient' : 'partial'),
             'issues' => $issues,
             'uncertainties' => $uncertainties,
             'reviewed_claim_hashes' => $reviewedClaimHashes,

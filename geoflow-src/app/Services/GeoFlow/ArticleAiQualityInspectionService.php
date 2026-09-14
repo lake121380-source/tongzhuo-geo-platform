@@ -3,6 +3,7 @@
 namespace App\Services\GeoFlow;
 
 use App\Contracts\ArticleAiQualityReviewer;
+use App\Services\GeoFlow\ArticleAiQualitySampleBuilder;
 use App\Contracts\DeadlineAwareArticleAiQualityReviewer;
 use App\Contracts\ProviderAttemptAwareArticleAiQualityReviewer;
 use App\Contracts\VersionAwareArticleAiQualityReviewer;
@@ -890,7 +891,13 @@ class ArticleAiQualityInspectionService
                         $check->article?->generation_evidence_snapshot ?? [],
                         JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES,
                     )),
-                    'retrieval_version' => 4,
+                    /*
+                     * ⚠️ 这个数字是**证据缓存的语义版本**，不是指纹里的 `ret=4`（那个别动，它进了
+                     * `input_fingerprint`，改了会让全库质检记录集体变 stale）。
+                     * **任何改动"检索/证据怎么组装"的提交都必须把它 +1**，否则最长 24 小时里
+                     * 命中的都是旧代码算出来的证据——改了半天看不出区别。2026-09-14 已踩过。
+                     */
+                    'retrieval_version' => 5,
                     'retrieval_mode' => (string) ($check->requested_retrieval_mode ?: AiQualityRetrievalMode::legacyDefault()),
                     'retrieval_basis_hash' => (string) $check->retrieval_basis_hash,
                     'limits' => [
@@ -1329,6 +1336,36 @@ class ArticleAiQualityInspectionService
                 );
             }
 
+            /*
+             * 覆盖度记录（`coverage_meta`）。
+             *
+             * **这条主路径以前完全不写这个字段**，而 `ArticleAiQualityGate` 的自动放行分支要求
+             * `coverage_meta.algorithm_version === ALGORITHM_VERSION` 且 `safe_for_auto_release === true`
+             * —— 缺了它，自动放行**永远不可达**：任何文章（哪怕满分）都只能人工放行。
+             * 2026-09-14 实测：库里 9 条质检 `coverage_meta` 全为 NULL、`decision=passed` 0 条。
+             *
+             * 全篇质检（`inspection_scope=full`）按构造就是"全篇覆盖"：所有段落都送检。
+             * 但段数没跑满（或门禁另有原因）时**必须如实记 false**，否则等于绕过人工复核。
+             */
+            $coverageTotal = max(1, (int) $current->segment_count);
+            $coverageCompleted = count($validatedResults);
+            $coverageGateReasons = array_values(array_unique(array_map('strval', (array) ($score['gate_reasons'] ?? []))));
+            $coverage = [
+                'algorithm_version' => ArticleAiQualitySampleBuilder::ALGORITHM_VERSION,
+                'inspection_scope' => 'full',
+                'segments_total' => $coverageTotal,
+                'segments_completed' => $coverageCompleted,
+                // 全篇路径没有"必检声明"抽样这回事：总量即段数，覆盖即已校验段数。
+                'mandatory_claims_total' => $coverageTotal,
+                'mandatory_claims_covered' => $coverageCompleted,
+                'mandatory_overflow' => false,
+                'regions_covered' => ['front', 'middle', 'back'],
+                'gate_reasons' => $coverageGateReasons,
+            ];
+            $coverage['safe_for_auto_release'] = ($score['decision'] ?? null) === 'passed'
+                && $coverageGateReasons === []
+                && $coverageCompleted >= $coverageTotal;
+
             return ArticleAiQualityCheck::query()
                 ->whereKey($checkId)
                 ->where('status', 'running')
@@ -1352,6 +1389,7 @@ class ArticleAiQualityInspectionService
                     'uncertainties' => json_encode($score['uncertainties'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'confidence' => $score['confidence'] ?? null,
                     'gate_reasons' => json_encode($score['gate_reasons'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                    'coverage_meta' => json_encode($coverage, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'truncated_issue_count' => (int) ($aggregate['truncated_issue_count'] ?? 0),
                     'raw_model_output' => json_encode($storedRawResults, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                     'ai_model_id' => isset($modelMeta['id']) ? (int) $modelMeta['id'] : (int) $current->ai_model_id,
@@ -2853,7 +2891,18 @@ class ArticleAiQualityInspectionService
         }
 
         if ($references === []) {
-            return [];
+            /*
+             * **chunk 模式（未启用原子事实）没有 fact 级引用——证据就是检索到的切片本身。**
+             *
+             * 此前这里返回 []：只要没有任何一条事实候选挂上知识引用（例如原子事实关闭、
+             * 或广域检索被跳过导致一条都没匹配上），评审模型的提示词里 `knowledge` 就是空的——
+             * 它在没有任何知识库上下文的情况下读文章。这是真缺陷，修掉。
+             *
+             * ⚠️ 但它**不是**「永远要人工放行」的主因（2026-09-14 我先这么归因，错了）：
+             * 实测里大多数文章是**部分**事实有引用，这条分支根本没走到；真正卡住的是检索预算与
+             * 广域检索（见 `ArticleAiQualityEvidenceBuilder`）。别再把它当成放行链路的关键。
+             */
+            return $evidence;
         }
 
         return array_values(array_filter(

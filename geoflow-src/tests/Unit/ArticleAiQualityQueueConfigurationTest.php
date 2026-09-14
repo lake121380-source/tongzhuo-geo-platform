@@ -26,9 +26,12 @@ class ArticleAiQualityQueueConfigurationTest extends TestCase
         $this->assertSame(6000, config('geoflow.ai_quality_sampled_max_characters'));
         $this->assertSame(12, config('geoflow.ai_quality_sampled_max_ranges'));
         $this->assertSame(2048, config('geoflow.ai_quality_max_output_tokens'));
-        $this->assertSame(12, config('geoflow.ai_quality_max_evidence'));
-        $this->assertSame(6000, config('geoflow.ai_quality_max_evidence_characters'));
-        $this->assertSame(6, config('geoflow.ai_quality_max_fact_retrievals'));
+        // 2026-09-14：证据预算调大（12/6000/6 → 24/32000/12）。
+        // 原值会让「覆盖度」永远算不到 sufficient：一篇正文即知识库原文、得分 100 的文章
+        // 也因切片被字符预算截断而判 needs_review，自动放行不可达。详见 config/geoflow.php 注。
+        $this->assertSame(24, config('geoflow.ai_quality_max_evidence'));
+        $this->assertSame(32000, config('geoflow.ai_quality_max_evidence_characters'));
+        $this->assertSame(12, config('geoflow.ai_quality_max_fact_retrievals'));
         $this->assertSame('legacy', config('geoflow.ai_quality_execution_version'));
         $this->assertSame(0, config('geoflow.ai_quality_principle_v2_percent'));
         $this->assertSame(0, config('geoflow.ai_quality_scoring_v2_percent'));
@@ -165,8 +168,9 @@ class ArticleAiQualityQueueConfigurationTest extends TestCase
             $this->assertStringContainsString('GEOFLOW_AI_QUALITY_SAMPLED_MAX_CHARACTERS=6000', $contents);
             $this->assertStringContainsString('GEOFLOW_AI_QUALITY_SAMPLED_MAX_RANGES=12', $contents);
             $this->assertStringContainsString('GEOFLOW_AI_QUALITY_MAX_OUTPUT_TOKENS=2048', $contents);
-            $this->assertStringContainsString('GEOFLOW_AI_QUALITY_MAX_EVIDENCE=12', $contents);
-            $this->assertStringContainsString('GEOFLOW_AI_QUALITY_MAX_FACT_RETRIEVALS=6', $contents);
+            // 2026-09-14：证据预算调大（12/6000/6 → 24/32000/12），理由见 config/geoflow.php 注。
+            $this->assertStringContainsString('GEOFLOW_AI_QUALITY_MAX_EVIDENCE=24', $contents);
+            $this->assertStringContainsString('GEOFLOW_AI_QUALITY_MAX_FACT_RETRIEVALS=12', $contents);
             $this->assertStringContainsString('GEOFLOW_AI_QUALITY_JOB_TIMEOUT_SECONDS=245', $contents);
             $this->assertStringContainsString('GEOFLOW_AI_QUALITY_WORKER_TIMEOUT_SECONDS=250', $contents);
             $this->assertStringContainsString('GEOFLOW_AI_QUALITY_STOP_GRACE_PERIOD=260s', $contents);
