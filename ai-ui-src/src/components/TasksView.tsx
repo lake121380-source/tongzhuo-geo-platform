@@ -520,6 +520,21 @@ export const TasksView: React.FC<TasksViewProps> = ({
           }
           if (authorId) payload.author_id = Number(authorId);
           if (knowledgeBaseId) payload.knowledge_base_ids = [Number(knowledgeBaseId)];
+          /*
+           * 上面这些字段（need_review / knowledge_base_ids / ai_model_id / publish_scope /
+           * title_library_id / prompt_id）都在后端的「质检配置」清单里，改它们必须带上
+           * 当前版本号做乐观并发，否则服务端一律 409
+           * `task_ai_quality_config_version_required`——而界面上根本没有这个字段可填，
+           * 用户看到的就是一句没有出路的报错。版本号来自任务投影的 `config_version`。
+           */
+          const configVersion = Number(editingTask.aiQualityConfigVersion) || 0;
+          if (configVersion <= 0) {
+            setFormError(lang === 'zh'
+              ? '没读到这个任务的质检配置版本号，无法安全保存。请关闭弹窗、刷新页面后重试。'
+              : 'Could not read this task\'s quality config version. Close the dialog, refresh and retry.');
+            return;
+          }
+          payload.config_version = configVersion;
           await onUpdateTask(editingTask.id, payload);
         } else if (isEditing) {
           throw new Error(lang === 'zh' ? '任务编辑接口未配置' : 'Task update is not configured');

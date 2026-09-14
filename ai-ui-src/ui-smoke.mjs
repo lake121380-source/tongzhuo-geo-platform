@@ -519,6 +519,48 @@ async function main() {
       `落在 tab=${deepLinkTab}，期望 ${expectedTab}`,
     );
 
+    // ── 6b. 任务编辑保存：改质检字段必须能落库，不能撞 409 ─────────────
+    // 2026-09-14 哥哥报的 bug：点「保存修改」必报「请提供当前任务 AI 质检配置版本」，
+    // 而弹窗里**根本没有这个字段可填**，用户在界面上是死胡同。
+    // 根因：后端对「改质检字段」要求回传乐观并发版本号（`config_version`），
+    // 而前端从来没带上——接口其实在列表和详情里一直都返回它。
+    // 判据：**不改任何内容**地点一次保存，必须是 2xx、不弹错、弹窗正常关闭。
+    // 无改动保存不会改任务内容（实测 `ai_quality_config_version` 也不变），不动业务数据。
+    const patchStatuses = [];
+    const onTaskPatch = (res) => {
+      if (res.request().method() === 'PATCH' && /\/tasks\/\d+/.test(res.url())) {
+        patchStatuses.push(res.status());
+      }
+    };
+    page.on('response', onTaskPatch);
+    await page.goto(`${ADMIN_PATH}?tab=tasks`, { waitUntil: 'domcontentloaded', timeout: 40000 });
+    await waitForAppReady(page);
+    await waitForDataSettled(page);
+    let taskSaveOk = false;
+    let taskSaveDetail = '没找到「编辑」按钮';
+    const taskEditBtn = page.locator('main button:has-text("编辑")').first();
+    if (await taskEditBtn.count() > 0) {
+      await taskEditBtn.click();
+      await page.waitForTimeout(2500);
+      const taskSaveBtn = page.locator('div.fixed.inset-0 button:has-text("保存修改")').first();
+      if (await taskSaveBtn.count() > 0) {
+        await taskSaveBtn.click();
+        await page.waitForTimeout(6000);
+        const saveErr = await page.evaluate(() => document.querySelector('[role="alert"]')?.innerText.trim() || '');
+        const stillOpen = await page.evaluate(() => !!document.querySelector('div.fixed.inset-0'));
+        taskSaveOk = patchStatuses.length > 0
+          && patchStatuses.every((status) => status >= 200 && status < 300)
+          && saveErr === ''
+          && stillOpen === false;
+        taskSaveDetail = `PATCH=${patchStatuses.join(',') || '没发出'} 报错=${saveErr || '无'} 弹窗还开着=${stillOpen}`;
+        if (stillOpen) await page.keyboard.press('Escape');
+      } else {
+        taskSaveDetail = '弹窗里没有「保存修改」按钮';
+      }
+    }
+    page.off('response', onTaskPatch);
+    record('任务编辑弹窗「保存修改」能落库（不再 409 质检配置版本）', taskSaveOk, taskSaveDetail);
+
     // ── 7. 失败请求（按 URL 过滤掉已知可忽略项）──────────────────────
     const realBad = badResponses.filter((entry) => !IGNORABLE_BAD_URL.test(entry));
     const dedupedBad = [...new Set(realBad.map((e) => e.replace(/\?.*$/, '')))];

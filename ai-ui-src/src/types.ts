@@ -149,6 +149,12 @@ export interface Task {
   autoKeywords?: boolean;
   autoDescription?: boolean;
   aiQualityEnabled?: boolean;
+  /**
+   * 后端给质检配置做的乐观并发版本号（投影里的 `config_version`）。
+   * **改任何一个质检字段时必须原样回传**，否则服务端按 409 拒绝——
+   * 见 `TaskLifecycleService::updateTask` 的 `task_ai_quality_config_version_required`。
+   */
+  aiQualityConfigVersion?: number;
   /** 桐灼GEO's publish_interval is expressed in seconds. */
   publishIntervalSeconds?: number;
   scheduleEnabled?: boolean;

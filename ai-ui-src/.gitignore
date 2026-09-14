@@ -60,3 +60,8 @@ Thumbs.db
 /_proof-auto-pass.mjs
 /_fixture-kb-article.mjs
 /_shot-quality.mjs
+# 2026-09-14 任务保存 409 排查期间新增（同上，真机驱动后台）
+/_repro-task-save.mjs
+/_verify-task-toggle.mjs
+/_verify-generate.mjs
+/_verify-review-flow.mjs

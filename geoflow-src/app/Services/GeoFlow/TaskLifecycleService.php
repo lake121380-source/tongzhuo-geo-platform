@@ -435,7 +435,15 @@ class TaskLifecycleService
             ? (int) $data['config_version']
             : null;
         unset($data['config_version']);
-        if ($qualityConfigurationRequested && $apiTokenId !== null && $expectedQualityVersion === null) {
+        /*
+         * 乐观并发只对**API 令牌客户端**成立：它们能读回 config_version 再带上重放。
+         * 后台界面走的是管理员会话，`TaskController` 传的是 `(int) ($auth->token['id'] ?? 0)`
+         * —— 会话请求拿到的是 **0**，而这里原先只判 `!== null`，于是 0 被当成"有令牌"，
+         * 后台每次保存任务（表单必带 need_review、知识库、模型等质检字段）都被 409 拦下，
+         * 提示「请提供当前任务 AI 质检配置版本」，而界面上**根本没有这个字段可填**。
+         * 本文件其它地方（api_token_id 写审计）一律用 `!== null && > 0`，这里与之一致。
+         */
+        if ($qualityConfigurationRequested && $apiTokenId !== null && $apiTokenId > 0 && $expectedQualityVersion === null) {
             throw new ApiException('task_ai_quality_config_version_required', '请提供当前任务 AI 质检配置版本', 409, [
                 'required_field' => 'config_version',
             ]);
