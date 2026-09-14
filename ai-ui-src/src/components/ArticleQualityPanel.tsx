@@ -28,7 +28,7 @@ interface ArticleQualityPanelProps {
   onArticleStateChange?: (article: Article) => void | Promise<void>;
 }
 
-type BusyAction = 'refresh' | 'recheck' | 'start' | 'apply' | 'cancel' | 'rollback' | null;
+type BusyAction = 'refresh' | 'recheck' | 'start' | 'apply' | 'cancel' | 'rollback' | 'override' | null;
 
 function record(value: unknown): ApiRecord {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -61,6 +61,20 @@ function qualityFrom(value: unknown): ApiRecord {
     };
   }
   return root;
+}
+
+/**
+ * 从后端给的可读结论反推判定。
+ * 为什么需要：`/ai-quality/status` 是扁平载荷、**不带 decision**，只有 `result_label`
+ * （如「AI 质检待人工复核」「质检通过」）——不反推的话，「人工放行」这条路永远不出现。
+ */
+function decisionFromResultLabel(label: string): string {
+  const text = (label || '').trim();
+  if (!text) return '';
+  if (/待人工复核|待复核|needs review/i.test(text)) return 'needs_review';
+  if (/未通过|不通过|禁止|blocked/i.test(text)) return 'blocked';
+  if (/通过|passed/i.test(text)) return 'passed';
+  return '';
 }
 
 function statusLabel(status: string, lang: 'zh' | 'en'): string {
@@ -143,6 +157,10 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
   const [busy, setBusy] = useState<BusyAction>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 人工放行必须填理由（后端会记入审计）。 */
+  const [overrideReason, setOverrideReason] = useState('');
+  /** 本次会话里已放行成功（外壳不一定把新投影回灌到弹窗，本地先收起来）。 */
+  const [releasedLocally, setReleasedLocally] = useState(false);
   const [strategy, setStrategy] = useState<'pass' | 'excellent_80' | 'excellent_90'>('excellent_80');
   const candidateKey = useRef('');
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -250,7 +268,8 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
 
   const configVersion = number(quality.config_version) || article.aiQualityConfigVersion || 0;
   const qualityStatus = text(quality.effective_status || quality.status).toLowerCase();
-  const qualityScore = number(quality.score);
+  // 分数同理：`/ai-quality/status` 不带 score，文章投影才有（article.aiQualityScore）。
+  const qualityScore = number(quality.score) ?? article.aiQualityScore ?? null;
   const qualityProgress = Math.max(0, Math.min(100, number(snapshot?.progress_percent) || 0));
   const optimizationStatus = text(optimization.status).toLowerCase();
   const runId = number(optimization.run_id);
@@ -258,6 +277,85 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
   const canPublishQuality = !apiClient.session?.scopes?.length
     || apiClient.session.scopes.includes('articles:publish')
     || apiClient.session.scopes.includes('*');
+
+  /**
+   * 「跑完了」与「结论是什么」必须分开显示（2026-09-14 哥哥报的 bug：
+   * status=completed 显示成「已完成」，用户以为通过，点发布却被门禁拦下）。
+   * 结论优先用后端给的 `result_label`；没有才按 decision 兜底。
+   */
+  const qualityDecision = (
+    text(article.aiQualityDecision)
+    || decisionFromResultLabel(text(quality.result_label) || text(article.aiQualityResultLabel))
+    || text(quality.decision)
+  ).toLowerCase();
+  const qualityVerdictLabel = (() => {
+    if (qualityStatus !== 'completed') return statusLabel(qualityStatus, lang);
+    const backendLabel = text(quality.result_label);
+    if (backendLabel) return backendLabel;
+    if (qualityDecision === 'passed') return lang === 'zh' ? '质检通过' : 'Passed';
+    if (qualityDecision === 'needs_review') return lang === 'zh' ? '待人工复核' : 'Needs review';
+    if (qualityDecision === 'blocked') return lang === 'zh' ? '质检未通过' : 'Blocked';
+    return lang === 'zh' ? '已质检' : 'Checked';
+  })();
+  // `/ai-quality/status` 是**扁平**载荷（没有 decision / is_overridden / 放行线），
+  // 这些只在文章投影里 —— 所以以 article.* 为准，状态载荷只作兜底。
+  const qualityIsOverridden = article.aiQualityIsOverridden ?? bool(quality.is_overridden);
+  /**
+   * 为什么要人工放行——**按门禁的真实依据说**。
+   *
+   * 后端自动放行的条件是「整篇覆盖（coverage_meta 标记 safe_for_auto_release）+ 分数过线 + 无门禁原因」，
+   * 分数只是其中一项。实测本部署 9 条质检 `coverage_meta` 全为空、`decision=passed` 为 0 条——
+   * 也就是说**自动放行不可达，任何文章都要人工放行**。原来界面只写「分数 100 / 放行线 70」，
+   * 把原因归到了分数上，看着就像逻辑错误（2026-09-14 哥哥指出）。
+   */
+  const manualReviewReason = (() => {
+    const gateReasons = Array.isArray(quality.gate_reasons) ? (quality.gate_reasons as unknown[]).map(String) : [];
+    const coverage = quality.coverage;
+    const coverageEmpty = !coverage
+      || (Array.isArray(coverage) ? coverage.length === 0 : (typeof coverage === 'object' && Object.keys(coverage as Record<string, unknown>).length === 0));
+    const scope = text(quality.inspection_scope).toLowerCase();
+    const passLine = article.aiQualityPassScore ?? number(quality.pass_score);
+    if (scope === 'fallback_sampled') {
+      return lang === 'zh'
+        ? '本次质检是「抽样降级」执行——没有覆盖全文，所以不自动放行。'
+        : 'This check ran in sampled fallback mode, so it is not auto-released.';
+    }
+    if (gateReasons.length > 0) {
+      return lang === 'zh' ? `门禁判定原因：${gateReasons.join('、')}。` : `Gate reasons: ${gateReasons.join(', ')}.`;
+    }
+    if (coverageEmpty) {
+      return lang === 'zh'
+        ? '本次质检没有产出覆盖度记录，门禁无法确认它覆盖了全文，因此不自动放行——这一条与分数无关。'
+        : 'This check produced no coverage record, so the gate cannot auto-release it regardless of score.';
+    }
+    // 知识库证据不足是**策略性**的人工复核理由（scorer 的 requiresManualReview 之一）：
+    // 没有可核验的知识库证据时，文章不自动放行——这条与覆盖度、分数都无关，必须单独说。
+    // ⚠️ `knowledge_coverage` **不在** `/ai-quality/status` 的扁平载荷里，只在文章投影里——
+    // 从状态载荷读会静默拿到空串，这条分支就永远命中不了（本轮第二次栽在这个坑上）。
+    const rawQuality = (article.aiQuality || {}) as Record<string, unknown>;
+    const evidenceCoverage = (text(rawQuality.knowledge_coverage) || text(quality.knowledge_coverage)).toLowerCase();
+    if (evidenceCoverage === 'insufficient' || evidenceCoverage === 'partial') {
+      // 出路要写清楚：这种"不自动放行"是可以用动作解决的（换库/补内容），不是只能人工放行。
+      const usedKb = (Array.isArray((article as unknown as { knowledgeBases?: unknown }).knowledgeBases)
+        ? ''
+        : '');
+      return lang === 'zh'
+        ? `本次质检在所选知识库里没找到能支撑这篇文章的资料（知识库覆盖不足），按策略不能自动放行——与分数无关。${usedKb}想让高分文章自动通过：换一个与该标题更匹配的知识库、或往知识库里补上对应资料，再点「重新质检」。`
+        : 'No usable knowledge-base evidence was found for this article, so auto-release is disabled by policy. Use a better-matching knowledge base or add the source material, then re-check.';
+    }
+    if (passLine !== null && (qualityScore ?? 0) < passLine) {
+      return lang === 'zh' ? `分数未达自动通过线（${passLine}）。` : `Score is below the auto-pass line (${passLine}).`;
+    }
+    return lang === 'zh' ? '自动放行条件未满足（要求整篇覆盖且无门禁原因）。' : 'Auto-release conditions were not met.';
+  })();
+  const overrideMinScore = article.aiQualityOverrideMinScore ?? number(quality.manual_override_min_score) ?? 70;
+  const passScore = article.aiQualityPassScore ?? number(quality.pass_score);
+  /** 能不能人工放行：只有「跑完 + 待人工复核 + 未放行过 + 分数够」才有这条路。 */
+  const canOverride = qualityStatus === 'completed'
+    && qualityDecision === 'needs_review'
+    && !qualityIsOverridden
+    && (qualityScore ?? 0) >= overrideMinScore
+    && canPublishQuality;
   const articleIsDraft = text(article.apiStatus || article.status).toLowerCase() === 'draft'
     || article.status === 'review';
   const activeOptimization = bool(optimization.active);
@@ -279,7 +377,7 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
       // Apply/rollback already mutate the article server-side. Fetch the
       // authoritative projection and update the shell without issuing a
       // second PATCH request.
-      if (action === 'apply' || action === 'rollback') {
+      if (action === 'apply' || action === 'rollback' || action === 'override') {
         const updated = await apiClient.getArticle(article.id);
         await applyArticleRecord(updated);
       }
@@ -317,6 +415,23 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
       () => apiClient.recheckArticleQuality(article.id, resolvedConfigVersion),
       lang === 'zh' ? '已重新提交 AI 质检，结果会自动更新。' : 'The AI quality check was queued and will update automatically.',
     );
+  };
+
+  const handleOverride = async () => {
+    const reason = overrideReason.trim();
+    if (!reason) {
+      setError(lang === 'zh' ? '请先填写放行理由（会记入审计记录）。' : 'Enter a reason first (it is recorded in the audit trail).');
+      return;
+    }
+    await run(
+      'override',
+      () => apiClient.overrideArticleAiQuality(article.id, reason),
+      lang === 'zh'
+        ? '已人工放行：理由已记入审计，这篇文章现在可以发布了。'
+        : 'Released manually; the reason was recorded and the article can be published.',
+    );
+    setOverrideReason('');
+    setReleasedLocally(true);
   };
 
   const handleStart = async () => {
@@ -403,15 +518,24 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
             <span>{lang === 'zh' ? '最新质检' : 'Latest quality check'}</span>
             {qualityIcon}
           </div>
-          <div className="mt-2 text-sm font-bold">{statusLabel(qualityStatus, lang)}</div>
-          {qualityScore !== null && <div className="mt-1 text-2xl font-black text-white">{qualityScore}<span className="ml-1 text-xs font-medium text-slate-400">/100</span></div>}
+          <div className="mt-2 text-sm font-bold" data-quality-verdict={qualityStatus === 'completed' ? (qualityDecision || 'completed') : qualityStatus}>
+            {qualityVerdictLabel}
+          </div>
+          {qualityScore !== null && (
+            <div className="mt-1 flex items-baseline gap-1.5">
+              <span className="text-2xl font-black text-white">{qualityScore}</span>
+              <span className="text-[11px] font-medium text-slate-400">
+                /100{passScore !== null ? `${lang === 'zh' ? ' · 通过线 ' : ' · pass '}${passScore}` : ''}
+              </span>
+            </div>
+          )}
           {bool(snapshot?.active) && (
             <div className="mt-2 space-y-1">
               <div className="flex justify-between text-[10px] text-slate-400"><span>{text(snapshot?.phase) || (lang === 'zh' ? '处理中' : 'Working')}</span><span>{qualityProgress}%</span></div>
               <div className="h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-red-500 transition-all" style={{ width: `${qualityProgress}%` }} /></div>
             </div>
           )}
-          {text(quality.result_label || quality.summary) && <p className="mt-2 line-clamp-3 text-[10px] leading-4 text-slate-400">{text(quality.result_label || quality.summary)}</p>}
+          {text(quality.summary) && <p className="mt-2 line-clamp-3 text-[11.5px] leading-5 text-slate-400">{text(quality.summary)}</p>}
         </div>
 
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3 sm:col-span-2">
@@ -427,6 +551,68 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
           {text(optimization.stop_reason || optimization.error_code) && <p className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-200">{text(optimization.stop_reason || optimization.error_code)}</p>}
         </div>
       </div>
+
+      {/* 人工放行：后端有这条路（POST ai-quality/override），但界面从来没暴露过——
+          于是「判定=待人工复核」的文章在界面上是**死胡同**：不能发布、也没有任何提示说该怎么办。 */}
+      {qualityStatus === 'completed' && qualityDecision === 'needs_review' && !qualityIsOverridden && !releasedLocally && (
+        <div
+          data-quality-release
+          className="space-y-2 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-3.5"
+        >
+          <div className="text-[13px] font-semibold text-white">
+            {lang === 'zh' ? '这篇需要你人工放行，才能发布' : 'This article needs a manual release before publishing'}
+          </div>
+          <p className="text-[12.5px] leading-relaxed text-slate-200">
+            {lang === 'zh'
+              ? `质检跑完了，结论是「待人工复核」。原因：${manualReviewReason}本篇 ${qualityScore ?? '—'} 分（人工放行线 ${overrideMinScore} 分）。填写理由放行后即可发布，理由会记入审计。`
+              : `Verdict: needs review. ${manualReviewReason} Manual release requires a recorded reason.`}
+          </p>
+          {canOverride ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={overrideReason}
+                onChange={(event) => setOverrideReason(event.target.value)}
+                placeholder={lang === 'zh' ? '放行理由（必填，会记入审计）' : 'Release reason (required)'}
+                className="h-9 min-w-[240px] flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 text-[12.5px] text-white outline-none focus:border-indigo-500"
+              />
+              <button
+                type="button"
+                disabled={busy !== null || overrideReason.trim() === ''}
+                onClick={() => void handleOverride()}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-amber-600 px-3.5 text-[12.5px] font-bold text-white transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy === 'override' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                {lang === 'zh' ? '人工放行' : 'Release'}
+              </button>
+            </div>
+          ) : (
+            <p className="text-[12.5px] leading-relaxed text-amber-200">
+              {lang === 'zh'
+                ? `${manualReviewReason}分数也低于人工放行线（本篇 ${qualityScore ?? '—'} / 放行线 ${overrideMinScore}），所以不能直接放行：请点「启动 AI 优化」让模型重写后重新质检，或编辑文章补全证据。`
+                : `${manualReviewReason} The score is also below the manual release threshold (${overrideMinScore}).`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {qualityIsOverridden && (
+        <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-3.5 py-3 text-[12.5px] text-emerald-200">
+          {/* 放行信息（谁、何时、为什么）只在**文章投影**里；状态接口是扁平载荷、没有这些字段，
+              所以以 article.aiQuality 为准（否则提示里会出现「（— · ）：」这种空值）。 */}
+          {(() => {
+            const raw = (article.aiQuality || {}) as Record<string, unknown>;
+            const by = text(raw.overridden_by_name) || text(quality.overridden_by_name);
+            const at = text(raw.overridden_at) || text(quality.overridden_at);
+            const reasonText = text(raw.override_reason) || text(quality.override_reason);
+            if (!by && !reasonText) {
+              return lang === 'zh' ? '已人工放行：这篇文章可以发布了。' : 'Released manually; this article can now be published.';
+            }
+            return lang === 'zh'
+              ? `已人工放行${by ? `（${by}${at ? ` · ${at}` : ''}）` : ''}：${reasonText || '—'}`
+              : `Released manually${by ? ` by ${by}` : ''}: ${reasonText || '—'}`;
+          })()}
+        </div>
+      )}
 
       {candidate && (
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
@@ -490,7 +676,7 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
         </button>
 
         {bool(optimization.can_apply) && candidateHash && runId && (
-          <button type="button" onClick={() => void handleApply().catch(() => undefined)} disabled={busy !== null || !canPublishQuality} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50">
+          <button type="button" onClick={() => void handleApply().catch(() => undefined)} disabled={busy !== null || !canPublishQuality} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-[11px] font-bold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50">
             {busy === 'apply' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
             <span>{lang === 'zh' ? '应用候选' : 'Apply candidate'}</span>
           </button>

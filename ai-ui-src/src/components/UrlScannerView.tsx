@@ -19,8 +19,11 @@ import {
 import { UrlScanReport, UrlScanItem } from '../types';
 import { GeoFlowApiClient, GeoFlowApiError, UrlScanSummary } from '../api/geoflowClient';
 import { LoadingState } from './LoadingState';
+import { EmptyState } from './ui';
 
 interface UrlScannerViewProps {
+  /** 合并入口的内层 Tab 渲染：隐藏自身页面标题（由外层 TabbedShell 统一画），只留操作区。 */
+  embedded?: boolean;
   lang: 'zh' | 'en';
   apiClient?: GeoFlowApiClient;
   canRead?: boolean;
@@ -55,7 +58,7 @@ function mapReport(value: unknown): UrlScanReport | null {
   };
 }
 
-export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient, canRead = true, canWrite = true }) => {
+export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient, canRead = true, canWrite = true, embedded = false }) => {
   const [urlInput, setUrlInput] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [report, setReport] = useState<UrlScanReport | null>(null);
@@ -185,34 +188,36 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
   };
 
   return (
-    <div className="space-y-6" id="url-scanner-container">
+    <div className="space-y-8" id="url-scanner-container">
       {/* Header Banner */}
-      <div className="flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/90 p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className={`flex flex-col gap-4 rounded-2xl bg-slate-900/80 p-6 sm:flex-row ${embedded ? 'sm:items-center sm:justify-end' : 'sm:items-center sm:justify-between'}`}>
+        {!embedded && (
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-md bg-indigo-950/60 px-2.5 py-0.5 text-xs font-semibold text-indigo-300 border border-indigo-800/50">
               <Globe className="h-3.5 w-3.5" />
-              {lang === 'zh' ? '模块 C · 全站 GEO 体检' : 'Module C · URL Scanner'}
+              {lang === 'zh' ? '页面体检' : 'Page inspector'}
             </span>
-            <span className="text-xs text-slate-400">
-              {lang === 'zh' ? '涵盖 robots.txt / llms.txt / Schema / 表格' : 'Multi-point verification'}
+            <span className="text-caption">
+              {lang === 'zh' ? '检查一个网址能不能被 AI 正常抓取' : 'Check whether AI crawlers can read a URL'}
             </span>
           </div>
           <h2 className="text-xl font-bold tracking-tight text-white">
-            {lang === 'zh' ? '外站/全站 URL 一键 GEO 深度体检器' : 'Universal URL GEO Deep Inspector'}
+            {lang === 'zh' ? '页面体检' : 'Page inspector'}
           </h2>
-          <p className="text-sm text-slate-300">
+          <p className="text-[13px] text-slate-400">
             {lang === 'zh'
-              ? '输入任意网址，全方位自动化探测 AI 爬虫放行、/llms.txt 规范度、Schema 微数据、GFM 表格密度与去虚词比。'
-              : 'Scan any target domain or article URL to verify LLM crawler readiness, structured data, and knowledge density.'}
+              ? '输入任意网址，检查 AI 爬虫能不能抓、llms.txt 写得规不规范、结构化数据全不全。报告会保存下来，可复制或导出。'
+              : 'Scan any URL for AI crawler readiness, llms.txt and structured data. Reports are persisted and exportable.'}
           </p>
         </div>
+        )}
 
         <div className="flex items-center gap-2">
           <button
             onClick={handleCopyReport}
             disabled={!report}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 transition"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
           >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? (lang === 'zh' ? '已复制报告' : 'Copied!') : (lang === 'zh' ? '复制诊断书' : 'Copy Report')}
@@ -220,7 +225,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
           <button
             onClick={handleDownloadReport}
             disabled={!report || Boolean(apiClient && !canRead)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-medium text-slate-200 hover:bg-slate-700 transition"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
           >
             <Download className="h-3.5 w-3.5" />
             {lang === 'zh' ? '导出报告 (MD)' : 'Export MD'}
@@ -229,8 +234,8 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
       </div>
 
       {/* URL Input & Presets Box */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-5 shadow-sm">
-        <label className="block text-xs font-semibold text-slate-300">
+      <div className="rounded-2xl bg-slate-900/80 p-5">
+        <label className="block text-[12.5px] font-semibold text-slate-300">
           {lang === 'zh' ? '目标网站或落地页完整 URL' : 'Target Domain or Page URL'}
         </label>
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -241,13 +246,13 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
               placeholder="https://example.com/page-to-test"
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 py-2.5 pl-9 pr-3 text-sm text-white placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition"
+              className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 pl-9 pr-3 text-[13px] text-white placeholder:text-slate-400 outline-none transition focus:border-indigo-500"
             />
           </div>
           <button
             onClick={() => handleScan()}
             disabled={isScanning || !urlInput.trim() || !canWrite}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition disabled:opacity-50 cursor-pointer"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50 cursor-pointer"
           >
             <Search className={`h-4 w-4 ${isScanning ? 'animate-spin' : ''}`} />
             {isScanning
@@ -297,23 +302,38 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
       </div>
 
       {apiClient && canRead && (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4">
-          <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-bold text-white">{lang === 'zh' ? '最近扫描记录' : 'Recent scans'}</h3><button type="button" onClick={() => void loadHistory()} className="text-xs text-indigo-300 hover:text-indigo-200">{lang === 'zh' ? '刷新' : 'Refresh'}</button></div>
-          {loading && history.length === 0 ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取扫描记录…' : 'Loading scan history…'} /> : history.length === 0 ? <p className="text-xs text-slate-500">{lang === 'zh' ? '暂无持久化扫描记录' : 'No persisted scans yet'}</p> : (
+        <div className="rounded-2xl bg-slate-900/80 p-4">
+          <div className="mb-3 flex items-center justify-between"><h3 className="text-section-title">{lang === 'zh' ? '最近扫描记录' : 'Recent scans'}</h3><button type="button" onClick={() => void loadHistory()} className="text-[12.5px] text-indigo-400 hover:underline">{lang === 'zh' ? '刷新' : 'Refresh'}</button></div>
+          {loading && history.length === 0 ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取扫描记录…' : 'Loading scan history…'} /> : history.length === 0 ? (
+            <EmptyState
+              compact
+              icon={Bot}
+              title={lang === 'zh' ? '还没有扫描记录' : 'No scans yet'}
+              description={lang === 'zh' ? '在上面输入一个网址做一次体检，记录会保存到这里。' : 'Run a scan above and it will be saved here.'}
+            />
+          ) : (
             <div className="grid gap-2 md:grid-cols-2">
-              {history.slice(0, 6).map((item) => <button type="button" key={item.id} onClick={() => void handleOpenHistory(item)} className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-left hover:border-indigo-700"><span className="min-w-0"><span className="block truncate text-xs font-medium text-slate-200">{item.url}</span><span className="text-[11px] text-slate-500">{item.scanned_at || item.created_at || '—'}</span></span><span className={`ml-3 text-xs font-bold ${item.status === 'failed' ? 'text-rose-400' : 'text-indigo-300'}`}>{item.status === 'failed' ? (lang === 'zh' ? '失败' : 'Failed') : `${item.overall_score} · ${item.grade}`}</span></button>)}
+              {history.slice(0, 6).map((item) => <button type="button" key={item.id} onClick={() => void handleOpenHistory(item)} className="flex items-center justify-between rounded-xl bg-slate-950/40 px-4 py-3 text-left transition hover:bg-slate-800/40"><span className="min-w-0"><span className="block truncate text-[13px] font-medium text-slate-200">{item.url}</span><span className="text-[12px] text-slate-500">{item.scanned_at || item.created_at || '—'}</span></span><span className={`ml-3 text-[13px] font-bold ${item.status === 'failed' ? 'text-rose-400' : 'text-indigo-300'}`}>{item.status === 'failed' ? (lang === 'zh' ? '失败' : 'Failed') : `${item.overall_score} · ${item.grade}`}</span></button>)}
             </div>
           )}
         </div>
       )}
 
-      {!report && <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/50 p-10 text-center text-sm text-slate-400">{lang === 'zh' ? '输入公开 URL 开始真实扫描，报告会保存在 桐灼GEO 数据库中。' : 'Enter a public URL to run a persisted 桐灼GEO scan.'}</div>}
+      {!report && (isScanning ? (
+        <LoadingState lang={lang} variant="panel" label={lang === 'zh' ? '正在扫描…' : 'Scanning…'} />
+      ) : (
+        <EmptyState
+          icon={Globe}
+          title={lang === 'zh' ? '还没有扫描结果' : 'No scan report yet'}
+          description={lang === 'zh' ? '在上方输入一个公开网址，点「立即深度体检」开始；报告会自动保存，可复制或导出。' : 'Enter a public URL above and run the scan; the report is saved and exportable.'}
+        />
+      ))}
 
       {/* Score Overview Cards */}
       {report && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {/* Overall Score */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-5 shadow-sm lg:col-span-1">
-          <div className="text-xs font-medium text-slate-400">
+        <div className="rounded-2xl bg-slate-900/80 p-5 lg:col-span-1">
+          <div className="text-caption">
             {lang === 'zh' ? '综合 GEO 就绪得分' : 'GEO Readiness Score'}
           </div>
           <div className="mt-3 flex items-baseline gap-2">
@@ -341,7 +361,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
               {activeReport.grade}
             </span>
           </div>
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-2 text-[12.5px] text-slate-400">
             {activeReport.overallScore >= 85
               ? lang === 'zh'
                 ? '表现卓越，极利于大模型首屏推荐引用'
@@ -353,8 +373,8 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
         </div>
 
         {/* robots.txt status */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+        <div className="rounded-2xl bg-slate-900/80 p-4">
+          <div className="flex items-center gap-1.5 text-caption">
             <Bot className="h-3.5 w-3.5 text-slate-400" />
             <span>robots.txt 放行</span>
           </div>
@@ -366,14 +386,14 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
             )}
             <span>{activeReport.robotsTxtStatus.gptBotAllowed ? '放行 GPT/Perplexity' : '存在阻拦'}</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="mt-1 text-[12px] text-slate-400">
             ByteSpider: {activeReport.robotsTxtStatus.bytespiderAllowed ? '已允许' : '未明确放行'}
           </p>
         </div>
 
         {/* llms.txt status */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+        <div className="rounded-2xl bg-slate-900/80 p-4">
+          <div className="flex items-center gap-1.5 text-caption">
             <FileCheck className="h-3.5 w-3.5 text-slate-400" />
             <span>/llms.txt 规范</span>
           </div>
@@ -385,7 +405,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
             )}
             <span>{activeReport.llmsTxtStatus.present ? '已规范部署' : '未检测到索引'}</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="mt-1 text-[12px] text-slate-400">
             {activeReport.llmsTxtStatus.present
               ? `${activeReport.llmsTxtStatus.urlCount} 篇语料 · 指令完备`
               : '大模型需耗巨量Token抓取'}
@@ -393,8 +413,8 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
         </div>
 
         {/* Schema.org status */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+        <div className="rounded-2xl bg-slate-900/80 p-4">
+          <div className="flex items-center gap-1.5 text-caption">
             <Layers className="h-3.5 w-3.5 text-slate-400" />
             <span>Schema.org 标记</span>
           </div>
@@ -406,21 +426,21 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
             )}
             <span>{activeReport.schemaStatus.hasSchema ? 'JSON-LD 完备' : '标记缺失'}</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="mt-1 text-[12px] text-slate-400">
             {activeReport.schemaStatus.typesFound.join(', ')}
           </p>
         </div>
 
         {/* Tables & Fluff */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-sm">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+        <div className="rounded-2xl bg-slate-900/80 p-4">
+          <div className="flex items-center gap-1.5 text-caption">
             <Table className="h-3.5 w-3.5 text-slate-400" />
             <span>表格与废话比</span>
           </div>
           <div className="mt-2 flex items-center gap-1.5 font-bold text-white text-sm">
             <span>{activeReport.contentQuality.tableCount} 个GFM表格</span>
           </div>
-          <p className="mt-1 text-[11px] text-slate-400">
+          <p className="mt-1 text-[12px] text-slate-400">
             废话虚词占比: {activeReport.contentQuality.fluffRatio}% ({activeReport.contentQuality.fluffRatio < 10 ? '优' : '偏高'})
           </p>
         </div>
@@ -428,7 +448,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
 
       {/* Detailed Diagnostic Items */}
       {report && <div className="space-y-4">
-        <h3 className="text-sm font-bold text-white">
+        <h3 className="text-section-title">
           {lang === 'zh' ? '5 维度细粒度体检结果与诊断' : 'Detailed Dimension Diagnostics'}
         </h3>
 
@@ -436,7 +456,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
           {activeReport.items.map((item, idx) => (
             <div
               key={idx}
-              className="rounded-xl border border-slate-800 bg-slate-900/90 p-5 shadow-sm"
+              className="rounded-2xl bg-slate-900/80 p-5"
             >
               <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
                 <div className="flex items-center gap-2">
@@ -451,7 +471,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
                     {item.dimension}
                   </span>
                   <span
-                    className={`rounded px-1.5 py-0.2 text-[10px] font-bold ${
+                    className={`rounded px-1.5 py-0.2 text-[11px] font-bold ${
                       item.status === 'pass'
                         ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/40'
                         : item.status === 'warning'
@@ -464,15 +484,15 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
                 </div>
               </div>
 
-              <div className="mt-2 text-xs font-medium text-slate-200">
+              <div className="mt-2 text-[13px] font-medium text-slate-200">
                 {item.title}
               </div>
 
-              <div className="mt-1.5 text-xs text-slate-400">
+              <div className="mt-1.5 text-[13px] text-slate-400">
                 {item.details}
               </div>
 
-              <div className="mt-2.5 rounded-lg bg-slate-800/60 p-2.5 text-xs border border-slate-800">
+              <div className="mt-2.5 rounded-xl bg-slate-950/40 px-4 py-3 text-[13px]">
                 <span className="font-semibold text-indigo-400">
                   {lang === 'zh' ? '💡 针对性修复建议: ' : '💡 Recommendation: '}
                 </span>
@@ -484,14 +504,14 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
       </div>}
 
       {/* Priority Action Plan */}
-      {report && <div className="rounded-xl border border-indigo-900/50 bg-indigo-950/20 p-5">
-        <h4 className="text-sm font-bold text-indigo-200">
+      {report && <div className="rounded-2xl bg-indigo-500/8 p-5">
+        <h4 className="text-[13.5px] font-bold text-indigo-200">
           {lang === 'zh' ? '优先级修复行动清单 (Action Plan)' : 'Remediation Action Plan'}
         </h4>
-        <ul className="mt-3 space-y-2 text-xs text-indigo-300">
+        <ul className="mt-3 space-y-2 text-[13px] text-indigo-300">
           {activeReport.quickFixPlan.map((plan, i) => (
             <li key={i} className="flex items-start gap-2">
-              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[10px] font-bold text-white">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">
                 {i + 1}
               </span>
               <span>{plan}</span>

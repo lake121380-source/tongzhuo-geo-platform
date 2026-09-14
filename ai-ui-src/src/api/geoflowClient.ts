@@ -1443,6 +1443,18 @@ export class GeoFlowApiClient {
     });
   }
 
+  /**
+   * 人工放行：对「质检跑完但判定为待人工复核」的文章记录理由并放行。
+   * 后端要求分数 ≥ `manual_override_min_score`（默认 70），且只能对 needs_review 用。
+   */
+  async overrideArticleAiQuality(id: string | number, reason: string, options: MutationOptions = {}): Promise<ApiRecord> {
+    return this.request<ApiRecord>(`articles/${this.numericId(id)}/ai-quality/override`, {
+      method: 'POST',
+      body: { reason },
+      idempotencyKey: options.idempotencyKey,
+    });
+  }
+
   async recheckArticleRisk(id: string | number, options: MutationOptions = {}): Promise<ApiRecord> {
     return this.request<ApiRecord>(`articles/${this.numericId(id)}/risk-scan`, {
       method: 'POST',

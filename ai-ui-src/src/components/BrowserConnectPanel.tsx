@@ -116,7 +116,7 @@ const BrowserConnectPanel: React.FC<BrowserConnectPanelProps> = ({ apiClient, la
             onChange={(event) => setUserCode(event.target.value)}
             onKeyDown={(event) => { if (event.key === 'Enter') void lookup(); }}
             placeholder={zh ? '配对码（如 ABCD-1234）' : 'Pairing code'}
-            className="w-56 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 pl-8 font-mono text-xs text-white outline-none focus:border-emerald-500"
+            className="w-56 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 pl-8 font-mono text-xs text-white outline-none focus:border-indigo-500"
           />
         </div>
         <button type="button" onClick={() => void lookup()} disabled={busy === 'lookup' || userCode.trim() === ''} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">
@@ -141,7 +141,7 @@ const BrowserConnectPanel: React.FC<BrowserConnectPanelProps> = ({ apiClient, la
             </div>
             {canWrite && status === 'pending' && (
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => void decide('approve')} disabled={busy === 'approve'} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
+                <button type="button" onClick={() => void decide('approve')} disabled={busy === 'approve'} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">
                   {busy === 'approve' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{zh ? '批准' : 'Approve'}
                 </button>
                 <button type="button" onClick={() => void decide('deny')} disabled={busy === 'deny'} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-950/30 disabled:opacity-50">

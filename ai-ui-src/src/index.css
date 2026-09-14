@@ -3,37 +3,121 @@
 @variant dark (&:where(.dark, .dark *));
 
 /*
- * 明暗主题：**亮色为默认**（哥哥 2026-09-12：不喜欢深色，做成可切换、默认亮）。
+ * ════════════════════════════════════════════════════════════════════════════
+ *  桐灼GEO 后台 · 颜色系统（Design Tokens）
+ * ════════════════════════════════════════════════════════════════════════════
  *
- * 做法：把 Tailwind 的 slate 刻度与 white 指到主题变量上，再在 `.dark` 下覆盖一遍。
- * 组件里那 1200 多处 `bg-slate-900` / `text-white` / `border-slate-800` **一个都不用改**——
- * 它们引用的是 `var(--color-*)`，跟着 `:root` / `.dark` 走。
+ * 目标：成熟、克制、专业、清晰的**企业级 GEO 软件**观感；低饱和、高可读性。
+ * 反面清单：炫酷 AI 感、科技蓝、紫色渐变、电竞风、玻璃拟态、过度圆角、
+ *          彩色卡片堆叠、高饱和互联网 SaaS。
  *
- * 映射按**角色**而不是机械翻转：
- *   在深色设计里「数字越大＝越深、越靠底」，亮色下保持同样的视觉层次——
- *   页面底（950）／卡片（900）／抬升面（800）／更强的面·边框（700），
- *   文字则整体反转（white→最深、600→最浅），所以 `text-white` 在亮色下是深色文字。
+ * ── 结构 ───────────────────────────────────────────────────────────────────
+ * 本项目**不在组件里写颜色**：组件写的是 Tailwind 类名（`bg-slate-900`、
+ * `text-slate-400`、`border-slate-800`…），类名解析到 `@theme` 里的 CSS 变量。
+ * 所以**换肤 = 换变量**，1200 多处类名一个都不用改。全仓库硬编码 HEX 只有 1 处
+ * （`AiAttributionFunnelView` 的图标兜底色），其余全部收在这里。
  *
- * 注意：`bg-white` / `text-black` 在本项目里出现 0 次，所以改写 white/black 不会波及别处。
+ * 分四层：
+ *   ① `:root`            语义令牌——颜色的**词汇表**。调色只改这里。
+ *   ② `@theme`           亮色中性刻度（默认主题），把 Tailwind 类名接到令牌上。
+ *   ③ `.dark`            深色刻度，逐档显式覆盖（**本次重构不动深色**）。
+ *   ④ `:root:not(.dark)` 亮色专属：主色/状态色刻度 + 收敛规则。
+ *
+ * ── 调色板预算（强约束，不要再加色系） ─────────────────────────────────────
+ *   主色 1 个 · 状态色 4 个 · 中性一套。
+ *   原来「一个功能区一个色」的 rainbow（cyan=托管站点、purple/violet=AI 生成、
+ *   blue=模型、sky=手动发布…）**全部并入主色**——这是「AI 自动生成 SaaS 后台」
+ *   观感的主要来源。见文件末尾的「装饰性色系并入主色」一节。
+ *
+ * ── 深色模式 ───────────────────────────────────────────────────────────────
+ * 本次只重做亮色。`.dark` 块与所有 `:root:not(.dark)` 规则互不干扰，深色保持原样。
  */
-@theme {
-  /* 亮色（默认） */
-  --color-white: #0f172a; /* 主文字：亮色下是深色 */
-  --color-black: #f8fafc;
-  --color-slate-950: #eef2f7; /* 页面底 */
-  --color-slate-900: #ffffff; /* 卡片 */
-  --color-slate-800: #f6f8fb; /* 抬升面 / 浅chip */
-  --color-slate-700: #e3e8ef; /* 更强的面 / 边框 */
-  --color-slate-600: #cbd5e1;
-  --color-slate-500: #5f6f85;
-  --color-slate-400: #56657a; /* 弱化文字：白底 5.9、页面底 5.3，改前 #64748b 在页面底只有 4.2 */
-  --color-slate-300: #475569; /* 次级文字 */
-  --color-slate-200: #334155;
-  --color-slate-100: #1e293b;
-  --color-slate-50: #020617;
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ① 语义令牌（Design Tokens）
+   组件不直接用这些名字，但**它们是颜色的唯一真实来源**——Tailwind 刻度只是别名。
+   ════════════════════════════════════════════════════════════════════════════ */
+:root {
+  /* ── 背景 / 面（4 个） ─────────────────────────────────────────────── */
+  /* 2026-09-13 视觉重设计：页面底稍压深（#f5f6f8 → #f3f4f7），让白色卡片
+     浮出来——原来页面底与卡片几乎同色，整屏靠边框分块，观感「平」。 */
+  --bg-page: #f7f5f1; /* 页面底：再压深一档（2026-09-13 视觉整改第二轮）——
+                                      白卡片要靠「底色差 + 轻阴影」浮出来，而不是靠边框 */
+  --bg-surface: #ffffff;           /* 一级容器：卡片、表格、输入区 */
+  --bg-surface-secondary: #fbfaf7; /* 次级容器：卡内分区、表头 */
+  --bg-fill: #f2efe9; /* 浅填充：chip、进度槽、抬升面 */
+  --bg-input: #ffffff;             /* 输入框（与卡片同色，靠边框区分） */
+  --bg-sidebar: #fbfaf7; /* 侧栏：比内容区浅、比卡片深一档，形成三级层次 */
+  --bg-hover: #f4f1ea; /* 悬浮底 */
+  --bg-active: #f0eeff;            /* 选中底（主色极浅） */
+
+  /* ── 边框（3 个，别再加） ─────────────────────────────────────────── */
+  /* 重设计：边框再轻一档，把「分块」的职责交给留白与阴影，减少满屏线框感。 */
+  --border-light: #f0ece5; /* 极轻分隔线 */
+  --border-default: #e8e3da; /* 普通边框：卡片、输入框 */
+  --border-strong: #dad3c7; /* 强边框：表头下沿、分组分隔 */
+
+  /* ── 文字（4 级） ─────────────────────────────────────────────────── */
+  --text-primary: #171a21;         /* 一级标题：白底 16.3:1 */
+  --text-secondary: #4b5563;       /* 正文：白底 8.6:1 */
+  /* 辅助文字。规格给的是 #6b7280，但它在页面底 #f5f6f8 上只有 **4.47:1**，
+     差一点点够不到 AA；这里压到 #676e7a（页面底 4.75、白底 5.14）。
+     辅助文字是全站用量最大的一档（`text-slate-400/500` 共 700 余处），
+     差这 0.03 会让每一页的审计都挂红，不值得为色号原样而牺牲合规。 */
+  --text-tertiary: #6e6a62;
+  --text-disabled: #a1a7b2;        /* 禁用（WCAG 对禁用控件豁免对比度要求） */
+  --text-on-primary: #ffffff;      /* 主色与状态色**实底**上的白字 */
+  --scrim: #0b0f19;                /* 弹窗遮罩（原来亮色下是近白，遮不住） */
+
+  /* ── 主色（1 个） ─────────────────────────────────────────────────── */
+  --color-primary: #4c45d8;        /* 紫靛，不是高饱和 #5B35FF 那类 */
+  --color-primary-hover: #433cbf;
+  --color-primary-active: #3933a8;
+  --color-primary-soft: #f0eeff;   /* 选中底 / 极浅强调 */
+  --color-primary-soft-2: #f7f6ff;
+
+  /* ── 状态色（4 个，只表达状态，不当装饰色） ───────────────────────── */
+  --color-success: #159a6b;
+  --color-success-soft: #ecf8f3;
+  --color-warning: #c77b12;
+  --color-warning-soft: #fff7e8;
+  --color-danger: #d64545;
+  --color-danger-soft: #fff0f0;
+  --color-info: #3978c9;
+  --color-info-soft: #eef5ff;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   ② 亮色中性刻度（默认主题）
+   映射按**角色**而不是机械翻转：数字越大＝越浅、越靠底。
+   页面底(950) / 卡片(900) / 浅填充(800) / 边框·强面(700) / 禁用(600) /
+   辅助(500·400) / 正文次级(300) / 更强文字(200) / 更强(100) / 最深(50)。
+   `text-white` 在亮色下是**深色文字**（见 `--color-white`）。
+   `bg-white` / `text-black` 全仓库 0 处；`bg-black/*` 只用在弹窗遮罩。
+   ════════════════════════════════════════════════════════════════════════════ */
+@theme {
+  --color-white: var(--text-primary); /* 主文字：亮色下是深色 */
+  --color-black: var(--scrim);        /* 只被 bg-black/60~80 的弹窗遮罩消费 */
+
+  --color-slate-950: var(--bg-page);
+  --color-slate-900: var(--bg-surface);
+  --color-slate-800: var(--bg-fill);
+  --color-slate-700: var(--border-default);
+  --color-slate-600: var(--text-tertiary);
+  --color-slate-500: var(--text-tertiary);
+  --color-slate-400: var(--text-tertiary);
+  --color-slate-300: var(--text-secondary);
+  --color-slate-200: #374151;
+  --color-slate-100: #232833;
+  --color-slate-50: #0f1218;
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ③ 深色刻度 —— 逐档显式覆盖，**本次重构不动**。
+   显式写出来是为了：亮色改 `@theme` 时深色不会跟着漂。
+   ════════════════════════════════════════════════════════════════════════════ */
 .dark {
+  --bg-sidebar: #0b1220;             /* 深色下侧栏比卡片更深一档 */
   --color-white: #ffffff;
   --color-black: #000000;
   --color-slate-950: #020617;
@@ -49,6 +133,267 @@
   --color-slate-50: #f8fafc;
 }
 
+/* ════════════════════════════════════════════════════════════════════════════
+   ④ 亮色专属：主色 / 状态色刻度 + 装饰性色系并入主色
+   —— 一律放在 `:root:not(.dark)` 里，深色保持 Tailwind 原值不受影响。
+   ════════════════════════════════════════════════════════════════════════════ */
+:root:not(.dark) {
+  /* ── 主色刻度（indigo 槽位） ───────────────────────────────────────── */
+  --color-indigo-50: #f8f7ff;
+  --color-indigo-100: var(--color-primary-soft);
+  --color-indigo-200: #dedaf9;
+  --color-indigo-300: #bfb9f1;
+  --color-indigo-400: #948ce7;
+  --color-indigo-500: #6a62de;
+  --color-indigo-600: var(--color-primary);
+  --color-indigo-700: var(--color-primary-hover);
+  --color-indigo-800: var(--color-primary-active);
+  --color-indigo-900: #302b8a;
+  --color-indigo-950: var(--color-primary-soft); /* 950/xx 在本项目里当「极浅底」用 */
+
+  /* ── 成功（emerald 槽位） ─────────────────────────────────────────── */
+  --color-emerald-50: #f4fbf8;
+  --color-emerald-100: var(--color-success-soft);
+  --color-emerald-200: #c8eadb;
+  --color-emerald-300: #97d8be;
+  --color-emerald-400: #52c09a;
+  --color-emerald-500: #1ca97a;
+  --color-emerald-600: var(--color-success);
+  --color-emerald-700: #107a55;
+  --color-emerald-800: #0d6246;
+  --color-emerald-900: #0a4f39;
+  --color-emerald-950: var(--color-success-soft);
+
+  /* ── 警告（amber 槽位） ───────────────────────────────────────────── */
+  --color-amber-50: #fffaf1;
+  --color-amber-100: var(--color-warning-soft);
+  --color-amber-200: #fbe5be;
+  --color-amber-300: #f2ce8a;
+  --color-amber-400: #e3a83e;
+  --color-amber-500: #d68f1d;
+  --color-amber-600: var(--color-warning);
+  --color-amber-700: #a2620d;
+  --color-amber-800: #7e4b0a;
+  --color-amber-900: #633b08;
+  --color-amber-950: var(--color-warning-soft);
+
+  /* ── 危险（red / rose 槽位） ──────────────────────────────────────── */
+  --color-red-50: #fff7f7;
+  --color-red-100: var(--color-danger-soft);
+  --color-red-200: #fbd6d6;
+  --color-red-300: #f2b0b0;
+  --color-red-400: #e37c7c;
+  --color-red-500: #dc5c5c;
+  --color-red-600: var(--color-danger);
+  --color-red-700: #b33535;
+  --color-red-800: #8f2a2a;
+  --color-red-900: #742222;
+  --color-red-950: var(--color-danger-soft);
+
+  --color-rose-50: #fff7f7;
+  --color-rose-100: var(--color-danger-soft);
+  --color-rose-200: #fbd6d6;
+  --color-rose-300: #f2b0b0;
+  --color-rose-400: #e37c7c;
+  --color-rose-500: #dc5c5c;
+  --color-rose-600: var(--color-danger);
+  --color-rose-700: #b33535;
+  --color-rose-800: #8f2a2a;
+  --color-rose-900: #742222;
+  --color-rose-950: var(--color-danger-soft);
+
+  /* ── 同族色系并档：黄系归警告、绿系归成功 ─────────────────────────── */
+  --color-yellow-50: var(--color-amber-50);
+  --color-yellow-100: var(--color-amber-100);
+  --color-yellow-200: var(--color-amber-200);
+  --color-yellow-300: var(--color-amber-300);
+  --color-yellow-400: var(--color-amber-400);
+  --color-yellow-500: var(--color-amber-500);
+  --color-yellow-600: var(--color-amber-600);
+  --color-yellow-700: var(--color-amber-700);
+  --color-yellow-800: var(--color-amber-800);
+  --color-yellow-900: var(--color-amber-900);
+  --color-yellow-950: var(--color-amber-950);
+  --color-orange-50: var(--color-amber-50);
+  --color-orange-100: var(--color-amber-100);
+  --color-orange-200: var(--color-amber-200);
+  --color-orange-300: var(--color-amber-300);
+  --color-orange-400: var(--color-amber-400);
+  --color-orange-500: var(--color-amber-500);
+  --color-orange-600: var(--color-amber-600);
+  --color-orange-700: var(--color-amber-700);
+  --color-orange-800: var(--color-amber-800);
+  --color-orange-900: var(--color-amber-900);
+  --color-orange-950: var(--color-amber-950);
+
+  --color-lime-50: var(--color-emerald-50);
+  --color-lime-100: var(--color-emerald-100);
+  --color-lime-200: var(--color-emerald-200);
+  --color-lime-300: var(--color-emerald-300);
+  --color-lime-400: var(--color-emerald-400);
+  --color-lime-500: var(--color-emerald-500);
+  --color-lime-600: var(--color-emerald-600);
+  --color-lime-700: var(--color-emerald-700);
+  --color-lime-800: var(--color-emerald-800);
+  --color-lime-900: var(--color-emerald-900);
+  --color-lime-950: var(--color-emerald-950);
+  --color-green-50: var(--color-emerald-50);
+  --color-green-100: var(--color-emerald-100);
+  --color-green-200: var(--color-emerald-200);
+  --color-green-300: var(--color-emerald-300);
+  --color-green-400: var(--color-emerald-400);
+  --color-green-500: var(--color-emerald-500);
+  --color-green-600: var(--color-emerald-600);
+  --color-green-700: var(--color-emerald-700);
+  --color-green-800: var(--color-emerald-800);
+  --color-green-900: var(--color-emerald-900);
+  --color-green-950: var(--color-emerald-950);
+  --color-teal-50: var(--color-emerald-50);
+  --color-teal-100: var(--color-emerald-100);
+  --color-teal-200: var(--color-emerald-200);
+  --color-teal-300: var(--color-emerald-300);
+  --color-teal-400: var(--color-emerald-400);
+  --color-teal-500: var(--color-emerald-500);
+  --color-teal-600: var(--color-emerald-600);
+  --color-teal-700: var(--color-emerald-700);
+  --color-teal-800: var(--color-emerald-800);
+  --color-teal-900: var(--color-emerald-900);
+  --color-teal-950: var(--color-emerald-950);
+
+  /*
+   * ── 装饰性色系并入主色 ──────────────────────────────────────────────────
+   *
+   * 这 7 个色系在本项目里**没有任何语义**，纯粹是「一个功能区配一个颜色」的历史遗留
+   * （cyan=托管站点 / purple·violet=AI 生成 / blue=模型网关 / sky=手动发布 …）。
+   * 它们正是「彩虹 SaaS」观感的来源，全部并到主色上：实底按钮变主色按钮，
+   * 浅底变主色浅底，低透明度边框由下面「边框收敛」一节统一压成中性边框。
+   *
+   * 并入的是**槽位**而不是最终色值，所以深浅档的层次关系自动保持。
+   */
+  --color-blue-50: var(--color-indigo-50);
+  --color-blue-100: var(--color-indigo-100);
+  --color-blue-200: var(--color-indigo-200);
+  --color-blue-300: var(--color-indigo-300);
+  --color-blue-400: var(--color-indigo-400);
+  --color-blue-500: var(--color-indigo-500);
+  --color-blue-600: var(--color-indigo-600);
+  --color-blue-700: var(--color-indigo-700);
+  --color-blue-800: var(--color-indigo-800);
+  --color-blue-900: var(--color-indigo-900);
+  --color-blue-950: var(--color-indigo-950);
+  --color-sky-50: var(--color-indigo-50);
+  --color-sky-100: var(--color-indigo-100);
+  --color-sky-200: var(--color-indigo-200);
+  --color-sky-300: var(--color-indigo-300);
+  --color-sky-400: var(--color-indigo-400);
+  --color-sky-500: var(--color-indigo-500);
+  --color-sky-600: var(--color-indigo-600);
+  --color-sky-700: var(--color-indigo-700);
+  --color-sky-800: var(--color-indigo-800);
+  --color-sky-900: var(--color-indigo-900);
+  --color-sky-950: var(--color-indigo-950);
+  --color-cyan-50: var(--color-indigo-50);
+  --color-cyan-100: var(--color-indigo-100);
+  --color-cyan-200: var(--color-indigo-200);
+  --color-cyan-300: var(--color-indigo-300);
+  --color-cyan-400: var(--color-indigo-400);
+  --color-cyan-500: var(--color-indigo-500);
+  --color-cyan-600: var(--color-indigo-600);
+  --color-cyan-700: var(--color-indigo-700);
+  --color-cyan-800: var(--color-indigo-800);
+  --color-cyan-900: var(--color-indigo-900);
+  --color-cyan-950: var(--color-indigo-950);
+  --color-purple-50: var(--color-indigo-50);
+  --color-purple-100: var(--color-indigo-100);
+  --color-purple-200: var(--color-indigo-200);
+  --color-purple-300: var(--color-indigo-300);
+  --color-purple-400: var(--color-indigo-400);
+  --color-purple-500: var(--color-indigo-500);
+  --color-purple-600: var(--color-indigo-600);
+  --color-purple-700: var(--color-indigo-700);
+  --color-purple-800: var(--color-indigo-800);
+  --color-purple-900: var(--color-indigo-900);
+  --color-purple-950: var(--color-indigo-950);
+  --color-violet-50: var(--color-indigo-50);
+  --color-violet-100: var(--color-indigo-100);
+  --color-violet-200: var(--color-indigo-200);
+  --color-violet-300: var(--color-indigo-300);
+  --color-violet-400: var(--color-indigo-400);
+  --color-violet-500: var(--color-indigo-500);
+  --color-violet-600: var(--color-indigo-600);
+  --color-violet-700: var(--color-indigo-700);
+  --color-violet-800: var(--color-indigo-800);
+  --color-violet-900: var(--color-indigo-900);
+  --color-violet-950: var(--color-indigo-950);
+  --color-fuchsia-50: var(--color-indigo-50);
+  --color-fuchsia-100: var(--color-indigo-100);
+  --color-fuchsia-200: var(--color-indigo-200);
+  --color-fuchsia-300: var(--color-indigo-300);
+  --color-fuchsia-400: var(--color-indigo-400);
+  --color-fuchsia-500: var(--color-indigo-500);
+  --color-fuchsia-600: var(--color-indigo-600);
+  --color-fuchsia-700: var(--color-indigo-700);
+  --color-fuchsia-800: var(--color-indigo-800);
+  --color-fuchsia-900: var(--color-indigo-900);
+  --color-fuchsia-950: var(--color-indigo-950);
+  --color-pink-50: var(--color-indigo-50);
+  --color-pink-100: var(--color-indigo-100);
+  --color-pink-200: var(--color-indigo-200);
+  --color-pink-300: var(--color-indigo-300);
+  --color-pink-400: var(--color-indigo-400);
+  --color-pink-500: var(--color-indigo-500);
+  --color-pink-600: var(--color-indigo-600);
+  --color-pink-700: var(--color-indigo-700);
+  --color-pink-800: var(--color-indigo-800);
+  --color-pink-900: var(--color-indigo-900);
+  --color-pink-950: var(--color-indigo-950);
+
+  /* ── 圆角：企业软件，不是消费级 AI 产品 ───────────────────────────── */
+  /* 2026-09-13 视觉重设计：整体上调一档（8/12/14 → 10/14/16）。
+     仍在中性区间——「过度圆角」在反面清单上，只做一档，不再往上加。 */
+  --radius-sm: 6px;   /* 小组件 */
+  --radius-md: 8px;
+  --radius-lg: 10px;  /* 按钮、输入框 */
+  --radius-xl: 14px;  /* 普通卡片 */
+  --radius-2xl: 18px; /* 大型容器、弹窗 */
+
+  /* ── 阴影：只留「抬起来一点点」，禁止厚重/彩色/发光 ───────────────── */
+  /* 重设计：阴影比原来清楚半档（原来 0.04 在白底上几乎不可见），
+     承担「卡片浮起」的层级职责——与之配套，边框已经压轻。 */
+  --shadow-2xs: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-xs: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-sm: 0 1px 3px rgb(16 24 40 / 0.06), 0 1px 2px rgb(16 24 40 / 0.04);
+  /* 卡片专用：见下方 .card-surface / [class*=...] 规则 */
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 20px -6px rgb(16 24 40 / 0.1);
+  --shadow-md: 0 2px 6px -1px rgb(16 24 40 / 0.07), 0 1px 3px rgb(16 24 40 / 0.04);
+  --shadow-lg: 0 6px 16px -2px rgb(16 24 40 / 0.08), 0 2px 6px -2px rgb(16 24 40 / 0.04);
+  --shadow-xl: 0 12px 28px -4px rgb(16 24 40 / 0.1), 0 4px 10px -4px rgb(16 24 40 / 0.05);
+  --shadow-2xl: 0 16px 40px -8px rgb(16 24 40 / 0.14), 0 6px 14px -6px rgb(16 24 40 / 0.06);
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   ⑤ 排版（2026-09-13 视觉重设计新增）
+   —— 字号与字体栈放在 `@theme`（与主题无关，亮暗共用）。
+   `text-xs` 是全站用量最大的一档（表格、说明、徽标），12px 在中文下偏挤，
+   提到 13px/18px 行高；其余档位不动，避免整页重排。
+   ════════════════════════════════════════════════════════════════════════════ */
+@theme {
+  /* 中文优先的字体栈：Windows 下 Latin 走 Segoe UI、中文走微软雅黑新字形，
+     macOS 走苹方。不引入外部字体（企业内网部署不依赖外网）。 */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+
+  --text-xs: 0.875rem;               /* 14px（12 → 13 → 14：密度整改的第二步） */
+  --text-xs--line-height: 1.25rem;   /* 20px */
+
+  /*
+   * 间距令牌（D0 审计结论：全仓库**没有**一处任意间距值，本来就是 4 的倍数）。
+   * 这里把它显式锁死，作为规则而不是巧合：间距只用 4/8/12/16/20/24/32/40
+   * （对应 p-1/p-2/p-3/p-4/p-5/p-6/p-8/p-10）。**不要写 p-[13px] 这类值。**
+   */
+  --spacing: 0.25rem;
+}
+
 @layer base {
   body {
     /* 用主题变量而不是写死的深色，否则切到亮色时 body 还是黑底。 */
@@ -62,7 +407,7 @@
 
   input::placeholder, textarea::placeholder {
     color: var(--color-slate-400);
-    opacity: 0.9;
+    opacity: 1; /* 原来是 0.9，把已经压到 4.5:1 的辅助色又冲淡了 */
   }
 
   select option {
@@ -72,201 +417,320 @@
 }
 
 @layer components {
+  /* 侧栏表面：亮色下比内容区浅、比卡片深；深色下比卡片更深（层次一致，方向相反）。 */
+  .app-sidebar {
+    background-color: var(--bg-sidebar);
+  }
+
   .control {
     @apply w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /*
+   * ── 排版令牌（Design System · D0）───────────────────────────────────────
+   * 审计：全站 554 处手写字号（text-[11px] ×327、text-[10px] ×218、text-[9px] ×6），
+   * 同一个"小字"有 10/11/12/13 四种档位。这里固定五档，页面只准用这五个类名：
+   *   .text-page-title    页面标题（每页一个）
+   *   .text-section-title 区块标题
+   *   .text-card-title    卡片标题
+   *   .text-body          正文
+   *   .text-caption       说明/次要信息（原来 10~12px 那一堆）
+   * 颜色用 var(--color-*)（跟主题走）；字号/行高/字重写死——**别再手写 text-[11px]**。
+   * 放在 @layer components：工具类（如 text-white）仍可覆盖颜色，符合 Tailwind 优先级。
+   */
+  .text-page-title {
+    font-size: 26px; line-height: 1.2; font-weight: 800; letter-spacing: -0.015em;
+    color: var(--color-white);
+  }
+  .text-section-title {
+    font-size: 16px; line-height: 1.4; font-weight: 700; letter-spacing: -0.005em;
+    color: var(--color-white);
+  }
+  .text-card-title {
+    font-size: 15px; line-height: 1.4; font-weight: 700;
+    color: var(--color-white);
+  }
+  .text-body {
+    font-size: 15px; line-height: 1.65;
+    color: var(--color-slate-300);
+  }
+  .text-caption {
+    font-size: 12.5px; line-height: 1.5;
+    color: var(--color-slate-400);
   }
 }
 
 /*
- * 彩色饱和底上的白字必须钉回白色。
+ * ════════════════════════════════════════════════════════════════════════════
+ *  亮色专属收敛规则
  *
- * 为什么需要：`text-white` 在这个项目里承担**两种语义**——
- *   ① 深色底上的主文字 → 主题翻转时必须变深（这是我们要的）；
- *   ② **彩色底上的白字**（按钮、选中态、状态徽标）→ 不该变。
- * 一个 `--color-white` 服务不了两种，所以在这里按底色打补丁。
+ *  为什么用类名匹配（`[class*=…]`）而不是逐个改组件：这些写法在全仓库有上千处，
+ *  逐条改既不可审也不可回退；本项目此前处理「732 处浅彩字」用的就是同一手法
+ *  （见 git 历史）。放在 `@layer utilities` 里、用 `:root:not(.dark)` 提特异性，
+ *  稳定压过单类名（0,1,0）的工具类，且**完全不进深色模式**。
  *
- * 只列饱和档 500/600/700：浅色 chip（`bg-amber-100` 那类）本来就该配深字，不能误伤。
- * 第一条用 `:where()` 保持 0 特异性，给彩色底自身一个白色基线供后代继承，
- * 同时任何显式 `text-*` 都能盖过它；第二条用复合选择器（0,2,0）压过同元素上的
- * `text-white`（0,1,0）——否则主题翻转会把选中导航项变成「深字压靛蓝底」，实测几乎看不清。
- */
+ *  已知取舍：特异性高于 `hover:` 变体（0,2,0），所以被收敛的元素其悬停变色会失效。
+ *  这些元素本来就以背景色/左指示条表达状态，可接受。
+ * ════════════════════════════════════════════════════════════════════════════ */
 @layer utilities {
+  /* ── 0. 卡片表面统一（视觉整改第二轮）───────────────────────────────────
+   * 审计里「卡片密度/层级」是主要观感问题：全站卡片都是「白面 + 1px 边框」，
+   * 靠边框切块 → 显得又平又碎。这里统一成**无边框 + 轻阴影**：白面浮在压深的
+   * 页面底上，一眼能看出层级。（只命中"同时有 bg-slate-900* 与圆角"的容器，
+   * 不会碰到输入框、按钮、警告条这些语义色彩块。深色模式不受影响。）
+   */
+  :root:not(.dark) [class*="bg-slate-900"][class*="rounded-2xl"],
+  :root:not(.dark) [class*="bg-slate-900"][class*="rounded-xl"] {
+    border-color: transparent;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* ── 1. 彩色边框 → 中性边框 ─────────────────────────────────────────────
+   * 「边框颜色杂乱」的根治：全仓库 265 处 `border-{彩}-500/30` 这类装饰边框，
+   * 收敛到 3 个中性边框档。实色彩色边框（`border-red-500` 校验错误、
+   * `border-indigo-500` 聚焦）**保留语义**，不在收敛范围内。
+   */
+  :root:not(.dark) [class*="border-blue-"],
+  :root:not(.dark) [class*="border-sky-"],
+  :root:not(.dark) [class*="border-cyan-"],
+  :root:not(.dark) [class*="border-purple-"],
+  :root:not(.dark) [class*="border-violet-"],
+  :root:not(.dark) [class*="border-fuchsia-"],
+  :root:not(.dark) [class*="border-pink-"] {
+    border-color: var(--border-default);
+  }
+
+  :root:not(.dark) [class*="border-indigo-400/"],
+  :root:not(.dark) [class*="border-indigo-500/"],
+  :root:not(.dark) [class*="border-indigo-600/"],
+  :root:not(.dark) [class*="border-indigo-700/"],
+  :root:not(.dark) [class*="border-indigo-800/"],
+  :root:not(.dark) [class*="border-indigo-900/"],
+  :root:not(.dark) [class*="border-emerald-400/"],
+  :root:not(.dark) [class*="border-emerald-500/"],
+  :root:not(.dark) [class*="border-emerald-600/"],
+  :root:not(.dark) [class*="border-emerald-700/"],
+  :root:not(.dark) [class*="border-emerald-800/"],
+  :root:not(.dark) [class*="border-emerald-900/"],
+  :root:not(.dark) [class*="border-green-400/"],
+  :root:not(.dark) [class*="border-green-500/"],
+  :root:not(.dark) [class*="border-green-800/"],
+  :root:not(.dark) [class*="border-teal-400/"],
+  :root:not(.dark) [class*="border-teal-500/"],
+  :root:not(.dark) [class*="border-teal-800/"],
+  :root:not(.dark) [class*="border-lime-400/"],
+  :root:not(.dark) [class*="border-lime-500/"],
+  :root:not(.dark) [class*="border-lime-800/"],
+  :root:not(.dark) [class*="border-amber-400/"],
+  :root:not(.dark) [class*="border-amber-500/"],
+  :root:not(.dark) [class*="border-amber-600/"],
+  :root:not(.dark) [class*="border-amber-700/"],
+  :root:not(.dark) [class*="border-amber-800/"],
+  :root:not(.dark) [class*="border-amber-900/"],
+  :root:not(.dark) [class*="border-yellow-400/"],
+  :root:not(.dark) [class*="border-yellow-500/"],
+  :root:not(.dark) [class*="border-yellow-800/"],
+  :root:not(.dark) [class*="border-orange-400/"],
+  :root:not(.dark) [class*="border-orange-500/"],
+  :root:not(.dark) [class*="border-orange-800/"],
+  :root:not(.dark) [class*="border-red-400/"],
+  :root:not(.dark) [class*="border-red-500/"],
+  :root:not(.dark) [class*="border-red-600/"],
+  :root:not(.dark) [class*="border-red-700/"],
+  :root:not(.dark) [class*="border-red-800/"],
+  :root:not(.dark) [class*="border-red-900/"],
+  :root:not(.dark) [class*="border-rose-400/"],
+  :root:not(.dark) [class*="border-rose-500/"],
+  :root:not(.dark) [class*="border-rose-600/"],
+  :root:not(.dark) [class*="border-rose-700/"],
+  :root:not(.dark) [class*="border-rose-800/"],
+  :root:not(.dark) [class*="border-rose-900/"] {
+    border-color: var(--border-default);
+  }
+
+  /* ── 2. 状态色「深档 + 低透明度」的底 → 标准 soft 色 ────────────────────
+   * 深档在亮色下已被重映射成极浅色，再乘 20%~40% 透明度会淡到看不见
+   * （错误横幅、警告条都靠这类写法）。这里直接钉到语义 soft 令牌上，
+   * 于是「warning 底 = --color-warning-soft」在全仓库恒等。
+   */
+  :root:not(.dark) [class*="bg-indigo-950"], :root:not(.dark) [class*="bg-indigo-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-blue-950"], :root:not(.dark) [class*="bg-blue-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-sky-950"], :root:not(.dark) [class*="bg-sky-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-cyan-950"], :root:not(.dark) [class*="bg-cyan-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-purple-950"], :root:not(.dark) [class*="bg-purple-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-violet-950"], :root:not(.dark) [class*="bg-violet-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-fuchsia-950"], :root:not(.dark) [class*="bg-fuchsia-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-pink-950"], :root:not(.dark) [class*="bg-pink-900/"] { background-color: var(--color-primary-soft); }
+  :root:not(.dark) [class*="bg-emerald-950"], :root:not(.dark) [class*="bg-emerald-900/"],
+  :root:not(.dark) [class*="bg-green-950"], :root:not(.dark) [class*="bg-green-900/"],
+  :root:not(.dark) [class*="bg-teal-950"], :root:not(.dark) [class*="bg-teal-900/"],
+  :root:not(.dark) [class*="bg-lime-950"], :root:not(.dark) [class*="bg-lime-900/"] { background-color: var(--color-success-soft); }
+  :root:not(.dark) [class*="bg-amber-950"], :root:not(.dark) [class*="bg-amber-900/"],
+  :root:not(.dark) [class*="bg-yellow-950"], :root:not(.dark) [class*="bg-yellow-900/"],
+  :root:not(.dark) [class*="bg-orange-950"], :root:not(.dark) [class*="bg-orange-900/"] { background-color: var(--color-warning-soft); }
+  :root:not(.dark) [class*="bg-red-950"], :root:not(.dark) [class*="bg-red-900/"],
+  :root:not(.dark) [class*="bg-rose-950"], :root:not(.dark) [class*="bg-rose-900/"] { background-color: var(--color-danger-soft); }
+
+  /* ── 3. 彩色浅字压深 ───────────────────────────────────────────────────
+   * 亮色下 `text-amber-200` 这类浅色文字会糊在浅底上（实测 1.17:1）。
+   * 一律压到该色系的 **-800** 档——不是 -700：这些字常压在**同色系的 soft 底**上
+   * （`text-amber-200` + `bg-amber-500/10`），-700 在那种底上只有 4.40:1，仍差一点；
+   * -800 在白底/soft 底/页面底上都稳过 4.5。
+   *
+   * 两种写法都要覆盖：
+   *   ① 纯类名   `text-amber-300`      → `:where()`
+   *   ② 带透明度 `text-amber-300/80`   → 子串匹配（`:where(.text-amber-300)` 匹配不到它！
+   *      实测漏掉的那条 `text-amber-300/80` 只有 **1.32:1**，等于看不见。
+   *      子串匹配刻意**不用 `-50` 前缀**（`[class*="text-amber-50"]` 会误伤 `text-amber-500`），
+   *      所以 -50 只走 `:where()`，带斜杠的 -50/ 单独写。
+   */
+  :root:not(.dark) :where(.text-amber-50, .text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400,
+    .text-yellow-50, .text-yellow-100, .text-yellow-200, .text-yellow-300, .text-yellow-400,
+    .text-orange-50, .text-orange-100, .text-orange-200, .text-orange-300, .text-orange-400) {
+    color: var(--color-amber-800);
+  }
+  :root:not(.dark) [class*="text-amber-50/"], [class*="text-amber-100/"], [class*="text-amber-200/"], [class*="text-amber-300/"], [class*="text-amber-400/"],
+  [class*="text-yellow-50/"], [class*="text-yellow-100/"], [class*="text-yellow-200/"], [class*="text-yellow-300/"], [class*="text-yellow-400/"],
+  [class*="text-orange-50/"], [class*="text-orange-100/"], [class*="text-orange-200/"], [class*="text-orange-300/"], [class*="text-orange-400/"] {
+    color: var(--color-amber-800);
+  }
+
+  :root:not(.dark) :where(.text-lime-50, .text-lime-100, .text-lime-200, .text-lime-300, .text-lime-400,
+    .text-green-50, .text-green-100, .text-green-200, .text-green-300, .text-green-400,
+    .text-teal-50, .text-teal-100, .text-teal-200, .text-teal-300, .text-teal-400,
+    .text-emerald-50, .text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400) {
+    color: var(--color-emerald-800);
+  }
+  :root:not(.dark) [class*="text-lime-50/"], [class*="text-lime-100/"], [class*="text-lime-200/"], [class*="text-lime-300/"], [class*="text-lime-400/"],
+  [class*="text-green-50/"], [class*="text-green-100/"], [class*="text-green-200/"], [class*="text-green-300/"], [class*="text-green-400/"],
+  [class*="text-teal-50/"], [class*="text-teal-100/"], [class*="text-teal-200/"], [class*="text-teal-300/"], [class*="text-teal-400/"],
+  [class*="text-emerald-50/"], [class*="text-emerald-100/"], [class*="text-emerald-200/"], [class*="text-emerald-300/"], [class*="text-emerald-400/"] {
+    color: var(--color-emerald-800);
+  }
+
+  :root:not(.dark) :where(.text-red-50, .text-red-100, .text-red-200, .text-red-300, .text-red-400,
+    .text-rose-50, .text-rose-100, .text-rose-200, .text-rose-300, .text-rose-400) {
+    color: var(--color-red-800);
+  }
+  :root:not(.dark) [class*="text-red-50/"], [class*="text-red-100/"], [class*="text-red-200/"], [class*="text-red-300/"], [class*="text-red-400/"],
+  [class*="text-rose-50/"], [class*="text-rose-100/"], [class*="text-rose-200/"], [class*="text-rose-300/"], [class*="text-rose-400/"] {
+    color: var(--color-red-800);
+  }
+
+  /* 品牌族：blue / sky / cyan / purple / violet / fuchsia / pink 已并入主色槽位，
+     它们这些浅档同样压到 indigo-800。 */
+  :root:not(.dark) :where(.text-blue-50, .text-blue-100, .text-blue-200, .text-blue-300, .text-blue-400,
+    .text-sky-50, .text-sky-100, .text-sky-200, .text-sky-300, .text-sky-400,
+    .text-cyan-50, .text-cyan-100, .text-cyan-200, .text-cyan-300, .text-cyan-400,
+    .text-indigo-50, .text-indigo-100, .text-indigo-200, .text-indigo-300, .text-indigo-400,
+    .text-purple-50, .text-purple-100, .text-purple-200, .text-purple-300, .text-purple-400,
+    .text-violet-50, .text-violet-100, .text-violet-200, .text-violet-300, .text-violet-400,
+    .text-fuchsia-50, .text-fuchsia-100, .text-fuchsia-200, .text-fuchsia-300, .text-fuchsia-400,
+    .text-pink-50, .text-pink-100, .text-pink-200, .text-pink-300, .text-pink-400) {
+    color: var(--color-indigo-800);
+  }
+  :root:not(.dark) [class*="text-blue-50/"], [class*="text-blue-100/"], [class*="text-blue-200/"], [class*="text-blue-300/"], [class*="text-blue-400/"],
+  [class*="text-sky-50/"], [class*="text-sky-100/"], [class*="text-sky-200/"], [class*="text-sky-300/"], [class*="text-sky-400/"],
+  [class*="text-cyan-50/"], [class*="text-cyan-100/"], [class*="text-cyan-200/"], [class*="text-cyan-300/"], [class*="text-cyan-400/"],
+  [class*="text-indigo-50/"], [class*="text-indigo-100/"], [class*="text-indigo-200/"], [class*="text-indigo-300/"], [class*="text-indigo-400/"],
+  [class*="text-purple-50/"], [class*="text-purple-100/"], [class*="text-purple-200/"], [class*="text-purple-300/"], [class*="text-purple-400/"],
+  [class*="text-violet-50/"], [class*="text-violet-100/"], [class*="text-violet-200/"], [class*="text-violet-300/"], [class*="text-violet-400/"],
+  [class*="text-fuchsia-50/"], [class*="text-fuchsia-100/"], [class*="text-fuchsia-200/"], [class*="text-fuchsia-300/"], [class*="text-fuchsia-400/"],
+  [class*="text-pink-50/"], [class*="text-pink-100/"], [class*="text-pink-200/"], [class*="text-pink-300/"], [class*="text-pink-400/"] {
+    color: var(--color-indigo-800);
+  }
+
+  /* ── 3b. 剩余的状态色**实底**取更深一档 ─────────────────────────────────
+   * 白字压在 `-600` 档上够不到 AA：warning 3.35、success 3.58、danger 4.38。
+   * 装饰性的实底已全部收敛为主色（见组件改动），剩下的只有删除/中止这类**真语义**
+   * 按钮与进度条，这里把它们统一取 -700 档，白字全部 ≥4.9。
+   */
+  :root:not(.dark) [class*="bg-amber-600"]:not([class*="bg-amber-600/"]),
+  :root:not(.dark) [class*="bg-amber-500"]:not([class*="bg-amber-500/"]) { background-color: var(--color-amber-700); }
+
+  :root:not(.dark) [class*="bg-emerald-600"]:not([class*="bg-emerald-600/"]),
+  :root:not(.dark) [class*="bg-emerald-500"]:not([class*="bg-emerald-500/"]),
+  :root:not(.dark) [class*="bg-green-600"]:not([class*="bg-green-600/"]) { background-color: var(--color-emerald-700); }
+
+  :root:not(.dark) [class*="bg-red-600"]:not([class*="bg-red-600/"]),
+  :root:not(.dark) [class*="bg-red-500"]:not([class*="bg-red-500/"]),
+  :root:not(.dark) [class*="bg-rose-600"]:not([class*="bg-rose-600/"]),
+  :root:not(.dark) [class*="bg-rose-500"]:not([class*="bg-rose-500/"]) { background-color: var(--color-red-700); }
+
+  /*
+   * ── 4. 彩色**实底**上的白字必须钉回白色 ─────────────────────────────────
+   * `text-white` 在本项目承担两种语义：① 深色底上的主文字 → 亮色下要变深（这是我们要的）；
+   * ② 彩色底上的白字（按钮、选中态、状态徽标）→ 不该变。一个 `--color-white` 服务不了
+   * 两种，所以在饱和底上打补丁。只列 500/600/700 三档：浅色 chip 本来就该配深字。
+   * 第二条用复合选择器（0,2,0）压过同元素上的 `text-white`（0,1,0）。
+   */
   :where(
     .bg-indigo-500, .bg-indigo-600, .bg-indigo-700,
-    .bg-rose-500, .bg-rose-600, .bg-rose-700,
-    .bg-red-500, .bg-red-600, .bg-red-700,
+    .bg-blue-500, .bg-blue-600, .bg-blue-700,
+    .bg-sky-500, .bg-sky-600, .bg-sky-700,
+    .bg-cyan-500, .bg-cyan-600, .bg-cyan-700,
+    .bg-purple-500, .bg-purple-600, .bg-purple-700,
+    .bg-violet-500, .bg-violet-600, .bg-violet-700,
+    .bg-fuchsia-500, .bg-fuchsia-600, .bg-fuchsia-700,
+    .bg-pink-500, .bg-pink-600, .bg-pink-700,
     .bg-emerald-500, .bg-emerald-600, .bg-emerald-700,
     .bg-green-500, .bg-green-600, .bg-green-700,
     .bg-teal-500, .bg-teal-600, .bg-teal-700,
-    .bg-cyan-500, .bg-cyan-600, .bg-cyan-700,
-    .bg-sky-500, .bg-sky-600, .bg-sky-700,
-    .bg-blue-500, .bg-blue-600, .bg-blue-700,
-    .bg-violet-500, .bg-violet-600, .bg-violet-700,
-    .bg-purple-500, .bg-purple-600, .bg-purple-700,
-    .bg-fuchsia-500, .bg-fuchsia-600, .bg-fuchsia-700,
-    .bg-pink-500, .bg-pink-600, .bg-pink-700,
+    .bg-lime-500, .bg-lime-600, .bg-lime-700,
     .bg-amber-500, .bg-amber-600, .bg-amber-700,
-    .bg-orange-500, .bg-orange-600, .bg-orange-700,
     .bg-yellow-500, .bg-yellow-600, .bg-yellow-700,
-    .bg-lime-500, .bg-lime-600, .bg-lime-700
+    .bg-orange-500, .bg-orange-600, .bg-orange-700,
+    .bg-red-500, .bg-red-600, .bg-red-700,
+    .bg-rose-500, .bg-rose-600, .bg-rose-700
   ) {
-    color: #ffffff;
+    color: var(--text-on-primary);
   }
 
   .bg-indigo-500.text-white, .bg-indigo-600.text-white, .bg-indigo-700.text-white,
-  .bg-rose-500.text-white, .bg-rose-600.text-white, .bg-rose-700.text-white,
-  .bg-red-500.text-white, .bg-red-600.text-white, .bg-red-700.text-white,
+  .bg-blue-500.text-white, .bg-blue-600.text-white, .bg-blue-700.text-white,
+  .bg-sky-500.text-white, .bg-sky-600.text-white, .bg-sky-700.text-white,
+  .bg-cyan-500.text-white, .bg-cyan-600.text-white, .bg-cyan-700.text-white,
+  .bg-purple-500.text-white, .bg-purple-600.text-white, .bg-purple-700.text-white,
+  .bg-violet-500.text-white, .bg-violet-600.text-white, .bg-violet-700.text-white,
+  .bg-fuchsia-500.text-white, .bg-fuchsia-600.text-white, .bg-fuchsia-700.text-white,
+  .bg-pink-500.text-white, .bg-pink-600.text-white, .bg-pink-700.text-white,
   .bg-emerald-500.text-white, .bg-emerald-600.text-white, .bg-emerald-700.text-white,
   .bg-green-500.text-white, .bg-green-600.text-white, .bg-green-700.text-white,
   .bg-teal-500.text-white, .bg-teal-600.text-white, .bg-teal-700.text-white,
-  .bg-cyan-500.text-white, .bg-cyan-600.text-white, .bg-cyan-700.text-white,
-  .bg-sky-500.text-white, .bg-sky-600.text-white, .bg-sky-700.text-white,
-  .bg-blue-500.text-white, .bg-blue-600.text-white, .bg-blue-700.text-white,
-  .bg-violet-500.text-white, .bg-violet-600.text-white, .bg-violet-700.text-white,
-  .bg-purple-500.text-white, .bg-purple-600.text-white, .bg-purple-700.text-white,
-  .bg-fuchsia-500.text-white, .bg-fuchsia-600.text-white, .bg-fuchsia-700.text-white,
-  .bg-pink-500.text-white, .bg-pink-600.text-white, .bg-pink-700.text-white,
+  .bg-lime-500.text-white, .bg-lime-600.text-white, .bg-lime-700.text-white,
   .bg-amber-500.text-white, .bg-amber-600.text-white, .bg-amber-700.text-white,
-  .bg-orange-500.text-white, .bg-orange-600.text-white, .bg-orange-700.text-white,
   .bg-yellow-500.text-white, .bg-yellow-600.text-white, .bg-yellow-700.text-white,
-  .bg-lime-500.text-white, .bg-lime-600.text-white, .bg-lime-700.text-white {
-    color: #ffffff;
+  .bg-orange-500.text-white, .bg-orange-600.text-white, .bg-orange-700.text-white,
+  .bg-red-500.text-white, .bg-red-600.text-white, .bg-red-700.text-white,
+  .bg-rose-500.text-white, .bg-rose-600.text-white, .bg-rose-700.text-white {
+    color: var(--text-on-primary);
   }
 
   /*
-   * 浅彩色**文字**在亮色底上必然糊——这是亮色主题的系统性问题，不是某一页的。
-   *
-   * 实测（2026-09-13，浏览器计算样式）：`text-amber-200` 压在 `bg-amber-950/20` 上对比度只有
-   * **1.17:1**，`text-slate-500`（改前 #94a3b8）压白底 **2.56:1**，都远低于 AA 的 4.5:1。
-   * 全仓库这类浅彩字共 **732 处**，逐条改类名不现实，所以在调色板这一层统一压深。
-   *
-   * 为什么能一刀切：抽查过 `bg-{彩}-{200,300,400}` 只有 10 处、`border-` 只有 7 处，而这些浅彩字
-   * 所处的「底」几乎都是 `bg-{彩}-500/10|20` 这类**半透明浅底**，不是饱和底。
-   *
-   * 不需要任何例外：彩色 **800/900/950 档也已在亮色下重映射成浅档**（见文件末尾的
-   * `:root:not(.dark)` 块），所以亮色下不存在「深 chip + 浅字」这种组合。
-   * 第一版曾用 `:not([class*="bg-{彩}-950/"])` 守卫把深 chip 排除在外，并给它们另写一条提亮规则；
-   * 那个做法在「深档重映射」之后变成有害（会让浅底上的浅字跳过压深），已一并删除。
-   *
-   * 只覆盖 200/300/400 三档文字；500 以上本来就是深色，亮色下无需处理。
+   * ── 5. 去玻璃拟态 / 去彩色阴影 / 去厚重阴影 ────────────────────────────
+   * 企业后台不需要磨砂与发光。弹窗遮罩保留底色，只是不再模糊背景。
    */
-  /* 深 chip 底（{彩}-950/900/800）上的浅彩字：不能只跳过压深，还要提到 -200 档才够亮。
-     实测侧栏 9px 徽标在跳过压深后仍是 4.25（indigo-300 压 indigo-950/80），提到 -200 档后 ~5.4。 */
-
-  /*
-   * 亮色下把**彩色深档**也纳入重映射（原来只有 slate 被管）：950→50、900→100、800→200。
-   *
-   * 为什么需要：`bg-rose-900/40` 这类「深色 + 低透明度」叠在白底上是**中间调**，深字浅字都够不到
-   * 4.5:1。全仓库这类用法 114 处。把深档映射成浅档后，它们变成真正的浅底，上面那条
-   * 「浅彩字压深」就能给出合格对比度，也不需要再为「深 chip」留守卫。
-   *
-   * 为什么安全：`text-{彩}-{800,900,950}` 在全仓库的用量是 **0**（已 grep 核实），
-   * 所以把这三档整体改浅不会让任何文字变浅。
-   */
-  :root:not(.dark) {
-    --color-amber-950: #fffbeb; /* 该色系 50 */
-    --color-amber-900: #fef3c7; /* 该色系 100 */
-    --color-amber-800: #fde68a; /* 该色系 200 */
-    --color-yellow-950: #fefce8; /* 该色系 50 */
-    --color-yellow-900: #fef9c3; /* 该色系 100 */
-    --color-yellow-800: #fef08a; /* 该色系 200 */
-    --color-orange-950: #fff7ed; /* 该色系 50 */
-    --color-orange-900: #ffedd5; /* 该色系 100 */
-    --color-orange-800: #fed7aa; /* 该色系 200 */
-    --color-lime-950: #f7fee7; /* 该色系 50 */
-    --color-lime-900: #ecfccb; /* 该色系 100 */
-    --color-lime-800: #d9f99d; /* 该色系 200 */
-    --color-green-950: #f0fdf4; /* 该色系 50 */
-    --color-green-900: #dcfce7; /* 该色系 100 */
-    --color-green-800: #bbf7d0; /* 该色系 200 */
-    --color-emerald-950: #ecfdf5; /* 该色系 50 */
-    --color-emerald-900: #d1fae5; /* 该色系 100 */
-    --color-emerald-800: #a7f3d0; /* 该色系 200 */
-    --color-teal-950: #f0fdfa; /* 该色系 50 */
-    --color-teal-900: #ccfbf1; /* 该色系 100 */
-    --color-teal-800: #99f6e4; /* 该色系 200 */
-    --color-cyan-950: #ecfeff; /* 该色系 50 */
-    --color-cyan-900: #cffafe; /* 该色系 100 */
-    --color-cyan-800: #a5f3fc; /* 该色系 200 */
-    --color-sky-950: #f0f9ff; /* 该色系 50 */
-    --color-sky-900: #e0f2fe; /* 该色系 100 */
-    --color-sky-800: #bae6fd; /* 该色系 200 */
-    --color-blue-950: #eff6ff; /* 该色系 50 */
-    --color-blue-900: #dbeafe; /* 该色系 100 */
-    --color-blue-800: #bfdbfe; /* 该色系 200 */
-    --color-indigo-950: #eef2ff; /* 该色系 50 */
-    --color-indigo-900: #e0e7ff; /* 该色系 100 */
-    --color-indigo-800: #c7d2fe; /* 该色系 200 */
-    --color-violet-950: #f5f3ff; /* 该色系 50 */
-    --color-violet-900: #ede9fe; /* 该色系 100 */
-    --color-violet-800: #ddd6fe; /* 该色系 200 */
-    --color-purple-950: #faf5ff; /* 该色系 50 */
-    --color-purple-900: #f3e8ff; /* 该色系 100 */
-    --color-purple-800: #e9d5ff; /* 该色系 200 */
-    --color-fuchsia-950: #fdf4ff; /* 该色系 50 */
-    --color-fuchsia-900: #fae8ff; /* 该色系 100 */
-    --color-fuchsia-800: #f5d0fe; /* 该色系 200 */
-    --color-pink-950: #fdf2f8; /* 该色系 50 */
-    --color-pink-900: #fce7f3; /* 该色系 100 */
-    --color-pink-800: #fbcfe8; /* 该色系 200 */
-    --color-rose-950: #fff1f2; /* 该色系 50 */
-    --color-rose-900: #ffe4e6; /* 该色系 100 */
-    --color-rose-800: #fecdd3; /* 该色系 200 */
-    --color-red-950: #fef2f2; /* 该色系 50 */
-    --color-red-900: #fee2e2; /* 该色系 100 */
-    --color-red-800: #fecaca; /* 该色系 200 */
+  :root:not(.dark) [class*="backdrop-blur"] {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
-  /*
-   * 浅彩色**文字**在亮色下压深到 -700 档（全仓库 732 处这类写法）。
-   *
-   * 与文件末尾的「深档重映射」配套：深档已变浅底，浅字再压深，两边合起来才有合格对比度。
-   * 不需要任何例外——亮色下不存在「深 chip + 浅字」的组合了。
-   */
-  :root:not(.dark) :where(.text-amber-200, .text-amber-300, .text-amber-400) { color: #b45309; }
-  :root:not(.dark) :where(.text-yellow-200, .text-yellow-300, .text-yellow-400) { color: #a16207; }
-  :root:not(.dark) :where(.text-orange-200, .text-orange-300, .text-orange-400) { color: #c2410c; }
-  :root:not(.dark) :where(.text-lime-200, .text-lime-300, .text-lime-400) { color: #4d7c0f; }
-  :root:not(.dark) :where(.text-green-200, .text-green-300, .text-green-400) { color: #15803d; }
-  :root:not(.dark) :where(.text-emerald-200, .text-emerald-300, .text-emerald-400) { color: #047857; }
-  :root:not(.dark) :where(.text-teal-200, .text-teal-300, .text-teal-400) { color: #0f766e; }
-  :root:not(.dark) :where(.text-cyan-200, .text-cyan-300, .text-cyan-400) { color: #0e7490; }
-  :root:not(.dark) :where(.text-sky-200, .text-sky-300, .text-sky-400) { color: #0369a1; }
-  :root:not(.dark) :where(.text-blue-200, .text-blue-300, .text-blue-400) { color: #1d4ed8; }
-  :root:not(.dark) :where(.text-indigo-200, .text-indigo-300, .text-indigo-400) { color: #4338ca; }
-  :root:not(.dark) :where(.text-violet-200, .text-violet-300, .text-violet-400) { color: #6d28d9; }
-  :root:not(.dark) :where(.text-purple-200, .text-purple-300, .text-purple-400) { color: #7e22ce; }
-  :root:not(.dark) :where(.text-fuchsia-200, .text-fuchsia-300, .text-fuchsia-400) { color: #a21caf; }
-  :root:not(.dark) :where(.text-pink-200, .text-pink-300, .text-pink-400) { color: #be185d; }
-  :root:not(.dark) :where(.text-rose-200, .text-rose-300, .text-rose-400) { color: #be123c; }
-  :root:not(.dark) :where(.text-red-200, .text-red-300, .text-red-400) { color: #b91c1c; }
+  :root:not(.dark) [class*="shadow-red-"],
+  :root:not(.dark) [class*="shadow-rose-"],
+  :root:not(.dark) [class*="shadow-amber-"],
+  :root:not(.dark) [class*="shadow-emerald-"],
+  :root:not(.dark) [class*="shadow-indigo-"],
+  :root:not(.dark) [class*="shadow-blue-"],
+  :root:not(.dark) [class*="shadow-cyan-"],
+  :root:not(.dark) [class*="shadow-sky-"],
+  :root:not(.dark) [class*="shadow-purple-"],
+  :root:not(.dark) [class*="shadow-violet-"],
+  :root:not(.dark) [class*="shadow-black"] {
+    --tw-shadow-color: rgb(16 24 40 / 0.06);
+  }
 
-  /*
-   * `-50` / `-100` 档同样要压深（2026-09-13 补）。
-   *
-   * 上面那批只覆盖了 `-200/-300/-400`，而全仓库还有一批 `text-{彩}-100`——
-   * 亮色下它们保持近白，压在 `bg-{彩}-950/20`（深档已重映射成浅底）上，
-   * 实测对比度低到 **1.08:1**，等于看不见：AI 内容工坊顶部的红色报错横幅、
-   * 总览页的琥珀提示条都是这个原因。
-   *
-   * 这一档比 `-200` 更浅，所以压得比 `-700` 更深，取各色系 `-800`。
-   */
-  :root:not(.dark) :where(.text-amber-50, .text-amber-100) { color: #92400e; }
-  :root:not(.dark) :where(.text-yellow-50, .text-yellow-100) { color: #854d0e; }
-  :root:not(.dark) :where(.text-orange-50, .text-orange-100) { color: #9a3412; }
-  :root:not(.dark) :where(.text-lime-50, .text-lime-100) { color: #3f6212; }
-  :root:not(.dark) :where(.text-green-50, .text-green-100) { color: #166534; }
-  :root:not(.dark) :where(.text-emerald-50, .text-emerald-100) { color: #065f46; }
-  :root:not(.dark) :where(.text-teal-50, .text-teal-100) { color: #115e59; }
-  :root:not(.dark) :where(.text-cyan-50, .text-cyan-100) { color: #155e75; }
-  :root:not(.dark) :where(.text-sky-50, .text-sky-100) { color: #075985; }
-  :root:not(.dark) :where(.text-blue-50, .text-blue-100) { color: #1e40af; }
-  :root:not(.dark) :where(.text-indigo-50, .text-indigo-100) { color: #3730a3; }
-  :root:not(.dark) :where(.text-violet-50, .text-violet-100) { color: #5b21b6; }
-  :root:not(.dark) :where(.text-purple-50, .text-purple-100) { color: #6b21a8; }
-  :root:not(.dark) :where(.text-fuchsia-50, .text-fuchsia-100) { color: #86198f; }
-  :root:not(.dark) :where(.text-pink-50, .text-pink-100) { color: #9d174d; }
-  :root:not(.dark) :where(.text-rose-50, .text-rose-100) { color: #9f1239; }
-  :root:not(.dark) :where(.text-red-50, .text-red-100) { color: #991b1b; }
-
+  /* `rounded`（裸类，编译成写死的 4px）统一到 6px 小组件档。 */
+  :root:not(.dark) .rounded {
+    border-radius: var(--radius-sm);
+  }
 }

@@ -7,6 +7,9 @@ import { GeoFlowApiClient } from '../api/geoflowClient';
 import { mapKnowledgeBase } from '../api/mappers';
 import KnowledgeFactWorkbench from './KnowledgeFactWorkbench';
 import EnterpriseKnowledgeView from './EnterpriseKnowledgeView';
+import { StatusBadge, kbStatusSpec } from './StatusBadge';
+import { PageHeader } from './PageHeader';
+import { EmptyState } from './ui';
 
 const EMPTY_KNOWLEDGE_BASES: KnowledgeBase[] = [];
 const EMPTY_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [];
@@ -318,39 +321,34 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <Database className="w-6 h-6 text-emerald-500" />
-            {lang === 'zh' ? '私有知识库与 RAG 语料切片' : 'Knowledge Bases & RAG Chunks'}
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            {lang === 'zh'
-              ? '沉淀企业产品规格、白皮书与对比数据，构建大模型防幻觉引用的事实基石。'
-              : 'Manage authenticated business documentation, chunks & embeddings to eliminate hallucinations.'}
-          </p>
-        </div>
-
-        {!canRead && <PermissionNotice lang={lang} mode="read" requiredScope="materials:read" className="sm:col-span-2" />}
-        {canRead && !canWrite && <PermissionNotice lang={lang} requiredScope="materials:write" className="sm:col-span-2" />}
-
-        {canWrite && <button
-          onClick={() => {
-            setCreateError('');
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{lang === 'zh' ? '新建知识库' : 'New Knowledge Base'}</span>
-        </button>}
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        icon={Database}
+        group={lang === 'zh' ? '内容中心' : 'Content'}
+        title={lang === 'zh' ? '知识库' : 'Knowledge Bases'}
+        description={lang === 'zh'
+          ? 'AI 写作的事实来源：把产品资料、白皮书等放进来，生成文章时它会优先引用这里的内容，少瞎编。'
+          : 'The factual source for AI writing: add product docs and whitepapers so generated articles cite them.'}
+        actions={<>
+          {!canRead && <PermissionNotice lang={lang} mode="read" requiredScope="materials:read" className="sm:col-span-2" />}
+          {canRead && !canWrite && <PermissionNotice lang={lang} requiredScope="materials:write" className="sm:col-span-2" />}
+          {canWrite && <button
+            onClick={() => {
+              setCreateError('');
+              setIsModalOpen(true);
+            }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{lang === 'zh' ? '新建知识库' : 'New Knowledge Base'}</span>
+          </button>}
+        </>}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Knowledge Bases List (4 cols) */}
         <div className="lg:col-span-4 space-y-3">
-          <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">
+          <div className="text-section-title px-1">
             {lang === 'zh' ? '知识库列表' : 'Repositories'} ({formatCount(totalCount ?? (apiMode ? undefined : visibleKnowledgeBases.length))})
           </div>
 
@@ -361,22 +359,21 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                 <div
                   key={kb.id}
                   onClick={() => setSelectedKbId(kb.id)}
-                  className={`p-4 rounded-xl border transition cursor-pointer ${
+                  className={`cursor-pointer rounded-2xl border p-4 transition ${
                     isSelected
-                      ? 'bg-slate-800 border-emerald-500 shadow-md shadow-emerald-500/10'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
+                      ? 'border-emerald-500 bg-slate-800 shadow-md shadow-emerald-500/10'
+                      : 'border-transparent bg-slate-900/80 hover:bg-slate-800/40'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-sm font-bold text-white line-clamp-1">{kb.name}</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-                      {kb.status}
-                    </span>
+                    <h3 className="text-card-title line-clamp-1">{kb.name}</h3>
+                    {/* 后端枚举（indexed / processing / failed / ready）翻成中文语义。 */}
+                    <StatusBadge spec={kbStatusSpec(kb.status)} lang={lang} className="!text-[12px] shrink-0" />
                   </div>
-                  <p className="text-xs text-slate-400 line-clamp-2 mt-1.5 leading-relaxed">
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-slate-400 line-clamp-2">
                     {kb.description || (lang === 'zh' ? '暂无描述' : 'No description')}
                   </p>
-                  <div className="flex items-center justify-between text-[11px] text-slate-400 pt-3 mt-3 border-t border-slate-700/40">
+                  <div className="mt-3 flex items-center justify-between border-t border-slate-700/40 pt-3 text-caption">
                     <span>
                       {/*
                         只显示**后端确实提供了**的计数。`/api/v1/materials/knowledge-bases` 的投影里
@@ -401,20 +398,20 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
         {/* Right Column: Chunks & RAG Semantic Tester (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
           {/* Active Knowledge Base Info & Chunks */}
-          <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 space-y-4">
+          <div className="space-y-4 rounded-2xl bg-slate-900/80 p-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-emerald-400" />
+                <h3 className="flex items-center gap-2 text-section-title">
+                  <Layers className="h-4 w-4 text-emerald-400" />
                   <span>{activeKb?.name}</span>
                 </h3>
-                <span className="text-xs text-slate-400">
+                <span className="text-caption">
                   {lang === 'zh' ? '包含切片' : 'Chunks'}: {formatCount(activeChunkTotal)} {lang === 'zh' ? '段' : 'items'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {apiMode && activeKb?.id && canWrite && <button type="button" onClick={() => void refreshActiveKnowledgeBase()} disabled={assetBusy !== ''} className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 px-2 py-1.5 text-[10px] text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-50"><RefreshCw className={`h-3 w-3 ${assetBusy === 'refresh' ? 'animate-spin' : ''}`} />{lang === 'zh' ? '重建切片' : 'Rebuild chunks'}</button>}
-                <span className="text-[11px] px-2 py-1 rounded bg-slate-800 text-slate-300">
+                {apiMode && activeKb?.id && canWrite && <button type="button" onClick={() => void refreshActiveKnowledgeBase()} disabled={assetBusy !== ''} className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${assetBusy === 'refresh' ? 'animate-spin' : ''}`} />{lang === 'zh' ? '重建切片' : 'Rebuild chunks'}</button>}
+                <span className="rounded-lg bg-slate-800 px-2 py-1 text-[12px] text-slate-300">
                   {apiMode
                     ? (lang === 'zh' ? '向量状态由后端同步任务决定' : 'Embedding state is owned by the backend')
                     : '100% Vector Embedded'}
@@ -429,22 +426,31 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   <span>{lang === 'zh' ? '切片加载失败：' : 'Chunk loading failed: '}{activeChunkLoadError}</span>
                 </div>
               ) : activeChunks.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400">
-                  {activeKb?.status === 'processing'
-                    ? (lang === 'zh' ? '切片正在由后端生成，请稍后刷新' : 'Chunks are being generated by the backend')
-                    : activeKb?.status === 'failed'
-                      ? (lang === 'zh' ? `切片同步失败${activeKb.syncError ? `：${activeKb.syncError}` : ''}` : `Chunk synchronization failed${activeKb.syncError ? `: ${activeKb.syncError}` : ''}`)
-                      : (lang === 'zh' ? '此知识库暂无独立切片' : 'No chunks available in this repository')}
-                </div>
+                activeKb?.status === 'processing' ? (
+                  <div className="py-8 text-center text-[13px] text-slate-400">
+                    {lang === 'zh' ? '切片正在由后端生成，请稍后刷新' : 'Chunks are being generated by the backend'}
+                  </div>
+                ) : activeKb?.status === 'failed' ? (
+                  <div className="py-8 text-center text-[13px] text-rose-300">
+                    {lang === 'zh' ? `切片同步失败${activeKb.syncError ? `：${activeKb.syncError}` : ''}` : `Chunk synchronization failed${activeKb.syncError ? `: ${activeKb.syncError}` : ''}`}
+                  </div>
+                ) : (
+                  <EmptyState
+                    compact
+                    icon={Layers}
+                    title={lang === 'zh' ? '暂无独立切片' : 'No chunks yet'}
+                    description={lang === 'zh' ? '新知识库创建后由后端异步切片；也可以点上方「重建切片」重新生成。' : 'New libraries are chunked asynchronously; use “Rebuild chunks” to regenerate.'}
+                  />
+                )
               ) : (
                 activeChunks.map((chk) => (
                   <div
                     key={chk.id}
-                    className="p-3.5 bg-slate-950/60 rounded-xl border border-slate-800/80 space-y-1.5"
+                    className="space-y-1.5 rounded-xl bg-slate-950/40 px-4 py-3"
                   >
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-slate-200">{chk.title}</h4>
-                      <span className="text-[10px] font-mono text-slate-400">{chk.tokenCount} tokens</span>
+                      <span className="font-mono text-caption">{chk.tokenCount} tokens</span>
                     </div>
                     <p className="text-xs text-slate-400 leading-relaxed font-sans">{chk.content}</p>
                   </div>
@@ -456,35 +462,35 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
 
             {apiMode && assetDetails && (
               <div className="grid grid-cols-1 gap-4 border-t border-slate-800 pt-4 xl:grid-cols-2">
-                <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300"><History className="h-3.5 w-3.5 text-indigo-300" />{lang === 'zh' ? '知识库版本' : 'Revisions'}</div>
+                <section className="rounded-xl bg-slate-950/40 px-4 py-3">
+                  <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-slate-300"><History className="h-3.5 w-3.5 text-indigo-300" />{lang === 'zh' ? '知识库版本' : 'Revisions'}</div>
                   <div className="max-h-36 space-y-1.5 overflow-y-auto">
                     {Array.isArray(assetDetails.revisions) && assetDetails.revisions.length > 0 ? assetDetails.revisions.map((revision: any) => (
-                      <div key={revision.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 px-2.5 py-2 text-[10px]">
+                      <div key={revision.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900/50 px-2.5 py-2 text-[12px]">
                         <span className="text-slate-400">v{revision.revision_number} · {revision.source} · {revision.creator_username || 'system'}</span>
-                        {canWrite && canRestoreActiveKnowledgeBase && <button type="button" onClick={() => void restoreRevision(Number(revision.id))} disabled={assetBusy !== ''} className="rounded border border-indigo-500/30 px-2 py-1 text-indigo-300 hover:bg-indigo-500/10 disabled:opacity-50">{assetBusy === `restore-${revision.id}` ? '…' : (lang === 'zh' ? '恢复' : 'Restore')}</button>}
+                        {canWrite && canRestoreActiveKnowledgeBase && <button type="button" onClick={() => void restoreRevision(Number(revision.id))} disabled={assetBusy !== ''} className="rounded-lg border border-indigo-500/30 px-2 py-1 text-[12px] font-semibold text-indigo-300 hover:bg-indigo-500/10 disabled:opacity-50">{assetBusy === `restore-${revision.id}` ? '…' : (lang === 'zh' ? '恢复' : 'Restore')}</button>}
                       </div>
-                    )) : <p className="text-[10px] text-slate-500">{lang === 'zh' ? '暂无历史版本' : 'No revisions yet'}</p>}
+                    )) : <p className="text-[12px] text-slate-500">{lang === 'zh' ? '暂无历史版本' : 'No revisions yet'}</p>}
                   </div>
-                  {!canRestoreActiveKnowledgeBase && Array.isArray(assetDetails.revisions) && assetDetails.revisions.length > 0 && <p className="mt-2 text-[10px] text-slate-500">{lang === 'zh' ? '此知识库仅保留版本记录；恢复仅适用于系统托管知识库。' : 'This library keeps revision history; restoration is available only for system-managed knowledge bases.'}</p>}
+                  {!canRestoreActiveKnowledgeBase && Array.isArray(assetDetails.revisions) && assetDetails.revisions.length > 0 && <p className="mt-2 text-[12px] text-slate-500">{lang === 'zh' ? '此知识库仅保留版本记录；恢复仅适用于系统托管知识库。' : 'This library keeps revision history; restoration is available only for system-managed knowledge bases.'}</p>}
                 </section>
 
-                <section className="rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-300"><ImagePlus className="h-3.5 w-3.5 text-cyan-300" />{lang === 'zh' ? '知识媒体资产' : 'Knowledge media'}</div>
+                <section className="rounded-xl bg-slate-950/40 px-4 py-3">
+                  <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-slate-300"><ImagePlus className="h-3.5 w-3.5 text-indigo-300" />{lang === 'zh' ? '知识媒体资产' : 'Knowledge media'}</div>
                   <div className="max-h-36 space-y-1.5 overflow-y-auto">
                     {Array.isArray(assetDetails.media) && assetDetails.media.length > 0 ? assetDetails.media.map((media: any) => (
-                      <div key={media.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 px-2.5 py-2 text-[10px]">
-                        <button type="button" onClick={() => { setSelectedMediaId(Number(media.id)); setMediaForm((previous) => ({ ...previous, asset_key: String(media.asset_key || ''), section_key: String(media.section_key || ''), route_name: String(media.route_name || ''), title: String(media.title || ''), alt_text: String(media.alt_text || ''), caption: String(media.caption || ''), keywords: Array.isArray(media.keywords) ? media.keywords.join(', ') : String(media.keywords || '') })); }} className={`min-w-0 truncate text-left ${selectedMediaId === Number(media.id) ? 'text-cyan-300' : 'text-slate-400'}`}>{media.title || media.asset_key} · v{media.asset_version}</button>
-                        {canWrite && <div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => void toggleMedia(Number(media.id), !Boolean(media.is_active))} disabled={assetBusy !== ''} className={`inline-flex items-center gap-1 rounded border px-2 py-1 ${media.is_active ? 'border-emerald-500/30 text-emerald-300' : 'border-slate-700 text-slate-500'}`}><Power className="h-3 w-3" />{media.is_active ? (lang === 'zh' ? '启用' : 'Active') : (lang === 'zh' ? '停用' : 'Inactive')}</button>{mediaFile && <button type="button" onClick={() => void replaceMedia(Number(media.id))} disabled={assetBusy !== ''} className="rounded border border-cyan-500/30 px-2 py-1 text-cyan-300 disabled:opacity-50">{assetBusy === `replace-${media.id}` ? '…' : (lang === 'zh' ? '替换' : 'Replace')}</button>}</div>}
+                      <div key={media.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900/50 px-2.5 py-2 text-[12px]">
+                        <button type="button" onClick={() => { setSelectedMediaId(Number(media.id)); setMediaForm((previous) => ({ ...previous, asset_key: String(media.asset_key || ''), section_key: String(media.section_key || ''), route_name: String(media.route_name || ''), title: String(media.title || ''), alt_text: String(media.alt_text || ''), caption: String(media.caption || ''), keywords: Array.isArray(media.keywords) ? media.keywords.join(', ') : String(media.keywords || '') })); }} className={`min-w-0 truncate text-left ${selectedMediaId === Number(media.id) ? 'text-indigo-300' : 'text-slate-400'}`}>{media.title || media.asset_key} · v{media.asset_version}</button>
+                        {canWrite && <div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => void toggleMedia(Number(media.id), !Boolean(media.is_active))} disabled={assetBusy !== ''} className={`inline-flex items-center gap-1 rounded border px-2 py-1 ${media.is_active ? 'border-emerald-500/30 text-emerald-300' : 'border-slate-700 text-slate-500'}`}><Power className="h-3 w-3" />{media.is_active ? (lang === 'zh' ? '启用' : 'Active') : (lang === 'zh' ? '停用' : 'Inactive')}</button>{mediaFile && <button type="button" onClick={() => void replaceMedia(Number(media.id))} disabled={assetBusy !== ''} className="rounded-lg border border-indigo-500/30 px-2 py-1 text-[12px] font-semibold text-indigo-300 disabled:opacity-50">{assetBusy === `replace-${media.id}` ? '…' : (lang === 'zh' ? '替换' : 'Replace')}</button>}</div>}
                       </div>
-                    )) : <p className="text-[10px] text-slate-500">{lang === 'zh' ? '暂无媒体资产（系统知识媒体需 PNG/WebP 和受控入口）' : 'No media assets'}</p>}
+                    )) : <p className="text-[12px] text-slate-500">{lang === 'zh' ? '暂无媒体资产（系统知识媒体需 PNG/WebP 和受控入口）' : 'No media assets'}</p>}
                   </div>
                   {canWrite && <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
-                    <input type="file" accept="image/png,image/webp" onChange={(event) => setMediaFile(event.target.files?.[0] || null)} className="block w-full text-[10px] text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-[10px] file:text-slate-300" />
+                    <input type="file" accept="image/png,image/webp" onChange={(event) => setMediaFile(event.target.files?.[0] || null)} className="block w-full text-[12px] text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-[12px] file:text-slate-300" />
                     <div className="grid grid-cols-2 gap-2">
-                      {(['asset_key', 'section_key', 'route_name', 'title', 'alt_text', 'caption'] as const).map((field) => <input key={field} value={mediaForm[field]} onChange={(event) => setMediaForm((previous) => ({ ...previous, [field]: event.target.value }))} placeholder={field} className="rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-[10px] text-white" />)}
+                      {(['asset_key', 'section_key', 'route_name', 'title', 'alt_text', 'caption'] as const).map((field) => <input key={field} value={mediaForm[field]} onChange={(event) => setMediaForm((previous) => ({ ...previous, [field]: event.target.value }))} placeholder={field} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />)}
                     </div>
-                    <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void uploadMedia()} disabled={!mediaFile || assetBusy !== ''} className="rounded-lg bg-cyan-700 px-3 py-1.5 text-[10px] font-semibold text-white hover:bg-cyan-600 disabled:opacity-50">{assetBusy === 'media' ? (lang === 'zh' ? '上传中…' : 'Uploading…') : (lang === 'zh' ? '上传媒体' : 'Upload media')}</button>{selectedMediaId && <button type="button" onClick={() => void updateMediaMetadata()} disabled={assetBusy !== ''} className="rounded-lg border border-cyan-500/30 px-3 py-1.5 text-[10px] font-semibold text-cyan-300 disabled:opacity-50">{assetBusy === `update-media-${selectedMediaId}` ? '…' : (lang === 'zh' ? '保存元数据' : 'Save metadata')}</button>}</div>
+                    <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void uploadMedia()} disabled={!mediaFile || assetBusy !== ''} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">{assetBusy === 'media' ? (lang === 'zh' ? '上传中…' : 'Uploading…') : (lang === 'zh' ? '上传媒体' : 'Upload media')}</button>{selectedMediaId && <button type="button" onClick={() => void updateMediaMetadata()} disabled={assetBusy !== ''} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">{assetBusy === `update-media-${selectedMediaId}` ? '…' : (lang === 'zh' ? '保存元数据' : 'Save metadata')}</button>}</div>
                   </div>}
                 </section>
               </div>
@@ -492,33 +498,36 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
           </div>
 
           {/* RAG Semantic Retrieval Tester */}
-          <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 space-y-4">
+          <div className="space-y-4 rounded-2xl bg-slate-900/80 p-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span>{lang === 'zh' ? 'RAG 语义检索向量试验场' : 'Semantic RAG Vector Retrieval Playground'}</span>
+              <h3 className="flex items-center gap-2 text-section-title">
+                <Zap className="h-4 w-4 text-amber-400" />
+                <span>{lang === 'zh' ? '检索测试' : 'Retrieval test'}</span>
+                <span className="text-caption font-normal">
+                  {lang === 'zh' ? '（问一个问题，看看 AI 会从知识库里找到哪几段）' : '(see which chunks the AI would retrieve)'}
+                </span>
               </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[12px] text-amber-400">
                 {apiMode ? (lang === 'zh' ? '后端混合召回' : 'Backend hybrid retrieval') : 'Cosine Similarity'}
               </span>
             </div>
 
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   disabled={!canRead}
                   placeholder={lang === 'zh' ? '输入自然语言问题测试向量语义召回...' : 'Enter query to test retrieval...'}
-                  className="w-full bg-slate-800 border border-slate-700 text-xs text-slate-200 rounded-xl pl-8 pr-3 py-2.5 focus:outline-none focus:border-amber-500 transition"
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 pl-10 pr-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                 />
               </div>
               <button
                 onClick={handleTestSearch}
                 disabled={!canRead || isSearching || !activeKb?.id}
-                className="px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-500 text-white shadow-sm transition shrink-0"
+                className="inline-flex h-9 shrink-0 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
               >
                 {isSearching ? (lang === 'zh' ? '检索中...' : 'Searching...') : (lang === 'zh' ? '测试召回' : 'Test Search')}
               </button>
@@ -532,18 +541,18 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
 
             {searchResults.length > 0 && (
               <div className="space-y-2 pt-2 border-t border-slate-800">
-                <div className="text-[11px] font-semibold text-slate-400">
+                <div className="text-caption font-semibold">
                   {lang === 'zh' ? '召回 Top 切片：' : 'Top Retrieved Chunks:'}
                 </div>
                 {searchResults.map((res, i) => (
                   <div
                     key={res.chunk_id || res.id || i}
-                    className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1"
+                    className="space-y-1 rounded-xl bg-slate-950/40 px-4 py-3"
                   >
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-slate-200">{res.title || res.chunk_title || `Chunk ${res.chunk_index ?? i}`}</span>
                       {typeof (res.score ?? res.similarity) === 'number' && (
-                        <span className="text-[10px] font-mono text-emerald-400 font-bold">
+                        <span className="font-mono text-[12px] font-bold text-emerald-400">
                           Score: {Number(res.score ?? res.similarity).toFixed(3)}
                         </span>
                       )}
@@ -582,18 +591,18 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form
             onSubmit={handleCreateSubmit}
-            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
+            className="w-full max-w-md space-y-4 rounded-2xl bg-slate-900 p-6 shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Database className="w-5 h-5 text-emerald-500" />
+                <Database className="w-5 h-5 text-indigo-600" />
                 <span>{lang === 'zh' ? '新建私有知识库' : 'Create Knowledge Base'}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => !isCreating && setIsModalOpen(false)}
                 disabled={isCreating || !canWrite}
-                className="text-slate-400 hover:text-slate-200 text-sm"
+                className="text-sm text-slate-400 hover:text-white"
               >
                 ✕
               </button>
@@ -609,7 +618,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   required
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition"
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   placeholder="e.g. 2026年企业营销系统竞品评测库"
                 />
               </div>
@@ -617,8 +626,8 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
               {apiMode && (
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-slate-300">{lang === 'zh' ? '或上传知识文件（TXT / Markdown / DOCX）' : 'Or upload a knowledge file (TXT / Markdown / DOCX)'}</label>
-                  <input type="file" accept=".txt,.md,.markdown,.docx" onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} className="block w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-[11px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-[10px] file:text-slate-200" />
-                  {selectedFile && <p className="text-[10px] text-emerald-300">{selectedFile.name}</p>}
+                  <input type="file" accept=".txt,.md,.markdown,.docx" onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-[12px] file:text-slate-200" />
+                  {selectedFile && <p className="text-[12px] text-emerald-300">{selectedFile.name}</p>}
                 </div>
               )}
 
@@ -633,7 +642,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   required={apiMode && !selectedFile}
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition resize-y"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500 resize-y"
                   placeholder={lang === 'zh' ? '粘贴经过审核的企业资料；创建后由 桐灼GEO 异步切片。' : 'Paste reviewed enterprise material; 桐灼GEO will chunk it asynchronously.'}
                 />
               </div>
@@ -646,7 +655,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   rows={3}
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition resize-none"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500 resize-none"
                   placeholder="描述语料覆盖范围、文档类型及防幻觉标准..."
                 />
               </div>
@@ -662,14 +671,14 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                 type="button"
                 onClick={() => !isCreating && setIsModalOpen(false)}
                 disabled={isCreating}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300"
+                className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
               >
                 {lang === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button
                 type="submit"
                 disabled={isCreating}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isCreating ? (lang === 'zh' ? '创建中...' : 'Creating...') : (lang === 'zh' ? '创建并切片' : 'Create & Index')}
               </button>

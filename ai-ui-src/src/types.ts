@@ -18,6 +18,19 @@ export interface Article {
   /** 桐灼GEO API v1 fields retained for review/publish UI adapters. */
   reviewStatus?: string;
   aiQualityStatus?: string;
+  /**
+   * 质检**判定**（passed / needs_review / blocked）——与 `aiQualityStatus`（跑没跑完）是两回事：
+   * 实测 `status=completed` 但 `decision=needs_review` 的文章，界面若只显示「已完成」，
+   * 用户会以为通过了，点发布却被门禁拦下（2026-09-14 哥哥报的 bug）。
+   */
+  aiQualityDecision?: string;
+  /** 后端给的人类可读结论（如「AI 质检待人工复核」）——界面直接用，不要自己编词。 */
+  aiQualityResultLabel?: string;
+  aiQualityScore?: number;
+  aiQualityPassScore?: number;
+  /** 人工放行的最低分（低于它只能优化/改写，不能放行）。 */
+  aiQualityOverrideMinScore?: number;
+  aiQualityIsOverridden?: boolean;
   aiQualityReason?: string;
   /** Authoritative 桐灼GEO quality projection (scores, gate reasons, progress). */
   aiQuality?: Record<string, unknown>;

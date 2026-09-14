@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FileText,
   Search,
@@ -16,8 +16,15 @@ import {
   AlertCircle,
   ShieldCheck,
   CheckSquare,
+  Sparkles,
 } from 'lucide-react';
-import { Article, Category, DistributionChannel } from '../types';
+import { Article, Category, DistributionChannel, KnowledgeBase, Task } from '../types';
+import { AiGenerateModal, AiGenerateCatalog } from './AiGenerateModal';
+import { ArticleReviewMode } from './ArticleReviewMode';
+import { StatusBadge, articleStatusSpec, qualityStatusSpec } from './StatusBadge';
+import { Skeleton, SkeletonRows } from './Skeleton';
+import { PageHeader } from './PageHeader';
+import { Button, EmptyState } from './ui';
 
 interface ArticlesViewProps {
   articles: Article[];
@@ -33,7 +40,7 @@ interface ArticlesViewProps {
   apiMode?: boolean;
   distributionAvailable?: boolean;
   /** Batch actions use the governed 桐灼GEO API; demo mode leaves them hidden. */
-  onBatchAction?: (action: 'review' | 'publish' | 'trash' | 'restore' | 'retract', ids: string[]) => Promise<unknown>;
+  onBatchAction?: (action: 'review' | 'reject' | 'publish' | 'trash' | 'restore' | 'retract', ids: string[]) => Promise<unknown>;
   canBatchWrite?: boolean;
   canBatchPublish?: boolean;
   canManageTrash?: boolean;
@@ -41,6 +48,28 @@ interface ArticlesViewProps {
   onForceDeleteArticles?: (ids: string[]) => Promise<void>;
   onEmptyTrash?: () => Promise<void>;
   onExportArticles?: (ids: string[]) => Promise<void>;
+  /** 「AI 生成」弹窗需要的能力与数据，由 App 层透传。 */
+  apiCatalog?: AiGenerateCatalog;
+  knowledgeBases?: KnowledgeBase[];
+  onCreateTask?: (task: Partial<Task> & Record<string, unknown>) => void | Promise<void>;
+  onCheckTitleReadiness?: (params: Record<string, string | number | undefined>) => Promise<Record<string, unknown>>;
+  canGenerate?: boolean;
+  /** 人工放行（质检判定为「待人工复核」时唯一的出路）。 */
+  onReleaseArticle?: (id: string, reason: string) => Promise<unknown>;
+  /** 进行中的一次性生成任务；非空时列表顶部显示「生成中」占位。 */
+  generatingTasks?: Task[];
+  onNavigate?: (tab: string) => void;
+  /**
+   * 由总览的「开始使用」向导请求直接打开 AI 生成弹窗。
+   * App 用一次性令牌传进来、处理完立刻清掉，避免之后每次渲染都重开。
+   */
+  autoOpenAiGenerate?: boolean;
+  onAutoOpenGenerateHandled?: () => void;
+  /**
+   * 首轮数据是否还在读取。为 true 时表格显示骨架行、计数显示「…」，
+   * 而不是把「还没读到」画成「0 篇 / 没有找到符合条件的内容」。
+   */
+  loading?: boolean;
 }
 
 export const ArticlesView: React.FC<ArticlesViewProps> = ({
@@ -63,6 +92,17 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   onForceDeleteArticles,
   onEmptyTrash,
   onExportArticles,
+  apiCatalog,
+  knowledgeBases = [],
+  onCreateTask,
+  onCheckTitleReadiness,
+  canGenerate = false,
+  onReleaseArticle,
+  generatingTasks = [],
+  onNavigate,
+  autoOpenAiGenerate = false,
+  onAutoOpenGenerateHandled,
+  loading = false,
 }) => {
   const canDistribute = distributionAvailable && channels.length > 0;
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,10 +110,20 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [distributeTargetArticle, setDistributeTargetArticle] = useState<Article | null>(null);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [isAiGenerateOpen, setIsAiGenerateOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showTrash, setShowTrash] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
   const [batchError, setBatchError] = useState('');
+  const [isReviewMode, setIsReviewMode] = useState(false);
+
+  // 总览向导的「创建第一个生成任务」落到这里：打开已有的 AI 生成弹窗，
+  // 而不是再造一套表单——那个弹窗已经会自动带入知识库与标题库的首选项。
+  useEffect(() => {
+    if (!autoOpenAiGenerate) return;
+    setIsAiGenerateOpen(true);
+    onAutoOpenGenerateHandled?.();
+  }, [autoOpenAiGenerate, onAutoOpenGenerateHandled]);
 
   // New Article Form state
   const [newTitle, setNewTitle] = useState('');
@@ -105,6 +155,12 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   const visibleIds = filteredArticles.map((article) => article.id);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
 
+  /**
+   * 加载中的计数显示「…」而不是 0：0 是「确认没有」，而此刻只是「还没读到」。
+   * 冒烟测试读这个计数前必须先等数据落定（ui-smoke.mjs 的 waitForDataSettled）。
+   */
+  const countLabel = (value: number) => (loading ? '…' : String(value));
+
   const toggleSelected = (id: string) => {
     setSelectedIds((previous) => {
       const next = new Set(previous);
@@ -122,7 +178,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
     });
   };
 
-  const runBatchAction = async (action: 'review' | 'publish' | 'trash' | 'retract') => {
+  const runBatchAction = async (action: 'review' | 'reject' | 'publish' | 'trash' | 'retract') => {
     const ids = visibleIds.filter((id) => selectedIds.has(id));
     if (!onBatchAction || ids.length === 0) return;
     if (action === 'trash' && !window.confirm(lang === 'zh' ? `确定将选中的 ${ids.length} 篇文章移入回收站吗？` : `Move ${ids.length} articles to trash?`)) return;
@@ -220,85 +276,91 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header & Stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <FileText className="w-6 h-6 text-red-500" />
-            {lang === 'zh' ? '内容库与质量审核' : 'Content Management & Review'}
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            {lang === 'zh'
-              ? '管理已生成文章、把关人工审核道闸（防幻觉），并一键分发到远端 GEO 节点与博客。'
-              : 'Audit generated articles, verify factual grounding, and distribute to multi-site endpoints.'}
-          </p>
-        </div>
+      <PageHeader
+        icon={FileText}
+        group={lang === 'zh' ? '内容中心' : 'Content'}
+        title={lang === 'zh' ? '文章' : 'Articles'}
+        description={lang === 'zh'
+          ? 'AI 生成、手动新建、审核、发布——内容都从这一页流转。生成一篇约 1 分钟，完成后会出现在列表里等你审核。'
+          : 'Generate, review and publish content. AI generation takes about a minute; the draft then appears here for review.'}
+        actions={<>
+          {/* 待审核文章数量 > 0 时，显示「开启审核模式」按钮 */}
+          {!showTrash && articles.filter((a) => a.status === 'review').length > 0 && (
+            <button
+              onClick={() => setIsReviewMode(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition"
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>{lang === 'zh' ? '开启审核模式' : 'Review Mode'}</span>
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold">
+                {articles.filter((a) => a.status === 'review').length}
+              </span>
+            </button>
+          )}
+          {/* 手动新建：把 Markdown 正文粘进来直接建档。少用，放次按钮。 */}
+          <button
+            onClick={() => {
+              setCreateError(null);
+              setIsNewModalOpen(true);
+            }}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-700 bg-slate-800/60 text-slate-200 hover:bg-slate-800 transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{lang === 'zh' ? '手动新建' : 'New Article'}</span>
+          </button>
+          {/* AI 生成：这一页的主操作（产品的主链路就是「让 AI 写」）。 */}
+          {canGenerate && (
+            <button
+              onClick={() => setIsAiGenerateOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>{lang === 'zh' ? 'AI 生成文章' : 'Generate with AI'}</span>
+            </button>
+          )}
+        </>}
+      />
 
-        <button
-          onClick={() => {
-            setCreateError(null);
-            setIsNewModalOpen(true);
-          }}
-          className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20 transition self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{lang === 'zh' ? '新建内容' : 'New Article'}</span>
-        </button>
-      </div>
-
-      {/* Filter Toolbar */}
-      <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Status Tabs */}
-        <div className="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 overflow-x-auto">
-          <button
-            onClick={() => setSelectedStatus('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-              selectedStatus === 'all' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {lang === 'zh' ? '全部' : 'All'} ({articles.length})
-          </button>
-          <button
-            onClick={() => setSelectedStatus('published')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-              selectedStatus === 'published' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {lang === 'zh' ? '已发布' : 'Published'} ({articles.filter((a) => a.status === 'published').length})
-          </button>
-          <button
-            onClick={() => setSelectedStatus('review')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-              selectedStatus === 'review' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {lang === 'zh' ? '待审核' : 'Review'} ({articles.filter((a) => a.status === 'review').length})
-          </button>
-          <button
-            onClick={() => setSelectedStatus('draft')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-              selectedStatus === 'draft' ? 'bg-red-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {lang === 'zh' ? '草稿' : 'Drafts'} ({articles.filter((a) => a.status === 'draft').length})
-          </button>
+      {/* 筛选与搜索：状态用带计数的小胶囊，搜索/分类靠右。
+          这一段**不再包卡片**——它属于页头下方的「控制条」，再套一层卡片就是典型的「卡片堆砌」。
+          点任意状态页签会**退出回收站视图**（原来点「全部」仍停在回收站，是审计里的 P0 陷阱）。 */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-800/50 p-1.5">
+          {([
+            { key: 'all' as const, label: lang === 'zh' ? '全部' : 'All', count: articles.length },
+            { key: 'review' as const, label: lang === 'zh' ? '待审核' : 'Review', count: articles.filter((a) => a.status === 'review').length },
+            { key: 'published' as const, label: lang === 'zh' ? '已发布' : 'Published', count: articles.filter((a) => a.status === 'published').length },
+            { key: 'draft' as const, label: lang === 'zh' ? '草稿' : 'Drafts', count: articles.filter((a) => a.status === 'draft').length },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => { setSelectedStatus(tab.key); setShowTrash(false); }}
+              className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${
+                !showTrash && selectedStatus === tab.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              {tab.label} ({countLabel(tab.count)})
+            </button>
+          ))}
           {apiMode && canManageTrash && (
             <button
+              type="button"
               onClick={() => { setShowTrash(true); setSelectedIds(new Set()); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${showTrash ? 'bg-red-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${showTrash ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-900'}`}
             >
-              {lang === 'zh' ? '回收站' : 'Trash'} ({trashedArticles.length})
+              {lang === 'zh' ? '回收站' : 'Trash'} ({countLabel(trashedArticles.length)})
             </button>
           )}
         </div>
 
-        {/* Search & Category */}
         <div className="flex items-center gap-2">
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-xs text-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:border-red-500 transition"
+            className="h-10 rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-slate-200 outline-none transition focus:border-indigo-500"
           >
             <option value="all">{lang === 'zh' ? '全部分类' : 'All Categories'}</option>
             {categories.map((c) => (
@@ -309,13 +371,13 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
           </select>
 
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder={lang === 'zh' ? '搜索标题、关键词...' : 'Search articles...'}
-              className="bg-slate-800 border border-slate-700 text-xs text-slate-200 rounded-xl pl-8 pr-3 py-2 w-48 sm:w-60 focus:outline-none focus:border-red-500 transition"
+              placeholder={lang === 'zh' ? '搜索标题、关键词…' : 'Search articles...'}
+              className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 pl-10 pr-3 text-[13px] text-slate-200 outline-none transition focus:border-indigo-500 sm:w-64"
             />
           </div>
         </div>
@@ -340,7 +402,9 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
         </div>
       )}
 
-      {apiMode && !showTrash && onBatchAction && (canBatchWrite || canBatchPublish) && (
+      {/* 批量操作条：只在真的选了文章时出现。
+          原来「已选择 0 篇 + 一排禁用的按钮」常驻在列表上方，既占地方又像坏了。 */}
+      {apiMode && !showTrash && onBatchAction && (canBatchWrite || canBatchPublish) && selectedIds.size > 0 && (
         <div className="flex flex-col gap-2 rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2 text-xs text-slate-300">
             <CheckSquare className="h-4 w-4 text-indigo-300" />
@@ -361,27 +425,77 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
       )}
       {batchError && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{batchError}</div>}
 
+      {/* 「生成中」占位：一次性生成任务还没产出完，就占一条横幅，用户不用去「生成任务」页看进度。 */}
+      {!showTrash && generatingTasks.length > 0 && (
+        <div className="rounded-xl border border-indigo-500/25 bg-indigo-500/5 p-3 space-y-2">
+          {generatingTasks.map((task) => (
+            <div key={task.id} className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-slate-300 min-w-0">
+                <Loader2 className="h-4 w-4 animate-spin text-indigo-300 shrink-0" />
+                <span className="truncate">
+                  {lang === 'zh'
+                    ? `正在生成 ${Math.max(1, task.batchLimit - task.generatedCount)} 篇 · 「${task.name}」…`
+                    : `Generating ${Math.max(1, task.batchLimit - task.generatedCount)} · "${task.name}"…`}
+                </span>
+              </div>
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('tasks')}
+                  className="shrink-0 text-[11px] text-indigo-300 underline underline-offset-2 hover:text-indigo-200"
+                >
+                  {lang === 'zh' ? '查看任务 →' : 'View task →'}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Articles Table */}
-      <div className="bg-slate-900/80 rounded-2xl border border-slate-800 overflow-hidden">
+      <div className="overflow-hidden rounded-2xl bg-slate-900/80">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-800/60 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+            <thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400">
               <tr>
-                <th className="py-3 px-4"><label className="flex items-center gap-2"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={lang === 'zh' ? '选择当前列表' : 'Select visible'} className="accent-indigo-500" />{lang === 'zh' ? '文章标题' : 'Title'}</label></th>
-                <th className="py-3 px-3">{lang === 'zh' ? '分类' : 'Category'}</th>
-                <th className="py-3 px-3">{lang === 'zh' ? '状态' : 'Status'}</th>
-                <th className="py-3 px-3">{lang === 'zh' ? 'GEO 体检' : 'GEO Score'}</th>
-                <th className="py-3 px-3">{lang === 'zh' ? '分发渠道' : 'Distributed'}</th>
-                <th className="py-3 px-3">{lang === 'zh' ? '浏览' : 'Views'}</th>
-                <th className="py-3 px-3">{lang === 'zh' ? '更新日期' : 'Date'}</th>
-                <th className="py-3 px-4 text-right">{lang === 'zh' ? '操作' : 'Actions'}</th>
+                <th className="px-4 py-3.5"><label className="flex items-center gap-2"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={lang === 'zh' ? '选择当前列表' : 'Select visible'} className="accent-indigo-500" />{lang === 'zh' ? '文章标题' : 'Title'}</label></th>
+                <th className="px-3 py-3.5">{lang === 'zh' ? '分类' : 'Category'}</th>
+                <th className="px-3 py-3.5">{lang === 'zh' ? '状态' : 'Status'}</th>
+                <th className="px-3 py-3.5">{lang === 'zh' ? 'AI 质检' : 'AI Check'}</th>
+                <th className="px-3 py-3.5">{lang === 'zh' ? '分发渠道' : 'Distributed'}</th>
+                <th className="px-3 py-3.5">{lang === 'zh' ? '浏览' : 'Views'}</th>
+                <th className="px-3 py-3.5">{lang === 'zh' ? '更新日期' : 'Date'}</th>
+                <th className="px-4 py-3.5 text-right">{lang === 'zh' ? '操作' : 'Actions'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {filteredArticles.length === 0 ? (
+              {loading ? (
+                /* 首轮数据还没到：骨架行。画「没有找到符合条件的内容」会把
+                   「还在读」说成「确认没有」——这正是 P1 修的那类假空态。 */
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
-                    {lang === 'zh' ? '没有找到符合条件的内容' : 'No articles found'}
+                  <td colSpan={8} className="py-8 px-6">
+                    <SkeletonRows rows={4} />
+                  </td>
+                </tr>
+              ) : filteredArticles.length === 0 ? (
+                <tr>
+                  <td colSpan={8}>
+                    {/* 空态给「下一步」：没有内容时直接给生成入口，筛不出来时告诉用户换个条件 */}
+                    <EmptyState
+                      compact
+                      icon={FileText}
+                      title={sourceArticles.length === 0 && !showTrash
+                        ? (lang === 'zh' ? '还没有文章' : 'No articles yet')
+                        : (lang === 'zh' ? '没有符合条件的文章' : 'No matching articles')}
+                      description={sourceArticles.length === 0 && !showTrash
+                        ? (lang === 'zh' ? 'AI 生成一篇约 1 分钟：选好标题库与知识库即可。' : 'Generating one takes about a minute.')
+                        : (lang === 'zh' ? '试试清空搜索词或换一个状态/分类。' : 'Try clearing the search or changing filters.')}
+                      action={sourceArticles.length === 0 && !showTrash && canGenerate ? (
+                        <Button variant="primary" icon={Sparkles} onClick={() => setIsAiGenerateOpen(true)}>
+                          {lang === 'zh' ? 'AI 生成文章' : 'Generate with AI'}
+                        </Button>
+                      ) : undefined}
+                    />
                   </td>
                 </tr>
               ) : (
@@ -389,66 +503,49 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                   return (
                     <tr
                       key={art.id}
-                      className="hover:bg-slate-800/40 transition group"
+                      className={`group transition ${selectedIds.has(art.id) ? 'bg-indigo-500/[0.06]' : 'hover:bg-slate-800/40'}`}
                     >
-                      <td className="py-3.5 px-4 font-medium text-slate-100 max-w-sm">
+                      <td className="max-w-sm px-4 py-4 font-medium text-slate-100">
                         <div className="flex items-start gap-2">
                           <input type="checkbox" checked={selectedIds.has(art.id)} onChange={() => toggleSelected(art.id)} aria-label={`${lang === 'zh' ? '选择' : 'Select'} ${art.title}`} className="mt-1 accent-indigo-500" />
                           <div
                           onClick={() => onSelectArticle(art)}
-                          className="cursor-pointer group-hover:text-red-400 transition font-bold line-clamp-1"
+                          className="cursor-pointer truncate text-[14px] font-semibold text-white transition group-hover:text-indigo-600"
                         >
                           {art.title}
                           </div>
                         </div>
-                        <div className="pl-6 text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                        <div className="mt-1 line-clamp-1 pl-6 text-[12.5px] text-slate-400">
                           {art.summary}
                         </div>
                       </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                      <td className="whitespace-nowrap px-3 py-4">
+                        <span className="rounded-md bg-slate-800 px-2 py-1 text-[12px] text-slate-300">
                           {art.category}
                         </span>
                       </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                            art.status === 'published'
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : art.status === 'review'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : 'bg-slate-700/60 text-slate-300'
-                          }`}
-                        >
-                          {art.status === 'published' ? (
-                            <>
-                              <CheckCircle2 className="w-3 h-3" />
-                              <span>{lang === 'zh' ? '已上线' : 'Live'}</span>
-                            </>
-                          ) : art.status === 'review' ? (
-                            <>
-                              <Clock className="w-3 h-3" />
-                              <span>{lang === 'zh' ? '待审核' : 'Review'}</span>
-                            </>
-                          ) : (
-                            <span>{lang === 'zh' ? '草稿' : 'Draft'}</span>
-                          )}
-                        </span>
+                      <td className="whitespace-nowrap px-3 py-4">
+                        <StatusBadge
+                          spec={articleStatusSpec(art.status)}
+                          lang={lang}
+                          icon={art.status === 'published'
+                            ? <CheckCircle2 className="w-3 h-3" />
+                            : art.status === 'review' ? <Clock className="w-3 h-3" /> : undefined}
+                        />
                       </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-4">
                         <button
                           type="button"
                           onClick={() => onSelectArticle(art)}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border border-slate-700 text-slate-400 transition hover:border-red-500/40 hover:text-red-300"
+                          className="transition hover:opacity-75"
                           title={lang === 'zh' ? '查看服务端质检、复检与优化操作' : 'View server quality, recheck and optimization actions'}
                         >
-                          <ShieldCheck className="w-3 h-3" />
-                          <span>{art.aiQualityStatus || (lang === 'zh' ? '后端未质检' : 'Not inspected')}</span>
+                          <StatusBadge spec={qualityStatusSpec(art.aiQualityStatus, art.aiQualityDecision)} lang={lang} icon={<ShieldCheck className="w-3 h-3" />} />
                         </button>
                       </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-4">
                         {art.distributedTo && art.distributedTo.length > 0 ? (
-                          <span className="text-purple-400 flex items-center gap-1 font-semibold">
+                          <span className="flex items-center gap-1 text-[12.5px] font-semibold text-indigo-600">
                             <Radio className="w-3 h-3" />
                             <span>{art.distributedTo.length} {lang === 'zh' ? '个渠道' : 'nodes'}</span>
                           </span>
@@ -456,30 +553,25 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                           <span className="text-slate-400">{lang === 'zh' ? '未分发' : 'None'}</span>
                         )}
                       </td>
-                      <td className="py-3.5 px-3 text-slate-400 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-4 text-slate-400">
                         {art.views || 0}
                       </td>
-                      <td className="py-3.5 px-3 text-slate-400 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-4 text-slate-400">
                         {art.createdAt}
                       </td>
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap space-x-2">
+                      <td className="px-4 py-4 text-right whitespace-nowrap">
+                        {/* 「查看」（原先是 GEO 体检 + 阅读两个图标，点开的是同一个弹窗，合并成一个）。 */}
                         <button
                           onClick={() => onSelectArticle(art)}
-                          className="text-blue-400 hover:text-blue-300 p-1 hover:bg-slate-800 rounded transition"
-                          title={lang === 'zh' ? 'GEO 深度体检与一键优化' : 'GEO Auditor'}
-                        >
-                          <ShieldCheck className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => onSelectArticle(art)}
-                          className="text-slate-300 hover:text-white p-1 hover:bg-slate-800 rounded transition"
-                          title={lang === 'zh' ? '查看与阅读' : 'Read'}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
+                          title={lang === 'zh' ? '查看与编辑（含质检与优化）' : 'View & edit (quality included)'}
+                          aria-label={lang === 'zh' ? '查看文章' : 'View article'}
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         {canDistribute && <button
                           onClick={() => setDistributeTargetArticle(art)}
-                          className="text-purple-400 hover:text-purple-300 p-1 hover:bg-slate-800 rounded transition"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-indigo-600"
                           title={lang === 'zh' ? '一键分发到渠道' : 'Distribute'}
                         >
                           <Radio className="w-4 h-4" />
@@ -487,7 +579,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                         {showTrash ? (
                           <button
                             onClick={() => void runTrashAction('force-delete', [art.id])}
-                            className="text-slate-400 hover:text-rose-400 p-1 hover:bg-slate-800 rounded transition"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-500"
                             title={lang === 'zh' ? '永久删除' : 'Delete permanently'}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -495,7 +587,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                         ) : (
                           <button
                             onClick={() => onDeleteArticle(art.id)}
-                            className="text-slate-400 hover:text-rose-400 p-1 hover:bg-slate-800 rounded transition"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-500/10 hover:text-rose-500"
                             title={lang === 'zh' ? '删除' : 'Delete'}
                           >
                             <Trash2 className="w-4 h-4" />
@@ -589,7 +681,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Plus className="w-5 h-5 text-red-500" />
+                <Plus className="w-5 h-5 text-indigo-600" />
                 <span>{lang === 'zh' ? '手动新建内容' : 'Create Article'}</span>
               </h3>
               <button
@@ -612,7 +704,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
                   placeholder="e.g. 2026年企业级知识库向量化实战"
                 />
               </div>
@@ -624,7 +716,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                 <select
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
                 >
                   {categories.map((c) => (
                     <option key={c.id} value={c.name}>
@@ -643,7 +735,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                   rows={6}
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition font-mono resize-none"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition font-mono resize-none"
                   placeholder="# 一级标题&#10;&#10;输入正文 Markdown 内容..."
                 />
               </div>
@@ -737,13 +829,40 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
               <button
                 type="submit"
                 disabled={isCreating}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isCreating ? (lang === 'zh' ? '保存中...' : 'Saving...') : (lang === 'zh' ? '保存草稿' : 'Save Draft')}
               </button>
             </div>
           </form>
         </div>
+      )}
+
+      {/* AI 生成弹窗 */}
+      {isAiGenerateOpen && (
+        <AiGenerateModal
+          knowledgeBases={knowledgeBases}
+          apiCatalog={apiCatalog}
+          onCreateTask={onCreateTask}
+          onCheckTitleReadiness={onCheckTitleReadiness}
+          onNavigate={onNavigate}
+          onClose={() => setIsAiGenerateOpen(false)}
+          canRead={canGenerate}
+          canWrite={canGenerate}
+          lang={lang}
+        />
+      )}
+
+      {/* 批量审核模式 */}
+      {isReviewMode && onBatchAction && (
+        <ArticleReviewMode
+          articles={articles.filter((a) => a.status === 'review')}
+          // 必须**返回**批量结果：连续审核模式要靠 failed 判据才能不谎报成功。
+          onReview={(id, action) => onBatchAction(action === 'approve' ? 'review' : 'reject', [id])}
+          onReleaseArticle={onReleaseArticle}
+          onClose={() => setIsReviewMode(false)}
+          lang={lang}
+        />
       )}
     </div>
   );

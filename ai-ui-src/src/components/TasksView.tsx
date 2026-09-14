@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Workflow, Plus, Play, CheckCircle2, Clock, Sparkles, RefreshCw, Square, ListPlus, Pencil, Trash2, AlertTriangle, Server, ShieldCheck } from 'lucide-react';
+import { Workflow, Plus, Play, RefreshCw, Square, Pencil, Trash2, AlertTriangle, Server, ShieldCheck, ChevronDown, Wrench, Sparkles } from 'lucide-react';
 import { Task, Category, TaskTitleReadiness, TaskWorker } from '../types';
 import { ApiRecord } from '../api/geoflowClient';
 import { mapTaskTitleReadiness, mapTaskWorkers } from '../api/mappers';
 import { hasScope } from '../api/permissions';
 import PermissionNotice from './PermissionNotice';
 import TaskMonitoringPanel from './TaskMonitoringPanel';
+import { StatusBadge, jobStatusSpec } from './StatusBadge';
+import { SkeletonRows } from './Skeleton';
+import { PageHeader } from './PageHeader';
+import { EmptyState } from './ui';
 
 interface TasksViewProps {
   tasks: Task[];
@@ -23,9 +27,13 @@ interface TasksViewProps {
   onLoadTrash?: (params?: Record<string, string | number | undefined>) => Promise<ApiRecord>;
   onRestoreTask?: (taskId: string, trashSequence: number) => void | Promise<void>;
   onCheckTitleReadiness?: (params: Record<string, string | number | undefined>) => Promise<ApiRecord>;
+  /** 「AI 生成文章」：跳到文章页并直接打开生成弹窗（由 App 提供）。 */
+  onOpenAiGenerate?: () => void;
   lang: 'zh' | 'en';
   apiMode?: boolean;
   scopes?: readonly string[];
+  /** 首轮数据还在读取：任务区显示骨架而不是直接空白/空态。 */
+  loading?: boolean;
   apiCatalog?: {
     titleLibraries: Array<{ id: string | number; name: string }>;
     prompts: Array<{ id: string | number; name: string }>;
@@ -51,9 +59,11 @@ export const TasksView: React.FC<TasksViewProps> = ({
   onLoadTrash,
   onRestoreTask,
   onCheckTitleReadiness,
+  onOpenAiGenerate,
   lang,
   apiMode = false,
   scopes = [],
+  loading = false,
   apiCatalog,
 }) => {
   const canReadTasks = !apiMode || hasScope(scopes, 'tasks:read');
@@ -562,50 +572,68 @@ export const TasksView: React.FC<TasksViewProps> = ({
 
   return (
     <>
-      {onLoadHealth && onLoadRecentRuns && <TaskMonitoringPanel onLoadHealth={onLoadHealth} onLoadRecentRuns={onLoadRecentRuns} lang={lang} />}
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-            <Workflow className="w-6 h-6 text-red-500" />
-            {lang === 'zh' ? '自动化内容流水线与调度' : 'Task Automation & Pipelines'}
-          </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            {lang === 'zh'
-              ? '设定定时策略与大模型参数，自动化执行 RAG 召回、事实撰写及多渠道分发。'
-              : 'Configure schedules and models to automate RAG synthesis, factual drafting, and distribution.'}
-          </p>
-        </div>
-
-        {canWriteTasks ? (
-          <button
-            onClick={openCreateModal}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20 transition self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{lang === 'zh' ? '新建流水线任务' : 'Create Pipeline'}</span>
-          </button>
-        ) : apiMode ? (
-          <PermissionNotice lang={lang} requiredScope="tasks:write" className="max-w-xs" />
-        ) : null}
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        icon={Workflow}
+        group={lang === 'zh' ? '内容中心' : 'Content'}
+        title={lang === 'zh' ? '写文章' : 'Write'}
+        description={lang === 'zh'
+          ? '两种写法：想马上要一篇，点「AI 生成文章」（约 1 分钟出稿）；想让它按节奏自动写，就建一条流水线。'
+          : 'Two ways to write: generate one article now, or set up a pipeline that keeps writing on schedule.'}
+        actions={<>
+          {/* 主操作：立刻生成一篇（复用文章页的生成弹窗，见 App 的 openAiGenerate） */}
+          {onOpenAiGenerate && canWriteTasks && (
+            <button
+              onClick={onOpenAiGenerate}
+              className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>{lang === 'zh' ? 'AI 生成文章' : 'Generate now'}</span>
+            </button>
+          )}
+          {canWriteTasks ? (
+            <button
+              onClick={openCreateModal}
+              className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{lang === 'zh' ? '新建生成任务' : 'New Task'}</span>
+            </button>
+          ) : apiMode ? (
+            <PermissionNotice lang={lang} requiredScope="tasks:write" className="max-w-xs" />
+          ) : null}
+        </>}
+      />
 
       {apiMode && !canReadTasks && (
         <PermissionNotice lang={lang} requiredScope="tasks:read" mode="read" />
       )}
 
+      {/* 队列 / Worker 心跳 / 回收站——这些是给排障用的技术细节。
+          默认收进折叠块：运营人员打开这一页要管的是「写不写、写了多少」，
+          而不是 worker id 与心跳时间（旧版这三块常驻顶部，把任务列表挤到三屏之外）。 */}
+      {(onLoadHealth && onLoadRecentRuns) || (apiMode && canReadTasks && (onLoadWorkers || onLoadTrash)) ? (
+        <details className="group rounded-2xl bg-slate-900/80">
+          <summary className="flex cursor-pointer select-none items-center gap-2 px-4 py-3 text-xs font-semibold text-slate-300 [&::-webkit-details-marker]:hidden">
+            <Wrench className="h-3.5 w-3.5 text-slate-400" />
+            {lang === 'zh' ? '运行详情（排队情况、后台服务、回收站）' : 'Runtime details (queue, workers, trash)'}
+            <ChevronDown className="ml-auto h-4 w-4 text-slate-500 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="space-y-4 border-t border-slate-800 p-4">
+            {onLoadHealth && onLoadRecentRuns && <TaskMonitoringPanel onLoadHealth={onLoadHealth} onLoadRecentRuns={onLoadRecentRuns} lang={lang} />}
+
       {apiMode && canReadTasks && onLoadWorkers && (
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:p-5" aria-labelledby="task-workers-heading">
+        <section className="rounded-2xl bg-slate-900/80 p-5" aria-labelledby="task-workers-heading">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="rounded-xl bg-blue-500/10 p-2 text-blue-300">
+              <div className="rounded-xl bg-indigo-500/10 p-2 text-indigo-300">
                 <Server className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
-                <h2 id="task-workers-heading" className="text-sm font-bold text-white">
+                <h2 id="task-workers-heading" className="text-section-title">
                   {lang === 'zh' ? '后台 Worker 状态' : 'Background workers'}
                 </h2>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-caption">
                   {workersUpdatedAt
                     ? (lang === 'zh' ? `最近检查 ${workersUpdatedAt}，每 30 秒自动刷新` : `Checked ${workersUpdatedAt}; refreshes every 30s`)
                     : (lang === 'zh' ? '状态来自 桐灼GEO worker 心跳记录' : 'Status comes from 桐灼GEO worker heartbeats')}
@@ -616,7 +644,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
               type="button"
               onClick={() => void refreshWorkers()}
               disabled={workersLoading}
-              className="flex items-center gap-1.5 self-start rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 disabled:opacity-50 sm:self-auto"
+              className="inline-flex h-9 items-center gap-1.5 self-start rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50 sm:self-auto"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${workersLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
               {lang === 'zh' ? '刷新状态' : 'Refresh'}
@@ -644,22 +672,22 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 const statusClass = worker.isStale
                   ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
                   : worker.status === 'running'
-                    ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+                    ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
                     : worker.status === 'idle'
                       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                       : 'bg-slate-800 text-slate-300 border-slate-700';
                 return (
-                  <div key={worker.workerId} className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                  <div key={worker.workerId} className="rounded-xl bg-slate-950/40 px-4 py-3">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-mono text-xs text-slate-200" title={worker.workerId}>{worker.workerId}</span>
-                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusClass}`}>
+                      <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[12px] font-bold ${statusClass}`}>
                         {worker.statusLabel}
                       </span>
                     </div>
-                    <p className="mt-2 text-[11px] text-slate-400">{worker.summary || (lang === 'zh' ? '暂无运行摘要' : 'No run summary')}</p>
-                    {worker.taskName && <p className="mt-1 truncate text-[11px] text-slate-300">{lang === 'zh' ? '任务' : 'Task'}：{worker.taskName}</p>}
-                    {worker.articleTitle && <p className="mt-1 truncate text-[11px] text-slate-500">{lang === 'zh' ? '文章' : 'Article'}：{worker.articleTitle}</p>}
-                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                    <p className="mt-2 text-[12.5px] text-slate-400">{worker.summary || (lang === 'zh' ? '暂无运行摘要' : 'No run summary')}</p>
+                    {worker.taskName && <p className="mt-1 truncate text-[12.5px] text-slate-300">{lang === 'zh' ? '任务' : 'Task'}：{worker.taskName}</p>}
+                    {worker.articleTitle && <p className="mt-1 truncate text-[12.5px] text-slate-500">{lang === 'zh' ? '文章' : 'Article'}：{worker.articleTitle}</p>}
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-slate-500">
                       {worker.memoryMb !== undefined && <span>{lang === 'zh' ? '内存' : 'Memory'} {worker.memoryMb.toFixed(1)} MB</span>}
                       <span>{worker.lastSeenHuman}</span>
                     </div>
@@ -672,23 +700,23 @@ export const TasksView: React.FC<TasksViewProps> = ({
       )}
 
       {apiMode && canReadTasks && onLoadTrash && (
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 sm:p-5" aria-labelledby="task-trash-heading">
+        <section className="rounded-2xl bg-slate-900/80 p-5" aria-labelledby="task-trash-heading">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <div className="rounded-xl bg-slate-700/40 p-2 text-slate-300">
                 <Trash2 className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
-                <h2 id="task-trash-heading" className="text-sm font-bold text-white">
+                <h2 id="task-trash-heading" className="text-section-title">
                   {lang === 'zh' ? '任务回收站' : 'Task trash'}
-                  <span className="ml-2 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-400">{Number(trashPagination.total || trashedTasks.length)}</span>
+                  <span className="ml-2 rounded-full bg-slate-800 px-2 py-0.5 text-[12px] font-semibold text-slate-400">{Number(trashPagination.total || trashedTasks.length)}</span>
                 </h2>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <p className="mt-1 text-caption">
                   {lang === 'zh' ? '删除的任务保留 90 天，可恢复但会以暂停状态返回。' : 'Deleted tasks are retained for 90 days and restore as paused.'}
                 </p>
               </div>
             </div>
-            <button type="button" onClick={() => setTrashOpen((open) => !open)} className="self-start rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700 sm:self-auto">
+            <button type="button" onClick={() => setTrashOpen((open) => !open)} className="inline-flex h-9 items-center self-start rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 sm:self-auto">
               {trashOpen ? (lang === 'zh' ? '收起' : 'Collapse') : (lang === 'zh' ? '查看回收站' : 'View trash')}
             </button>
           </div>
@@ -701,9 +729,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 const id = String(item.id || '');
                 const requiresSuperAdmin = Boolean(item.requires_super_admin_restore);
                 const restoring = restoringTrashId === id;
-                return <div key={`${id}-${String(item.trash_sequence || '')}`} className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0"><div className="truncate text-xs font-semibold text-slate-200">{String(item.name || `#${id}`)}</div><div className="mt-1 text-[10px] text-slate-500">{lang === 'zh' ? '删除于' : 'Deleted'} {String(item.deleted_at || '—')} · {lang === 'zh' ? '到期' : 'Expires'} {String(item.expires_at || '—')}</div></div>
-                  {requiresSuperAdmin ? <span className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200">{lang === 'zh' ? '需超级管理员恢复' : 'Super admin required'}</span> : <button type="button" onClick={() => void handleRestoreTrash(item)} disabled={restoring || !onRestoreTask} className="inline-flex items-center justify-center gap-1.5 self-start rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50 sm:self-auto"><RefreshCw className={`h-3.5 w-3.5 ${restoring ? 'animate-spin' : ''}`} />{restoring ? (lang === 'zh' ? '恢复中…' : 'Restoring…') : (lang === 'zh' ? '恢复任务' : 'Restore')}</button>}
+                return <div key={`${id}-${String(item.trash_sequence || '')}`} className="flex flex-col gap-3 rounded-xl bg-slate-950/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0"><div className="truncate text-xs font-semibold text-slate-200">{String(item.name || `#${id}`)}</div><div className="mt-1 text-[12px] text-slate-500">{lang === 'zh' ? '删除于' : 'Deleted'} {String(item.deleted_at || '—')} · {lang === 'zh' ? '到期' : 'Expires'} {String(item.expires_at || '—')}</div></div>
+                  {requiresSuperAdmin ? <span className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[12px] font-semibold text-amber-200">{lang === 'zh' ? '需超级管理员恢复' : 'Super admin required'}</span> : <button type="button" onClick={() => void handleRestoreTrash(item)} disabled={restoring || !onRestoreTask} className="inline-flex h-9 items-center justify-center gap-1.5 self-start rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 text-[12.5px] font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50 sm:self-auto"><RefreshCw className={`h-3.5 w-3.5 ${restoring ? 'animate-spin' : ''}`} />{restoring ? (lang === 'zh' ? '恢复中…' : 'Restoring…') : (lang === 'zh' ? '恢复任务' : 'Restore')}</button>}
                 </div>;
               })}</div>}
             </div>
@@ -711,15 +739,62 @@ export const TasksView: React.FC<TasksViewProps> = ({
         </section>
       )}
 
+          </div>
+        </details>
+      ) : null}
+
+      {/* 自动写作流水线（任务卡）：标题 + 一句说明，把「任务」这个词接到「写文章」这件事上 */}
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <h2 className="text-section-title">{lang === 'zh' ? '自动写作流水线' : 'Automatic writing pipelines'}</h2>
+          <p className="mt-1 text-caption">
+            {lang === 'zh'
+              ? '每条流水线就是一条任务：多久写一篇、用哪个模型、写到哪个分类。'
+              : 'Each pipeline decides how often to write, with which model, into which category.'}
+          </p>
+        </div>
+      </div>
+
       {/* Task Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {tasks.map((task) => {
+        {loading && tasks.length === 0 ? (
+          /* 首轮数据未到：骨架卡，不画「还没有任务」 */
+          [0, 1, 2].map((index) => (
+            <div key={index} className="rounded-2xl bg-slate-900/80 p-5 space-y-4">
+              <SkeletonRows rows={4} />
+            </div>
+          ))
+        ) : tasks.length === 0 ? (
+          <EmptyState
+            className="md:col-span-2 lg:col-span-3"
+            icon={Workflow}
+            title={lang === 'zh' ? '还没有生成任务' : 'No generation tasks yet'}
+            description={lang === 'zh'
+              ? '生成任务负责「多久写一篇」。如果你只想马上要一篇文章，去「文章」页点「AI 生成文章」更快。'
+              : 'Tasks automate recurring generation; for a one-off article use “Generate with AI” on the Articles page.'}
+            action={canWriteTasks ? (
+              <button
+                onClick={openCreateModal}
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {lang === 'zh' ? '新建生成任务' : 'New Task'}
+              </button>
+            ) : undefined}
+          />
+        ) : tasks.map((task) => {
           const jobStatus = String(task.batchStatus || task.latestJobStatus || '').toLowerCase();
           const jobBusy = ['pending', 'queued', 'running', 'processing'].includes(jobStatus);
           const taskLifecycleActive = task.rawStatus === 'active' || task.status === 'running';
           const taskActive = taskLifecycleActive && task.scheduleEnabled !== false;
           const isRunning = runningTaskId === task.id || jobBusy;
           const isActioning = actionTaskId === task.id;
+          /**
+           * 已达本次生成上限（`limit_reached`）：这条流水线已经产出到设定的篇数，
+           * **再点「立即生成」也不会写**（后端不会再产）。按钮必须禁用并说明出路，
+           * 否则就是一个「点了白跑」的假按钮（2026-09-14 哥哥指出的问题）。
+           */
+          const atGenerationLimit = jobStatus === 'limit_reached';
           const statusLabel = jobBusy
             ? (lang === 'zh' ? '作业运行中' : 'Job running')
               : taskLifecycleActive
@@ -730,22 +805,22 @@ export const TasksView: React.FC<TasksViewProps> = ({
           return (
             <div
               key={task.id}
-              className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
+              className="rounded-2xl bg-slate-900/80 p-5 flex flex-col justify-between space-y-4 transition hover:shadow-md"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
+                    <span className="text-[12px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">
                       {task.targetCategory}
                     </span>
-                    <h3 className="text-base font-bold text-slate-100 mt-1.5 line-clamp-1">
+                    <h3 className="text-card-title mt-1.5 line-clamp-1">
                       {task.name}
                     </h3>
                   </div>
                   <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
+                    className={`text-[12px] font-bold px-2 py-0.5 rounded-full shrink-0 ${
                       jobBusy
-                        ? 'bg-blue-500/20 text-blue-400 animate-pulse'
+                        ? 'bg-indigo-500/20 text-indigo-400 animate-pulse'
                         : taskActive
                           ? 'bg-emerald-500/10 text-emerald-400'
                           : 'bg-slate-800 text-slate-400'
@@ -755,38 +830,44 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   </span>
                 </div>
 
-                <div className="space-y-1.5 text-xs text-slate-300 bg-slate-950/40 p-3 rounded-xl border border-slate-800/80">
+                <div className="space-y-1.5 text-[13px] text-slate-300 bg-slate-950/40 px-4 py-3 rounded-xl">
                   <div className="flex justify-between">
-                    <span className="text-slate-400">{lang === 'zh' ? '执行模型' : 'AI Model'}:</span>
+                    <span className="text-slate-400">{lang === 'zh' ? '使用模型' : 'Model'}:</span>
                     <span className="font-semibold text-white">{task.aiModel}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">{lang === 'zh' ? '执行策略' : 'Schedule'}:</span>
+                    <span className="text-slate-400">{lang === 'zh' ? '生成频率' : 'Frequency'}:</span>
                     <span>{task.schedule}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">{lang === 'zh' ? '单次限额' : 'Batch Size'}:</span>
+                    <span className="text-slate-400">{lang === 'zh' ? '每次生成' : 'Per run'}:</span>
                     <span>{task.batchLimit} {lang === 'zh' ? '篇' : 'articles'}</span>
                   </div>
                   <div className="flex justify-between pt-1 border-t border-slate-800">
-                    <span className="text-slate-400">{lang === 'zh' ? '累计产出' : 'Total Output'}:</span>
+                    <span className="text-slate-400">{lang === 'zh' ? '累计生成' : 'Total output'}:</span>
                     <span className="font-bold text-emerald-400">{task.generatedCount}</span>
                   </div>
                   {apiMode && jobStatus && (
-                    <div className="flex justify-between text-[11px]">
-                      <span className="text-slate-400">{lang === 'zh' ? '最近作业' : 'Latest job'}:</span>
-                      <span className={jobBusy ? 'text-blue-300' : jobStatus === 'failed' ? 'text-rose-300' : 'text-slate-300'}>
-                        {jobStatus}
-                      </span>
+                    <div className="flex justify-between items-center text-[12.5px]">
+                      <span className="text-slate-400">{lang === 'zh' ? '最近一次' : 'Latest job'}:</span>
+                      {/* 原始枚举（completed / limit_reached / failed…）翻成中文语义 */}
+                      <StatusBadge spec={jobStatusSpec(jobStatus)} lang={lang} className="!text-[12px]" />
+                    </div>
+                  )}
+                  {atGenerationLimit && (
+                    <div className="text-[12.5px] leading-relaxed text-amber-600">
+                      {lang === 'zh'
+                        ? `已达生成上限（每次 ${task.batchLimit} 篇，累计 ${task.generatedCount}）。要再写：点「编辑」把「每次生成」调大，或改成循环任务。`
+                        : `Generation limit reached. Raise “per run” or switch to loop mode to keep writing.`}
                     </div>
                   )}
                   {apiMode && task.batchErrorMessage && (
-                    <div role="status" className="text-[11px] text-rose-300 break-words">
+                    <div role="status" className="text-[12.5px] text-rose-300 break-words">
                       {task.batchErrorMessage}
                     </div>
                   )}
                   {apiMode && taskActionErrors[task.id] && (
-                    <div role="alert" className="text-[11px] text-amber-200 break-words">
+                    <div role="alert" className="text-[12.5px] text-amber-200 break-words">
                       {taskActionErrors[task.id]}
                     </div>
                   )}
@@ -794,15 +875,52 @@ export const TasksView: React.FC<TasksViewProps> = ({
               </div>
 
               <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[12.5px] text-slate-400">
                    {lang === 'zh' ? '上次运行' : 'Last run'}: {displayLastRun(task.lastRunAt)}
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                  {/* 主操作：让这条任务现在就跑一次。
+                      原来「单独入队」与「立即触发」是两个近义按钮（对用户而言都是「现在生成」），
+                      已合并为一个；入队语义由后端在 startTask 内部处理。 */}
+                  <button
+                    onClick={() => void handleRun(task.id)}
+                     disabled={isRunning || isActioning || atGenerationLimit || (apiMode && !canWriteTasks)}
+                    title={atGenerationLimit
+                      ? (lang === 'zh' ? '已达生成上限：先编辑把「每次生成」调大，或改成循环任务' : 'Generation limit reached — edit the task first')
+                      : undefined}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 transition hover:bg-indigo-500"
+                  >
+                  {isRunning ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>{jobBusy ? (lang === 'zh' ? '生成中…' : 'Running…') : (lang === 'zh' ? '启动中…' : 'Starting…')}</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3.5 h-3.5" />
+                       <span>{apiMode && !canWriteTasks
+                         ? (lang === 'zh' ? '只读' : 'Read-only')
+                         : atGenerationLimit
+                           ? (lang === 'zh' ? '已达上限' : 'Limit reached')
+                           : (lang === 'zh' ? '立即生成' : 'Run Now')}</span>
+                    </>
+                  )}
+                  </button>
+                   {apiMode && canWriteTasks && taskLifecycleActive && onStopTask && (
+                    <button
+                      onClick={() => void handleStop(task.id)}
+                      disabled={isActioning}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-rose-950/60 hover:text-rose-200 hover:border-rose-800/70 disabled:opacity-50"
+                    >
+                      <Square className="w-3 h-3 fill-current" />
+                      <span>{isActioning ? (lang === 'zh' ? '处理中' : 'Working') : (lang === 'zh' ? '停止' : 'Stop')}</span>
+                    </button>
+                  )}
                    {apiMode && canWriteTasks && onUpdateTask && (
                      <button
                        onClick={() => openEditModal(task)}
                        disabled={isActioning || deletingTaskId !== null}
-                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 disabled:opacity-50 transition border border-slate-700"
+                       className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                        title={lang === 'zh' ? '编辑任务配置' : 'Edit task configuration'}
                      >
                        <Pencil className="w-3 h-3" />
@@ -813,52 +931,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
                      <button
                        onClick={() => requestDelete(task.id)}
                        disabled={isActioning || deletingTaskId !== null}
-                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-950/60 hover:bg-rose-900/70 text-rose-200 disabled:opacity-50 transition border border-rose-800/70"
+                       className="inline-flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-[13px] font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-rose-300 disabled:opacity-50"
                        title={lang === 'zh' ? '删除任务（移入回收站）' : 'Delete task (move to trash)'}
                      >
                        <Trash2 className="w-3 h-3" />
                        <span>{lang === 'zh' ? '删除' : 'Delete'}</span>
                      </button>
                    )}
-                   {apiMode && canWriteTasks && taskLifecycleActive && onStopTask && (
-                    <button
-                      onClick={() => void handleStop(task.id)}
-                      disabled={isActioning}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-950/60 hover:bg-rose-900/70 text-rose-200 disabled:opacity-50 transition border border-rose-800/70"
-                    >
-                      <Square className="w-3 h-3 fill-current" />
-                      <span>{isActioning ? (lang === 'zh' ? '处理中' : 'Working') : (lang === 'zh' ? '停止' : 'Stop')}</span>
-                    </button>
-                  )}
-                   {apiMode && canWriteTasks && taskActive && onEnqueueTask && !jobBusy && (
-                    <button
-                      onClick={() => void handleEnqueue(task.id)}
-                      disabled={isActioning}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-950/60 hover:bg-amber-900/70 text-amber-200 disabled:opacity-50 transition border border-amber-800/70"
-                    >
-                      <ListPlus className="w-3.5 h-3.5" />
-                      <span>{lang === 'zh' ? '单独入队' : 'Enqueue'}</span>
-                    </button>
-                  )}
-                  <button
-                    onClick={() => void handleRun(task.id)}
-                     disabled={isRunning || isActioning || (apiMode && !canWriteTasks)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-50 transition border border-slate-700"
-                  >
-                  {isRunning ? (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                      <span>{jobBusy ? (lang === 'zh' ? '作业中...' : 'Job running...') : (lang === 'zh' ? '启动中...' : 'Starting...')}</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
-                       <span>{apiMode && !canWriteTasks
-                         ? (lang === 'zh' ? '只读' : 'Read-only')
-                         : (lang === 'zh' ? '立即触发' : 'Run Now')}</span>
-                    </>
-                  )}
-                  </button>
                 </div>
               </div>
             </div>
@@ -875,10 +954,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Workflow className="w-5 h-5 text-red-500" />
+                <Workflow className="w-5 h-5 text-indigo-600" />
                  <span>{editingTask
-                   ? (lang === 'zh' ? '编辑自动化流水线' : 'Edit Pipeline Task')
-                   : (lang === 'zh' ? '新建自动化流水线' : 'Create Pipeline Task')}</span>
+                   ? (lang === 'zh' ? '编辑生成任务' : 'Edit Task')
+                   : (lang === 'zh' ? '新建生成任务' : 'New Task')}</span>
                </h3>
                <button
                  type="button"
@@ -900,7 +979,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   placeholder="e.g. 每日 CRM 竞品评测自动生成"
                 />
               </div>
@@ -918,7 +997,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       const category = apiCatalog?.categories.find((item) => String(item.id) === next);
                       if (category) setTargetCategory(category.name);
                     }}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                    className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   >
                     <option value="">{lang === 'zh' ? '智能分类（不固定）' : 'Smart category'}</option>
                     {(apiCatalog?.categories || []).map((category) => (
@@ -929,7 +1008,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   <select
                     value={targetCategory}
                     onChange={(e) => setTargetCategory(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                    className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.name}>
@@ -953,7 +1032,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       const model = apiCatalog?.models.find((item) => String(item.id) === e.target.value);
                       if (model) setAiModel(model.name);
                     }}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                    className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   >
                     <option value="">{lang === 'zh' ? '请选择内容模型' : 'Select a content model'}</option>
                     {(apiCatalog?.models || []).filter((model) => !model.type || model.type === 'chat').map((model) => (
@@ -964,7 +1043,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   <select
                     value={aiModel}
                     onChange={(e) => setAiModel(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                    className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   >
                     <option value="Gemini 2.5 Flash">Google Gemini 2.5 Flash (推荐)</option>
                     <option value="Gemini 1.5 Pro">Google Gemini 1.5 Pro</option>
@@ -983,7 +1062,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                           type="button"
                           onClick={() => void checkTitleReadiness()}
                           disabled={readinessLoading || !titleLibraryId}
-                          className="flex items-center gap-1 rounded-md border border-blue-500/40 px-2 py-1 text-[10px] font-semibold text-blue-200 transition hover:bg-blue-900/30 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[12px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <ShieldCheck className={`h-3 w-3 ${readinessLoading ? 'animate-pulse' : ''}`} aria-hidden="true" />
                           {readinessLoading
@@ -992,17 +1071,17 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         </button>
                       )}
                     </div>
-                    <select required={!editingTask} value={titleLibraryId} onChange={(e) => setTitleLibraryId(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition">
+                    <select required={!editingTask} value={titleLibraryId} onChange={(e) => setTitleLibraryId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">
                       <option value="">{lang === 'zh' ? '请选择标题库' : 'Select a title library'}</option>
                       {(apiCatalog?.titleLibraries || []).map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
                     </select>
                     {readinessError && (
-                      <div role="alert" className="mt-2 rounded-lg border border-rose-500/30 bg-rose-950/30 px-2.5 py-2 text-[11px] text-rose-200">
+                      <div role="alert" className="mt-2 rounded-lg border border-rose-500/30 bg-rose-950/30 px-2.5 py-2 text-[12.5px] text-rose-200">
                         {readinessError}
                       </div>
                     )}
                     {readiness && (
-                      <div className={`mt-2 rounded-lg border px-2.5 py-2 text-[11px] ${
+                      <div className={`mt-2 rounded-lg border px-2.5 py-2 text-[12.5px] ${
                         readiness.status === 'ready'
                           ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-200'
                           : readiness.status === 'warning'
@@ -1037,14 +1116,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-300">{lang === 'zh' ? '内容提示词' : 'Content prompt'} *</label>
-                    <select required={!editingTask} value={promptId} onChange={(e) => setPromptId(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition">
+                    <select required={!editingTask} value={promptId} onChange={(e) => setPromptId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">
                       <option value="">{lang === 'zh' ? '请选择内容提示词' : 'Select a content prompt'}</option>
                       {(apiCatalog?.prompts || []).map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-slate-300">{lang === 'zh' ? '知识库（可选）' : 'Knowledge base (optional)'}</label>
-                    <select value={knowledgeBaseId} onChange={(e) => setKnowledgeBaseId(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition">
+                    <select value={knowledgeBaseId} onChange={(e) => setKnowledgeBaseId(e.target.value)} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">
                       <option value="">{lang === 'zh' ? '不挂载知识库' : 'No knowledge base'}</option>
                       {(apiCatalog?.knowledgeBases || []).map((item) => <option key={item.id} value={String(item.id)}>{item.name}</option>)}
                     </select>
@@ -1062,7 +1141,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     min={apiMode ? 1 : undefined}
                     value={schedule}
                     onChange={(e) => setSchedule(e.target.value)}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                    className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                     placeholder={apiMode ? (lang === 'zh' ? '间隔分钟数，例如 60' : 'Interval in minutes, e.g. 60') : undefined}
                   />
                 </div>
@@ -1076,7 +1155,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     max={100}
                     value={batchLimit}
                     onChange={(e) => setBatchLimit(Number(e.target.value))}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                    className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   />
                 </div>
               </div>
@@ -1087,7 +1166,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     type="checkbox"
                     checked={isLoop}
                     onChange={(e) => setIsLoop(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-red-600 focus:ring-red-500"
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
                   />
                   <span>{lang === 'zh' ? '循环任务（允许标题复用）' : 'Loop task (allow title reuse)'}</span>
                 </label>
@@ -1102,7 +1181,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     <select
                       value={taskStatus}
                       onChange={(e) => setTaskStatus(e.target.value === 'active' ? 'active' : 'paused')}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                      className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                     >
                       <option value="paused">{lang === 'zh' ? '暂停' : 'Paused'}</option>
                       <option value="active">{lang === 'zh' ? '启用' : 'Active'}</option>
@@ -1115,7 +1194,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     <select
                       value={publishScope}
                       onChange={(e) => setPublishScope(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-red-500 transition"
+                      className="h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                     >
                       <option value="local_only">{lang === 'zh' ? '仅本地' : 'Local only'}</option>
                       <option value="local_and_distribution">{lang === 'zh' ? '本地及分发' : 'Local and distribution'}</option>
@@ -1127,7 +1206,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       type="checkbox"
                       checked={needReview}
                       onChange={(e) => setNeedReview(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-red-600 focus:ring-red-500"
+                      className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
                     />
                     <span>{lang === 'zh' ? '生成文章需要人工审核' : 'Require human review for generated articles'}</span>
                   </label>
@@ -1145,14 +1224,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
                 type="button"
                 onClick={closeTaskModal}
                 disabled={isSubmitting}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300"
+                className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
               >
                 {lang === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button
                 type="submit"
                 disabled={!canWriteTasks || isSubmitting || (apiMode && !editingTask && (!titleLibraryId || !promptId || !aiModelId))}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-500 text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmitting
                   ? (editingTask
@@ -1198,7 +1277,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                  type="button"
                  onClick={cancelDelete}
                  disabled={isSubmitting}
-                 className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-50"
+                 className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                >
                  {lang === 'zh' ? '取消' : 'Cancel'}
                </button>
@@ -1206,7 +1285,7 @@ export const TasksView: React.FC<TasksViewProps> = ({
                  type="button"
                  onClick={() => void handleDeleteConfirmed()}
                  disabled={isSubmitting}
-                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold bg-rose-700 hover:bg-rose-600 text-white disabled:opacity-50"
+                 className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-rose-700 px-3.5 text-[13px] font-bold text-white transition hover:bg-rose-600 disabled:opacity-50"
                >
                  {isSubmitting && <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
                  {isSubmitting

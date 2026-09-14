@@ -17,8 +17,11 @@ import {
 } from 'lucide-react';
 import { AiSandboxSimulation } from '../types';
 import { GeoFlowApiClient } from '../api/geoflowClient';
+import { PageHeader } from './PageHeader';
 
 interface AiSandboxViewProps {
+  /** 合并入口的内层 Tab 渲染：隐藏自身页面标题（由外层 TabbedShell 统一画），只留操作区。 */
+  embedded?: boolean;
   lang: 'zh' | 'en';
   apiClient?: GeoFlowApiClient;
 }
@@ -43,7 +46,7 @@ function citationShareReason(status: string, lang: 'zh' | 'en'): string {
   }
 }
 
-export const AiSandboxView: React.FC<AiSandboxViewProps> = ({ lang, apiClient }) => {
+export const AiSandboxView: React.FC<AiSandboxViewProps> = ({ lang, apiClient, embedded = false }) => {
   const [query, setQuery] = useState(PRESET_QUERIES[0]);
   const [targetEngine, setTargetEngine] = useState<'perplexity' | 'chatgpt' | 'gemini'>('perplexity');
   const [isRunning, setIsRunning] = useState(false);
@@ -83,25 +86,13 @@ export const AiSandboxView: React.FC<AiSandboxViewProps> = ({ lang, apiClient })
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-              <Compass className="w-6 h-6 text-red-500" />
-              <span>大模型答案命中模拟沙盒 (AI Citation Sandbox)</span>
-            </h1>
-            <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              Live Evaluation
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            {lang === 'zh'
-              ? '模拟 Perplexity、SearchGPT、Gemini 等主流生成式搜索引擎，评测企业在自然语言问答中的信源采纳率与品牌提及率。'
-              : 'Simulate search LLM synthesis, evaluating your brand citation share and citation presence.'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        embedded={embedded}
+        icon={Compass}
+        group={lang === 'zh' ? 'GEO 效果' : 'Results'}
+        title={lang === 'zh' ? '引用测试' : 'Citation test'}
+        description={lang === 'zh' ? '拿一个真实问题去问主流 AI 搜索引擎，看它们会不会引用你、提到你——用真实调用评测，不造假结果。' : 'Ask mainstream AI engines a real question and see whether they cite or mention your brand.'}
+      />
 
       {/* Query Bar & Presets */}
       <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 space-y-4">
@@ -114,7 +105,7 @@ export const AiSandboxView: React.FC<AiSandboxViewProps> = ({ lang, apiClient })
             onClick={() => setTargetEngine('perplexity')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
               targetEngine === 'perplexity'
-                ? 'bg-blue-600/20 text-blue-300 border border-blue-500/30'
+                ? 'bg-indigo-100 text-indigo-700 border border-indigo-500/30 dark:bg-indigo-600/20 dark:text-indigo-300'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
           >
@@ -125,7 +116,7 @@ export const AiSandboxView: React.FC<AiSandboxViewProps> = ({ lang, apiClient })
             onClick={() => setTargetEngine('chatgpt')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
               targetEngine === 'chatgpt'
-                ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30'
+                ? 'bg-indigo-100 text-indigo-700 border border-indigo-500/30 dark:bg-indigo-600/20 dark:text-indigo-300'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
           >
@@ -136,7 +127,7 @@ export const AiSandboxView: React.FC<AiSandboxViewProps> = ({ lang, apiClient })
             onClick={() => setTargetEngine('gemini')}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
               targetEngine === 'gemini'
-                ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30'
+                ? 'bg-indigo-100 text-indigo-700 border border-indigo-500/30 dark:bg-indigo-600/20 dark:text-indigo-300'
                 : 'bg-slate-800 text-slate-400 hover:text-white'
             }`}
           >
@@ -155,14 +146,14 @@ export const AiSandboxView: React.FC<AiSandboxViewProps> = ({ lang, apiClient })
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleRunSimulation()}
               placeholder={lang === 'zh' ? '输入用户在 AI 搜索中可能提问的自然语言问题...' : 'Enter search query...'}
-              className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-red-500 transition"
+              className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
             />
           </div>
 
           <button
             onClick={() => handleRunSimulation()}
             disabled={isRunning || !query.trim()}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:opacity-90 text-xs font-bold text-white shadow-md shadow-red-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50"
+            className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {isRunning ? (
               <>

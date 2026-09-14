@@ -1,15 +1,18 @@
 import React from 'react';
 import {
-  FileText,
   ArrowUpRight,
-  Eye,
-  Activity,
   AlertTriangle,
-  Sparkles,
+  Activity,
+  FileText,
+  LayoutDashboard,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { ApiRecord } from '../api/geoflowClient';
 import { Article, Task } from '../types';
+import { GettingStartedPanel, GettingStartedStep } from './GettingStartedPanel';
+import { Skeleton, SkeletonRows } from './Skeleton';
+import { PageHeader } from './PageHeader';
 
 /**
  * 按点号路径从后端投影里取值（`kpis.articles`、`traffic.kpis.pv`）。
@@ -46,17 +49,26 @@ interface DashboardViewProps {
   /** In API mode, only values supplied by 桐灼GEO are shown; no demo formulas. */
   apiMode?: boolean;
   analyticsOverview?: ApiRecord | null;
+  /** 「开始使用」清单；由 App 从真实目录/就绪度推导后传入。 */
+  gettingStarted?: GettingStartedStep[];
+  /**
+   * 首轮业务数据是否还在读取（外壳可能先于数据渲染）。
+   * 为 true 时数值格显示骨架、清单与「下一步」不渲染——显示 0 / 暂无数据 / 未配置
+   * 都是把「还不知道」说成「确认如此」。
+   */
+  loading?: boolean;
+  /** 「AI 生成文章」主操作（跳到文章页并打开生成弹窗）。 */
+  onGenerate?: () => void;
 }
 
 /**
- * 总览页。
+ * 工作台（2026-09-13 视觉整改第二轮重排）。
  *
- * 设计原则（2026-09-13 重构）：
- * 1. **三层，只留客户关心的业务指标** —— GEO 核心表现 / 待处理事项 / 最近变化。
- * 2. **技术指标一律不上首页**（模型数、RAG 切片数、任务状态、爬虫 PV、Provider、Worker）
- *    ——那些是系统指标，不是客户指标。
- * 3. **不重复统计**：同一件事只出现一次。
- * 4. **取不到就显示「暂无数据」**，绝不用 0 或估算值冒充（哥哥 2026-09-13 硬性要求）。
+ * 版式顺序固定为：**页头 → 今天要做什么 → 核心表现 → 最近变化**。
+ * 第一屏回答「我现在该干什么」（待办），第二屏回答「做得怎么样」（指标），
+ * 最后才是「最近发生了什么」（列表）。技术指标（模型数/切片数/Worker）不上这一页。
+ *
+ * 取值原则不变：**取不到就显示「暂无数据」，绝不用 0 或估算值冒充**。
  */
 export const DashboardView: React.FC<DashboardViewProps> = ({
   articles,
@@ -66,6 +78,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   lang,
   apiMode = false,
   analyticsOverview,
+  gettingStarted = [],
+  loading = false,
+  onGenerate,
 }) => {
   const zh = lang === 'zh';
 
@@ -79,130 +94,93 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const pv = readNumber(analyticsOverview, 'traffic.kpis.pv');
   const totalArticles = readNumber(analyticsOverview, 'kpis.articles');
 
-  // —— 第二层：待处理事项（只列真需要用户动手的）——
+  // —— 第二层：今天要做什么（只列真需要用户动手的）——
   const pausedTasks = readNumber(analyticsOverview, 'task_health.paused_tasks') ?? 0;
   const pendingLeads = readNumber(analyticsOverview, 'leads.kpis.pending') ?? 0;
   const distributionFailed = readNumber(analyticsOverview, 'kpis.distribution_failed') ?? 0;
-  const pendingItems = [
-    { key: 'review', label: zh ? '篇文章待审核' : 'articles to review', count: reviewCount, tab: 'articles' },
-    { key: 'paused', label: zh ? '个生成任务已暂停' : 'tasks paused', count: pausedTasks, tab: 'tasks' },
-    { key: 'leads', label: zh ? '条线索待处理' : 'leads pending', count: pendingLeads, tab: 'leads' },
-    { key: 'dist', label: zh ? '个发布任务失败' : 'publishing failed', count: distributionFailed, tab: 'distribution' },
-  ].filter((item) => item.count > 0);
+  const generatingCount = tasks.filter((t) => t.status === 'running').length;
 
-  // —— 「下一步做什么」：由真实状态推导，不写死 ——
-  const nextStep = (() => {
-    if (reviewCount > 0) {
-      return {
-        text: zh ? `有 ${reviewCount} 篇文章等你审核，审完就能发布` : `${reviewCount} articles await review`,
-        cta: zh ? '去审核' : 'Review now',
-        tab: 'articles',
-      };
-    }
-    if ((totalArticles ?? 0) === 0) {
-      return {
-        text: zh ? '还没有内容。先写第一篇文章吧' : 'No content yet — write your first article',
-        cta: zh ? '写文章' : 'Write',
-        tab: 'generator',
-      };
-    }
-    return {
-      text: zh ? '内容都在处理中，去看看 AI 有没有引用你' : 'Check whether AI cites you',
-      cta: zh ? '看效果' : 'View results',
-      tab: 'analytics',
-    };
-  })();
+  const todoItems = [
+    { key: 'review', label: zh ? '篇文章待审核' : 'articles to review', hint: zh ? '审完就能发布' : 'review, then publish', count: reviewCount, tab: 'articles', tone: 'amber' },
+    { key: 'paused', label: zh ? '个生成任务已暂停' : 'tasks paused', hint: zh ? '看看为什么停了' : 'check why they stopped', count: pausedTasks, tab: 'tasks', tone: 'amber' },
+    { key: 'leads', label: zh ? '条线索待处理' : 'leads pending', hint: zh ? '尽快联系，缩短响应时间' : 'contact them sooner', count: pendingLeads, tab: 'attribution_funnel', tone: 'indigo' },
+    { key: 'dist', label: zh ? '个发布任务失败' : 'publishing failed', hint: zh ? '重新投递或检查渠道' : 'retry or check channels', count: distributionFailed, tab: 'distribution', tone: 'rose' },
+  ].filter((item) => item.count > 0);
 
   const recentArticles = [...articles]
     .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
-    .slice(0, 5);
-  const activeTasks = tasks.filter((t) => t.status === 'running' || t.status === 'paused').slice(0, 5);
+    .slice(0, 6);
+  const activeTasks = tasks.filter((t) => t.status === 'running' || t.status === 'paused').slice(0, 6);
 
   const formatMetric = (value: number | null, suffix = '') =>
     value === null ? (zh ? '暂无数据' : 'No data') : `${value}${suffix}`;
 
+  const toneClass: Record<string, string> = {
+    amber: 'text-amber-600',
+    indigo: 'text-indigo-600',
+    rose: 'text-rose-600',
+  };
+
   return (
-    <div className="space-y-6">
-      {/* 下一步引导：状态驱动，不是静态教程 */}
-      <div className="bg-indigo-600/10 border border-indigo-500/30 rounded-2xl p-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <Sparkles className="w-5 h-5 text-indigo-300 shrink-0" />
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-white truncate">{zh ? '下一步' : 'Next step'}</div>
-            <div className="text-xs text-slate-300 truncate">{nextStep.text}</div>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => onNavigate(nextStep.tab)}
-          className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition"
-        >
-          {nextStep.cta}
-          <ArrowUpRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {/* ① GEO 核心表现 */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-bold text-white">{zh ? 'GEO 核心表现' : 'GEO Performance'}</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: zh ? 'AI 提及率' : 'AI mention rate', value: brandVisibility, suffix: '%' },
-            { label: zh ? 'Top3 引用率' : 'Top-3 citation rate', value: top3Rate, suffix: '%' },
-            { label: zh ? '内容资产（已发布/总数）' : 'Published / total', value: null, text: `${publishedCount} / ${totalArticles ?? articles.length}` },
-            { label: zh ? '网站访问（近 30 天）' : 'Site views (30d)', value: pv },
-          ].map((tile) => (
-            <div key={tile.label} className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800">
-              <div className="text-[11px] text-slate-400 mb-1.5">{tile.label}</div>
-              <div className={`text-2xl font-black tabular-nums ${tile.text ? 'text-white' : tile.value === null ? 'text-slate-500' : 'text-white'}`}>
-                {tile.text ?? formatMetric(tile.value, tile.suffix ?? '')}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {!aiVisibilityConfigured && (
-          <div className="flex items-start gap-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3">
-            <AlertTriangle className="w-4 h-4 text-amber-300 shrink-0 mt-0.5" />
-            <div className="min-w-0 flex-1">
-              <div className="text-xs text-slate-200">
-                {zh
-                  ? 'AI 可见性监测尚未配置，所以「AI 提及率」和「Top3 引用率」暂时没有数据。配置采集来源后，这里会显示品牌在生成式引擎里的真实表现。'
-                  : 'AI visibility monitoring is not configured, so mention and citation rates have no data yet.'}
-              </div>
-              <button
-                type="button"
-                onClick={() => onNavigate('ai-models')}
-                className="mt-1.5 text-xs font-semibold text-slate-100 underline hover:no-underline"
-              >
-                {zh ? '去配置采集来源 →' : 'Configure sources →'}
-              </button>
-            </div>
-          </div>
+    <div className="space-y-8">
+      <PageHeader
+        icon={LayoutDashboard}
+        title={zh ? '工作台' : 'Workspace'}
+        description={zh
+          ? '你的 GEO 全局状态：先处理今天要做的，再看内容和 AI 侧的表现。'
+          : 'Your GEO at a glance: what needs action today, then content and AI performance.'}
+        actions={onGenerate && (
+          <button
+            type="button"
+            onClick={onGenerate}
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500"
+          >
+            <Sparkles className="h-4 w-4" />
+            {zh ? 'AI 生成文章' : 'Generate with AI'}
+          </button>
         )}
-      </section>
+      />
 
-      {/* ② 待处理事项 */}
+      {/* 「开始使用」清单：还没配齐时占在最前面，配齐了它自己消失。
+          加载中不渲染：此刻「未配置」还没被后端确认，显示出来就是假状态。 */}
+      {!loading && <GettingStartedPanel steps={gettingStarted} lang={lang} />}
+
+      {/* ① 今天要做什么 —— 第一屏的主角（原来最显眼的是两张 KPI 大卡，而用户真正要做的事藏在下面） */}
       <section className="space-y-3">
-        <h2 className="text-sm font-bold text-white">{zh ? '待处理事项' : 'To do'}</h2>
-        {pendingItems.length === 0 ? (
-          <div className="flex items-center gap-2.5 bg-slate-900/80 border border-slate-800 rounded-2xl p-4">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span className="text-xs text-slate-300">{zh ? '没有待处理事项。' : 'Nothing pending.'}</span>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-section-title">{zh ? '今天要做什么' : 'To do today'}</h2>
+          {!loading && todoItems.length === 0 && (
+            <span className="text-caption">{zh ? '没有待办，一切正常' : 'Nothing pending'}</span>
+          )}
+        </div>
+        {loading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="rounded-2xl bg-slate-900/80 p-5"><SkeletonRows rows={2} /></div>
+            ))}
+          </div>
+        ) : todoItems.length === 0 ? (
+          <div className="flex items-center gap-3 rounded-2xl bg-slate-900/80 px-5 py-4">
+            <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-500" />
+            <span className="text-body">{zh ? '没有待处理事项——没有待审文章、没有暂停的任务、没有待跟进线索。' : 'Nothing needs your attention right now.'}</span>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-            {pendingItems.map((item) => (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {todoItems.map((item) => (
               <button
                 key={item.key}
                 type="button"
+                data-todo={item.key}
                 onClick={() => onNavigate(item.tab)}
-                className="text-left bg-slate-900/80 hover:bg-slate-800/90 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 transition group"
+                className="group rounded-2xl bg-slate-900/80 p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg"
               >
-                <div className="text-2xl font-black tabular-nums text-amber-300">{item.count}</div>
-                <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                  {item.label}
-                  <ArrowUpRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+                <div className={`text-[34px] font-black leading-none tabular-nums ${toneClass[item.tone] ?? 'text-white'}`}>
+                  {item.count}
+                </div>
+                <div className="mt-2 text-[13.5px] font-semibold text-white">{item.label}</div>
+                <div className="mt-1 flex items-center gap-1 text-caption">
+                  {item.hint}
+                  <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
                 </div>
               </button>
             ))}
@@ -210,92 +188,140 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </section>
 
+      {/* ② 核心表现 */}
+      <section className="space-y-3">
+        <h2 className="text-section-title">{zh ? 'GEO 核心表现' : 'GEO performance'}</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: zh ? 'AI 提及率' : 'AI mention rate', value: brandVisibility, suffix: '%' },
+            { label: zh ? 'Top3 引用率' : 'Top-3 citation rate', value: top3Rate, suffix: '%' },
+            { label: zh ? '内容资产（已发布/总数）' : 'Published / total', value: null, text: `${publishedCount} / ${totalArticles ?? articles.length}` },
+            { label: zh ? '网站访问（近 30 天）' : 'Site views (30d)', value: pv },
+          ].map((tile) => (
+            <div key={tile.label} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md">
+              <div className="text-caption">{tile.label}</div>
+              {/* 加载中画骨架，不画 0 / 暂无数据：那会把「还没读到」说成「确认是零」。 */}
+              {loading ? (
+                <Skeleton className="mt-3 h-8 w-24" label={zh ? '正在读取' : 'Loading'} />
+              ) : (
+                <div className={`mt-2 text-[30px] font-black leading-none tabular-nums ${tile.text ? 'text-white' : tile.value === null ? 'text-slate-500' : 'text-white'}`}>
+                  {tile.text ?? formatMetric(tile.value, tile.suffix ?? '')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {!loading && !aiVisibilityConfigured && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-amber-500/8 px-5 py-3.5">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+            <span className="text-[13px] text-slate-200">
+              {zh
+                ? 'AI 可见性监测还没配置，所以「AI 提及率」和「Top3 引用率」暂时没有数据。'
+                : 'AI visibility monitoring is not configured yet, so mention rates have no data.'}
+            </span>
+            <button
+              type="button"
+              onClick={() => onNavigate('ai-models')}
+              className="text-[13px] font-semibold text-indigo-600 hover:underline"
+            >
+              {zh ? '去配置采集来源 →' : 'Configure sources →'}
+            </button>
+          </div>
+        )}
+      </section>
+
       {/* ③ 最近变化 */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-slate-900/80 p-5 rounded-2xl border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <FileText className="w-4 h-4 text-slate-400" />
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl bg-slate-900/80 p-6 lg:col-span-2">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-section-title flex items-center gap-2">
+              <FileText className="h-[18px] w-[18px] text-slate-400" />
               {zh ? '最近内容' : 'Recent content'}
             </h2>
             <button
               type="button"
               onClick={() => onNavigate('articles')}
-              className="text-xs text-indigo-300 hover:text-indigo-200 flex items-center gap-1"
+              className="flex items-center gap-1 text-[13px] font-semibold text-indigo-600 hover:underline"
             >
               {zh ? '查看全部' : 'View all'}
-              <ArrowUpRight className="w-3 h-3" />
+              <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          {recentArticles.length === 0 ? (
-            <div className="text-xs text-slate-500 py-6 text-center">{zh ? '暂无数据' : 'No data'}</div>
-          ) : (
-            <div className="space-y-1.5">
-              {recentArticles.map((art) => (
-                <button
-                  key={art.id}
-                  type="button"
-                  onClick={() => onSelectArticle(art)}
-                  className="w-full text-left flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg hover:bg-slate-800/70 transition"
-                >
-                  <span className="text-xs text-slate-200 truncate">{art.title}</span>
-                  <span className="shrink-0 flex items-center gap-2">
-                    <span
-                      className={`text-[10px] px-1.5 py-0.5 rounded ${
-                        art.status === 'published'
-                          ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/50'
-                          : 'bg-amber-950/60 text-amber-300 border border-amber-800/50'
-                      }`}
-                    >
-                      {art.status === 'published' ? (zh ? '已发布' : 'Published') : zh ? '待审核' : 'In review'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 tabular-nums flex items-center gap-1">
-                      <Eye className="w-3 h-3" />
-                      {art.views ?? 0}
-                    </span>
-                  </span>
-                </button>
-              ))}
+          {loading ? (
+            <div className="py-4"><SkeletonRows rows={4} /></div>
+          ) : recentArticles.length === 0 ? (
+            <div className="py-10 text-center text-caption">
+              {zh ? '还没有文章——点右上角「AI 生成文章」写第一篇。' : 'No articles yet.'}
             </div>
+          ) : (
+            <ul className="divide-y divide-slate-800/70">
+              {recentArticles.map((art) => (
+                <li key={art.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectArticle(art)}
+                    className="flex w-full items-center justify-between gap-4 py-2.5 text-left transition hover:text-indigo-600"
+                  >
+                    <span className="truncate text-[13.5px] font-medium text-slate-200">{art.title}</span>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
+                          art.status === 'published' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+                        }`}
+                      >
+                        {art.status === 'published' ? (zh ? '已发布' : 'Published') : zh ? '待审核' : 'In review'}
+                      </span>
+                      <span className="text-[11.5px] tabular-nums text-slate-500">{art.createdAt}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
-        <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <Activity className="w-4 h-4 text-slate-400" />
+        <div className="rounded-2xl bg-slate-900/80 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-section-title flex items-center gap-2">
+              <Activity className="h-[18px] w-[18px] text-slate-400" />
               {zh ? '生成任务' : 'Generation tasks'}
             </h2>
             <button
               type="button"
               onClick={() => onNavigate('tasks')}
-              className="text-xs text-indigo-300 hover:text-indigo-200 flex items-center gap-1"
+              className="flex items-center gap-1 text-[13px] font-semibold text-indigo-600 hover:underline"
             >
               {zh ? '管理' : 'Manage'}
-              <ArrowUpRight className="w-3 h-3" />
+              <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          {activeTasks.length === 0 ? (
-            <div className="text-xs text-slate-500 py-6 text-center">{zh ? '暂无数据' : 'No data'}</div>
+          {loading ? (
+            <div className="py-4"><SkeletonRows rows={3} /></div>
+          ) : activeTasks.length === 0 ? (
+            <div className="py-10 text-center text-caption">{zh ? '没有正在跑或暂停的任务' : 'No running or paused tasks'}</div>
           ) : (
-            <div className="space-y-2">
+            <ul className="divide-y divide-slate-800/70">
               {activeTasks.map((task) => (
-                <div key={task.id} className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-300 truncate">{task.name}</span>
+                <li key={task.id} className="flex items-center justify-between gap-3 py-2.5">
+                  <span className="truncate text-[13.5px] font-medium text-slate-200">{task.name}</span>
                   <span
-                    className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded ${
-                      task.status === 'paused'
-                        ? 'bg-amber-950/60 text-amber-300 border border-amber-800/50'
-                        : 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/50'
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
+                      task.status === 'paused' ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'
                     }`}
                   >
                     {task.status === 'paused' ? (zh ? '已暂停' : 'Paused') : zh ? '运行中' : 'Running'}
                   </span>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
+          )}
+          {!loading && generatingCount > 0 && (
+            <p className="mt-4 text-caption">
+              {zh ? `另外有 ${generatingCount} 条任务正在生成。` : `${generatingCount} task(s) generating.`}
+            </p>
           )}
         </div>
       </section>

@@ -1,12 +1,9 @@
 import React from 'react';
 import {
   Globe,
-  Shield,
   Sparkles,
   Radio,
-  CheckCircle2,
   LogOut,
-  Server,
   Moon,
   Sun,
 } from 'lucide-react';
@@ -51,19 +48,19 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="h-16 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
       {/* Brand */}
       <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 via-indigo-600 to-indigo-800 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white font-black text-base">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-base shadow-sm">
             桐
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-lg tracking-tight text-white">桐灼GEO</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 font-mono">
                 {isApiMode ? 'API v1' : 'v2.5 Pro'}
               </span>
             </div>
             <p className="text-xs text-slate-400 hidden sm:block">
-              {lang === 'zh' ? '生成式引擎优化 · 双轨基准与事实工程平台' : 'AI Content Engineering & GEO Platform'}
+              {lang === 'zh' ? '生成式引擎优化工作台' : 'Generative Engine Optimization Workspace'}
             </p>
           </div>
         </div>
@@ -71,47 +68,37 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Center Actions / Status */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {isApiMode && (
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300">
-            <Server className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-emerald-400 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              {lang === 'zh' ? '后端已认证' : 'Backend authenticated'}
-            </span>
-          </div>
-        )}
+        {/* 顶栏只留「动作」，连接状态等常驻信息交给侧栏底部的状态条——
+            原来这里挂着一个「后端已认证」小牌，每一屏都在，却从不变化。 */}
 
         {/* 明暗切换：亮色为默认。标题里写明当前是哪一个，读屏与悬停都能看出来。 */}
         <button
           onClick={toggleTheme}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition"
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
           title={theme === 'dark'
             ? (lang === 'zh' ? '当前：暗色 — 点击切到亮色' : 'Currently dark — switch to light')
             : (lang === 'zh' ? '当前：亮色 — 点击切到暗色' : 'Currently light — switch to dark')}
           aria-label={lang === 'zh' ? '切换明暗主题' : 'Toggle color theme'}
         >
           {theme === 'dark'
-            ? <Moon className="w-3.5 h-3.5 text-indigo-400" />
-            : <Sun className="w-3.5 h-3.5 text-amber-500" />}
-          <span className="hidden lg:inline">{theme === 'dark'
-            ? (lang === 'zh' ? '暗色' : 'Dark')
-            : (lang === 'zh' ? '亮色' : 'Light')}</span>
+            ? <Moon className="w-4 h-4" />
+            : <Sun className="w-4 h-4" />}
         </button>
 
         {/* Live Site Preview Quick Link */}
         {onOpenPreview && <button
           onClick={onOpenPreview}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+          className="flex items-center gap-1.5 px-3 h-9 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
           title={lang === 'zh' ? '查看生成的公开前台效果' : 'Preview Live Site'}
         >
-          <Radio className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
-          <span>{lang === 'zh' ? '前台站点预览' : 'Site Preview'}</span>
+          <Radio className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="hidden sm:inline">{lang === 'zh' ? '站点预览' : 'Site Preview'}</span>
         </button>}
 
-        {/* Quick Generate Button */}
+        {/* Quick Generate Button: 全站的「写文章」主入口，点了直达生成弹窗 */}
         {onQuickGenerate && <button
           onClick={onQuickGenerate}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition"
+          className="flex items-center gap-1.5 px-3.5 h-9 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition"
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>{lang === 'zh' ? 'AI 创作' : 'AI Studio'}</span>
@@ -120,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Language Switch */}
         <button
           onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
+          className="flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
           title={lang === 'zh' ? 'Switch to English' : '切换至中文'}
         >
           <Globe className="w-3.5 h-3.5 text-slate-400" />
@@ -128,9 +115,9 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Admin Badge */}
-        <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-slate-800">
-          <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-slate-300">
-            <Shield className="w-3.5 h-3.5 text-indigo-400" />
+        <div className="hidden lg:flex items-center gap-2 pl-3 ml-1 border-l border-slate-800">
+          <div className="w-7 h-7 rounded-full bg-indigo-500/15 border border-indigo-500/25 flex items-center justify-center text-xs font-bold text-indigo-500">
+            {(adminName || 'A').slice(0, 1).toUpperCase()}
           </div>
           <div className="text-left text-xs">
             <div className="font-semibold text-slate-200">{adminName || 'Admin'}</div>
@@ -140,7 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onLogout}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
               title={lang === 'zh' ? '退出登录' : 'Sign out'}
               aria-label={lang === 'zh' ? '退出登录' : 'Sign out'}
             >

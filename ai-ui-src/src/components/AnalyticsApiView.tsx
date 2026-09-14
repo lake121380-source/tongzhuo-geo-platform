@@ -3,6 +3,8 @@ import { BarChart3, Bot, Database, Filter, RefreshCw, TrendingUp, Users, Workflo
 import { ApiRecord, GeoFlowApiClient, GeoFlowApiError } from '../api/geoflowClient';
 import { hasScope, normalizeScopes } from '../api/permissions';
 import { LoadingState } from './LoadingState';
+import { PageHeader } from './PageHeader';
+import { EmptyState } from './ui';
 
 interface AnalyticsApiViewProps {
   apiClient: GeoFlowApiClient;
@@ -320,12 +322,12 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
   ];
 
   const cards = useMemo(() => [
-    { label: lang === 'zh' ? '时间范围文章' : 'Articles in range', value: displayNumber(kpis.articles), icon: Database, tone: 'text-blue-400' },
+    { label: lang === 'zh' ? '时间范围文章' : 'Articles in range', value: displayNumber(kpis.articles), icon: Database, tone: 'text-indigo-400' },
     { label: lang === 'zh' ? '已发布' : 'Published', value: displayNumber(kpis.published), icon: TrendingUp, tone: 'text-emerald-400' },
     { label: lang === 'zh' ? '运行任务' : 'Running tasks', value: displayNumber(kpis.running_tasks), icon: Workflow, tone: 'text-indigo-400' },
     { label: 'PV', value: displayNumber(trafficKpis.pv), icon: BarChart3, tone: 'text-amber-400' },
     { label: lang === 'zh' ? 'AI 爬虫 PV' : 'AI bot PV', value: displayNumber(trafficKpis.ai_bot_pv), icon: Bot, tone: 'text-rose-400' },
-    { label: lang === 'zh' ? 'AI 可见度' : 'AI visibility', value: visibility.brand_visibility === undefined || visibility.brand_visibility === null ? '—' : `${displayNumber(visibility.brand_visibility)}%`, icon: Users, tone: 'text-cyan-400' },
+    { label: lang === 'zh' ? 'AI 可见度' : 'AI visibility', value: visibility.brand_visibility === undefined || visibility.brand_visibility === null ? '—' : `${displayNumber(visibility.brand_visibility)}%`, icon: Users, tone: 'text-slate-400' },
   ], [kpis, lang, trafficKpis, visibility]);
 
   /**
@@ -359,38 +361,38 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
   const growthAlertTab = growthAlertHref.includes('?') ? (new URLSearchParams(growthAlertHref.split('?')[1]).get('tab') || '') : '';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="flex items-center gap-2 text-xl font-black text-white"><BarChart3 className="h-6 w-6 text-rose-400" />{lang === 'zh' ? 'GEO 真实运营分析' : 'GEO Operations Analytics'}</h1>
-          <p className="mt-1 text-xs text-slate-400">{lang === 'zh' ? '数据来自 桐灼GEO 数据库与已配置的 AI 可见度采集，不显示估算指标。' : 'Persisted 桐灼GEO data only; estimated metrics are never shown.'}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-slate-800 bg-slate-900 p-1">
+    <div className="space-y-8">
+      <PageHeader
+        icon={BarChart3}
+        group={lang === 'zh' ? 'GEO 效果' : 'Results'}
+        title={lang === 'zh' ? '数据分析' : 'Analytics'}
+        description={lang === 'zh' ? '内容、流量、爬虫、线索的真实数据都在这里；数字来自本部署数据库，不做估算。' : 'Real numbers for content, traffic, crawlers and leads — straight from this deployment.'}
+        actions={<>
+          <div className="flex rounded-xl bg-slate-800/50 p-1">
             {(['7d', '30d', '90d'] as const).map((item) => (
-              <button key={item} type="button" onClick={() => setPreset(item)} className={`rounded px-2.5 py-1 text-xs ${preset === item ? 'bg-rose-600 text-white' : 'text-slate-400 hover:text-white'}`}>{item}</button>
+              <button key={item} type="button" onClick={() => setPreset(item)} className={`rounded-lg px-2.5 py-1.5 text-[12.5px] font-semibold transition ${preset === item ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}>{item}</button>
             ))}
           </div>
-          <button type="button" onClick={() => void load()} disabled={busy} className="rounded-lg border border-slate-800 bg-slate-900 p-2 text-slate-300 hover:text-white disabled:opacity-50" aria-label={lang === 'zh' ? '刷新分析' : 'Refresh analytics'}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /></button>
-        </div>
-      </div>
+          <button type="button" onClick={() => void load()} disabled={busy} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-800/60 text-slate-200 transition hover:bg-slate-800 disabled:opacity-50" aria-label={lang === 'zh' ? '刷新分析' : 'Refresh analytics'}><RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /></button>
+        </>}
+      />
 
       {/* 「增长总览 + 下一步该做什么」：旧 Blade analytics 首页的版面，退役时失去了入口，
           哥哥拍板补回。它自带 60 天窗口、不吃上面的筛选参数，所以与分区数据分开取。 */}
       {(growth !== null || growthError !== '') && (
         <div className="space-y-3">
           {growthError !== '' && (
-            <p className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-slate-200">
+            <p className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-[13px] text-slate-200">
               {lang === 'zh' ? `增长总览暂不可用：${growthError}` : `Growth overview unavailable: ${growthError}`}
             </p>
           )}
           {growthAlertCopyEntry !== undefined && (
-            <div className="flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 rounded-2xl border border-amber-500/30 bg-amber-950/20 p-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs font-semibold text-amber-200">
+                <p className="text-[13px] font-semibold text-amber-200">
                   {(lang === 'zh' ? growthAlertCopyEntry.zh[0] : growthAlertCopyEntry.en[0]).replace(':count', displayNumber(growthAlert.count))}
                 </p>
-                <p className="mt-0.5 text-[11px] text-slate-300">{lang === 'zh' ? growthAlertCopyEntry.zh[1] : growthAlertCopyEntry.en[1]}</p>
+                <p className="mt-1 text-[12.5px] text-slate-300">{lang === 'zh' ? growthAlertCopyEntry.zh[1] : growthAlertCopyEntry.en[1]}</p>
               </div>
               <a
                 href={growthAlertHref === '' ? undefined : growthAlertHref}
@@ -398,7 +400,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
                   // 告警指向的就是本 SPA 自己的页签深链；能切页签就别整页刷新。
                   if (growthAlertTab !== '' && onNavigate) { event.preventDefault(); onNavigate(growthAlertTab); }
                 }}
-                className="shrink-0 rounded-lg border border-amber-500/40 px-3 py-1.5 text-center text-xs font-semibold text-amber-200 hover:bg-amber-500/10"
+                className="inline-flex h-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/40 px-3.5 text-[13px] font-semibold text-amber-200 transition hover:bg-amber-500/10"
               >
                 {lang === 'zh' ? '立即处理' : 'Handle now'}
               </a>
@@ -407,9 +409,9 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
           {growth !== null && (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
               {growthMetricTiles.map((tile) => (
-                <div key={tile.label} className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
-                  <p className="text-[11px] text-slate-500">{tile.label}</p>
-                  <p className="mt-1 text-lg font-black text-white">{tile.value}</p>
+                <div key={tile.label} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md">
+                  <p className="text-caption">{tile.label}</p>
+                  <p className="mt-1.5 text-[24px] font-black leading-none tabular-nums text-white">{tile.value}</p>
                 </div>
               ))}
             </div>
@@ -417,89 +419,89 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-900/70 p-2">
-        {sections.map((item) => <button key={item.key} type="button" onClick={() => setSection(item.key)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${section === item.key ? 'bg-rose-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{lang === 'zh' ? item.zh : item.en}</button>)}
+      <div className="flex flex-wrap gap-1.5 rounded-xl bg-slate-800/50 p-1.5">
+        {sections.map((item) => <button key={item.key} type="button" onClick={() => setSection(item.key)} className={`rounded-lg px-3.5 py-2 text-[12.5px] font-semibold transition ${section === item.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{lang === 'zh' ? item.zh : item.en}</button>)}
       </div>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+      <div className="rounded-2xl bg-slate-900/80 p-5">
         <div className="flex flex-wrap items-end gap-3">
-          <span className="flex items-center gap-1 pb-1.5 text-[11px] font-semibold uppercase text-slate-500"><Filter className="h-3.5 w-3.5" />{lang === 'zh' ? '筛选' : 'Filters'}</span>
+          <span className="flex items-center gap-1.5 pb-2.5 text-caption font-semibold"><Filter className="h-3.5 w-3.5" />{lang === 'zh' ? '筛选' : 'Filters'}</span>
           <FilterSelect label={lang === 'zh' ? '任务' : 'Task'} anyLabel={lang === 'zh' ? '全部任务' : 'All tasks'} value={taskId} options={options.tasks} note={optionNotes.tasks} onChange={setTaskId} />
           <FilterSelect label={lang === 'zh' ? '分类' : 'Category'} anyLabel={lang === 'zh' ? '全部分类' : 'All categories'} value={categoryId} options={options.categories} note={optionNotes.categories} onChange={setCategoryId} />
           <FilterSelect label={lang === 'zh' ? '文章' : 'Article'} anyLabel={lang === 'zh' ? '全部文章' : 'All articles'} value={articleId} options={options.articles} note={optionNotes.articles} onChange={setArticleId} />
           <FilterSelect label={lang === 'zh' ? '渠道' : 'Channel'} anyLabel={lang === 'zh' ? '全部渠道' : 'All channels'} value={channelId} options={options.channels} note={optionNotes.channels} onChange={setChannelId} />
           {keywordFilterVisible && (
-            <label className="flex flex-col gap-1 text-[11px] text-slate-500">
+            <label className="flex flex-col gap-1 text-caption">
               <span>{lang === 'zh' ? 'AI 关键词' : 'AI keyword'}</span>
-              <span className="flex gap-1">
+              <span className="flex items-center gap-1.5">
                 <input
                   list="analytics-ai-keyword-options"
                   value={keywordDraft}
                   onChange={(event) => setKeywordDraft(event.target.value)}
                   onKeyDown={(event) => { if (event.key === 'Enter') setAiKeyword(keywordDraft.trim()); }}
                   placeholder={lang === 'zh' ? '与采集关键词完全一致' : 'Exact collected keyword'}
-                  className="w-56 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600"
+                  className="h-10 w-56 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition placeholder:text-slate-500 focus:border-indigo-500"
                 />
                 <datalist id="analytics-ai-keyword-options">{keywordSuggestions.map((keyword) => <option key={keyword} value={keyword} />)}</datalist>
-                <button type="button" onClick={() => setAiKeyword(keywordDraft.trim())} className="rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-300 hover:text-white">{lang === 'zh' ? '应用' : 'Apply'}</button>
+                <button type="button" onClick={() => setAiKeyword(keywordDraft.trim())} className="inline-flex h-9 shrink-0 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">{lang === 'zh' ? '应用' : 'Apply'}</button>
               </span>
             </label>
           )}
           {activeFilterCount > 0 && (
-            <button type="button" onClick={clearFilters} className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-300 hover:text-white">
+            <button type="button" onClick={clearFilters} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">
               <X className="h-3.5 w-3.5" />{lang === 'zh' ? `清除筛选（${activeFilterCount}）` : `Clear filters (${activeFilterCount})`}
             </button>
           )}
         </div>
         {keywordFilterVisible && aiKeyword !== '' && (
-          <p className="mt-2 text-[11px] text-slate-500">{lang === 'zh' ? `AI 关键词为精确匹配，当前只看「${aiKeyword}」这一条采集关键词的样本（总览的 AI 可见度卡片也一并收窄）。` : `AI keyword is an exact match; only samples for “${aiKeyword}” are shown (the overview AI-visibility card is narrowed too).`}</p>
+          <p className="mt-3 text-caption">{lang === 'zh' ? `AI 关键词为精确匹配，当前只看「${aiKeyword}」这一条采集关键词的样本（总览的 AI 可见度卡片也一并收窄）。` : `AI keyword is an exact match; only samples for “${aiKeyword}” are shown (the overview AI-visibility card is narrowed too).`}</p>
         )}
         {optionHints.length > 0 && (
-          <p className="mt-2 text-[11px] text-amber-400/70">{optionHints.join(lang === 'zh' ? '；' : '; ')}</p>
+          <p className="mt-2 text-[12.5px] text-amber-400/80">{optionHints.join(lang === 'zh' ? '；' : '; ')}</p>
         )}
         {keywordFilterVisible && keywordSuggestions.length > 0 && (
-          <p className="mt-1 text-[11px] text-slate-500">{lang === 'zh'
+          <p className="mt-1 text-caption">{lang === 'zh'
             ? `AI 关键词候选只是后端返回的前 ${keywordSuggestions.length} 条提示，不是全部；可直接输入任意精确关键词。`
             : `AI keyword suggestions are only the first ${keywordSuggestions.length} returned, not the full set; any exact keyword can be typed.`}</p>
         )}
       </div>
 
-      {error && <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}<button type="button" onClick={() => void load()} className="ml-3 underline">{lang === 'zh' ? '重试' : 'Retry'}</button></div>}
+      {error && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-[13px] text-rose-200">{error}<button type="button" onClick={() => void load()} className="ml-3 font-semibold underline">{lang === 'zh' ? '重试' : 'Retry'}</button></div>}
 
       {busy && !data ? <LoadingState lang={lang} label={lang === 'zh' ? '正在读取真实分析数据…' : 'Loading persisted analytics…'} /> : data && section === 'overview' && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-            {cards.map(({ label, value, icon: Icon, tone }) => <div key={label} className="rounded-xl border border-slate-800 bg-slate-900/80 p-4"><div className="flex items-center justify-between text-xs text-slate-400"><span>{label}</span><Icon className={`h-4 w-4 ${tone}`} /></div><div className="mt-2 text-2xl font-black text-white">{value}</div></div>)}
+            {cards.map(({ label, value, icon: Icon, tone }) => <div key={label} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md"><div className="flex items-center justify-between text-caption"><span>{label}</span><Icon className={`h-[18px] w-[18px] ${tone}`} /></div><div className="mt-2 text-[30px] font-black leading-none tabular-nums text-white">{value}</div></div>)}
           </div>
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-5">
-              <div className="mb-3 flex items-center justify-between"><h2 className="text-sm font-bold text-white">{lang === 'zh' ? '访问趋势' : 'Traffic trend'}</h2><span className="text-[11px] text-slate-500">{String(source.kind || 'geoflow_database')}</span></div>
-              {trend.length === 0 ? <p className="text-xs text-slate-500">{lang === 'zh' ? '该时间范围暂无访问日志。' : 'No traffic logs in this range.'}</p> : <div className="overflow-x-auto"><table className="w-full text-left text-xs text-slate-300"><thead className="text-slate-500"><tr><th className="py-2">{lang === 'zh' ? '日期' : 'Date'}</th><th>PV</th><th>UV</th><th>AI Bot</th></tr></thead><tbody>{trend.map((row) => <tr key={String(row.date)} className="border-t border-slate-800"><td className="py-2">{String(row.date || '')}</td><td>{displayNumber(row.pv)}</td><td>{displayNumber(row.unique_ip)}</td><td className="text-rose-300">{displayNumber(row.ai_bot_pv)}</td></tr>)}</tbody></table></div>}
+            <section className="rounded-2xl bg-slate-900/80 p-5">
+              <div className="mb-4 flex items-center justify-between"><h2 className="text-section-title">{lang === 'zh' ? '访问趋势' : 'Traffic trend'}</h2><span className="text-caption">{String(source.kind || 'geoflow_database')}</span></div>
+              {trend.length === 0 ? <EmptyState compact icon={TrendingUp} title={lang === 'zh' ? '该时间范围暂无访问日志' : 'No traffic logs in this range'} description={lang === 'zh' ? '换个时间范围（7 / 30 / 90 天），或清空筛选后再看。' : 'Try another range (7 / 30 / 90 days) or clear the filters.'} /> : <div className="overflow-x-auto"><table className="w-full text-left text-[13px] text-slate-300"><thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400"><tr><th className="px-3 py-3.5">{lang === 'zh' ? '日期' : 'Date'}</th><th className="px-3 py-3.5">PV</th><th className="px-3 py-3.5">UV</th><th className="px-3 py-3.5">AI Bot</th></tr></thead><tbody className="divide-y divide-slate-800/60">{trend.map((row) => <tr key={String(row.date)} className="transition hover:bg-slate-800/40"><td className="px-3 py-4">{String(row.date || '')}</td><td className="px-3 py-4">{displayNumber(row.pv)}</td><td className="px-3 py-4">{displayNumber(row.unique_ip)}</td><td className="px-3 py-4 text-rose-300">{displayNumber(row.ai_bot_pv)}</td></tr>)}</tbody></table></div>}
             </section>
-            <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-5">
-              <h2 className="mb-3 text-sm font-bold text-white">{lang === 'zh' ? '爬虫分类' : 'Crawler breakdown'}</h2>
-              {botBreakdown.length === 0 ? <p className="text-xs text-slate-500">{lang === 'zh' ? '暂无分类数据。' : 'No crawler data.'}</p> : <div className="space-y-2">{botBreakdown.map((row) => <div key={String(row.key)} className="flex items-center justify-between rounded bg-slate-950/50 px-3 py-2 text-xs"><span className="text-slate-300">{String(row.label || row.key || '')}</span><span className="font-mono text-slate-400">{displayNumber(row.count)}</span></div>)}</div>}
-              <div className="mt-4 grid grid-cols-2 gap-3 text-xs"><div className="rounded bg-slate-950/50 p-3"><div className="text-slate-500">{lang === 'zh' ? '分发成功' : 'Distribution synced'}</div><div className="mt-1 text-lg font-bold text-emerald-300">{displayNumber(distribution.synced)}</div></div><div className="rounded bg-slate-950/50 p-3"><div className="text-slate-500">{lang === 'zh' ? '新线索' : 'New leads'}</div><div className="mt-1 text-lg font-bold text-cyan-300">{displayNumber(leads.new)}</div></div></div>
+            <section className="rounded-2xl bg-slate-900/80 p-5">
+              <h2 className="mb-4 text-section-title">{lang === 'zh' ? '爬虫分类' : 'Crawler breakdown'}</h2>
+              {botBreakdown.length === 0 ? <EmptyState compact icon={Bot} title={lang === 'zh' ? '暂无爬虫分类数据' : 'No crawler data'} description={lang === 'zh' ? '换个时间范围或清空筛选后再看。' : 'Try another range or clear the filters.'} /> : <div className="space-y-2">{botBreakdown.map((row) => <div key={String(row.key)} className="flex items-center justify-between rounded-xl bg-slate-950/40 px-4 py-3 text-[13px]"><span className="text-slate-300">{String(row.label || row.key || '')}</span><span className="font-mono text-slate-400">{displayNumber(row.count)}</span></div>)}</div>}
+              <div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-950/40 px-4 py-3"><div className="text-caption">{lang === 'zh' ? '分发成功' : 'Distribution synced'}</div><div className="mt-1.5 text-[20px] font-black leading-none tabular-nums text-emerald-300">{displayNumber(distribution.synced)}</div></div><div className="rounded-xl bg-slate-950/40 px-4 py-3"><div className="text-caption">{lang === 'zh' ? '新线索' : 'New leads'}</div><div className="mt-1.5 text-[20px] font-black leading-none tabular-nums text-indigo-300">{displayNumber(leads.new)}</div></div></div>
             </section>
           </div>
         </>
       )}
       {data && section !== 'overview' && (
         <>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-            <span className="rounded border border-slate-800 bg-slate-900 px-2 py-1">{String(record(data.source).kind || 'geoflow_database')}</span>
+          <div className="flex flex-wrap items-center gap-2 text-caption">
+            <span className="rounded-lg bg-slate-800/60 px-2.5 py-1 text-slate-300">{String(record(data.source).kind || 'geoflow_database')}</span>
             <span>{record(data.source).estimated === false ? (lang === 'zh' ? '非估算数据' : 'Not estimated') : (lang === 'zh' ? '来源状态未知' : 'Unknown source status')}</span>
-            {detailRoot.ready === false && <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">{lang === 'zh' ? '数据表或采集尚未就绪' : 'Data source is not ready'}</span>}
-            {section === 'ai_visibility' && detailRoot.configured === false && <span className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">{lang === 'zh' ? 'AI 可见度 Provider 尚未配置' : 'AI visibility provider is not configured'}</span>}
+            {detailRoot.ready === false && <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{lang === 'zh' ? '数据表或采集尚未就绪' : 'Data source is not ready'}</span>}
+            {section === 'ai_visibility' && detailRoot.configured === false && <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{lang === 'zh' ? 'AI 可见度 Provider 尚未配置' : 'AI visibility provider is not configured'}</span>}
           </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            {scalarEntries(detailKpis).map(([key, value]) => <div key={key} className="rounded-xl border border-slate-800 bg-slate-900/80 p-4"><div className="text-[11px] uppercase text-slate-500">{labelFor(key)}</div><div className="mt-2 text-xl font-black text-white">{displayScalar(value)}</div></div>)}
-            {scalarEntries(detailKpis).length === 0 && <div className="col-span-full rounded-xl border border-dashed border-slate-700 p-6 text-center text-xs text-slate-500">{lang === 'zh' ? '当前接口没有 KPI 数据。' : 'No KPI data is available.'}</div>}
+            {scalarEntries(detailKpis).map(([key, value]) => <div key={key} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md"><div className="text-caption">{labelFor(key)}</div><div className="mt-1.5 text-[24px] font-black leading-none tabular-nums text-white">{displayScalar(value)}</div></div>)}
+            {scalarEntries(detailKpis).length === 0 && <div className="col-span-full"><EmptyState compact icon={BarChart3} title={lang === 'zh' ? '当前接口没有 KPI 数据' : 'No KPI data is available'} description={lang === 'zh' ? '这个分区的接口没有返回指标；换个分区或点右上角刷新重试。' : 'This section returned no metrics; try another section or refresh.'} /></div>}
           </div>
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-            <AnalyticsTable title={lang === 'zh' ? '趋势' : 'Trend'} rows={detailTrend} emptyText={lang === 'zh' ? '当前时间范围暂无趋势数据。' : 'No trend data in this range.'} />
-            <AnalyticsTable title={section === 'content' ? (lang === 'zh' ? '热门内容' : 'Top content') : section === 'traffic' ? (lang === 'zh' ? '热门路径' : 'Top paths') : section === 'crawlers' ? (lang === 'zh' ? '爬虫分类' : 'Crawler breakdown') : section === 'ai_visibility' ? (lang === 'zh' ? '关键词' : 'Keywords') : section === 'distribution' ? (lang === 'zh' ? '渠道' : 'Channels') : (lang === 'zh' ? '线索来源' : 'Lead sources')} rows={detailRows} emptyText={lang === 'zh' ? '当前时间范围暂无明细。' : 'No detail rows in this range.'} />
+            <AnalyticsTable title={lang === 'zh' ? '趋势' : 'Trend'} rows={detailTrend} emptyText={lang === 'zh' ? '当前时间范围暂无趋势数据' : 'No trend data in this range'} emptyHint={lang === 'zh' ? '换个时间范围（7 / 30 / 90 天），或清空筛选后再看。' : 'Try another range (7 / 30 / 90 days) or clear the filters.'} />
+            <AnalyticsTable title={section === 'content' ? (lang === 'zh' ? '热门内容' : 'Top content') : section === 'traffic' ? (lang === 'zh' ? '热门路径' : 'Top paths') : section === 'crawlers' ? (lang === 'zh' ? '爬虫分类' : 'Crawler breakdown') : section === 'ai_visibility' ? (lang === 'zh' ? '关键词' : 'Keywords') : section === 'distribution' ? (lang === 'zh' ? '渠道' : 'Channels') : (lang === 'zh' ? '线索来源' : 'Lead sources')} rows={detailRows} emptyText={lang === 'zh' ? '当前时间范围暂无明细' : 'No detail rows in this range'} emptyHint={lang === 'zh' ? '换个时间范围或清空筛选后再看。' : 'Try another range or clear the filters.'} />
           </div>
         </>
       )}
@@ -516,27 +518,27 @@ const FilterSelect: React.FC<{
   note?: string;
   onChange: (value: string) => void;
 }> = ({ label, anyLabel, value, options, note, onChange }) => (
-  <label className="flex flex-col gap-1 text-[11px] text-slate-500">
+  <label className="flex flex-col gap-1 text-caption">
     <span>{label}</span>
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
       disabled={Boolean(note)}
       title={note}
-      className="w-44 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 disabled:opacity-50"
+      className="h-10 w-44 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500 disabled:opacity-50"
     >
       <option value="">{anyLabel}</option>
       {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
-    {note && <span className="max-w-44 text-[10px] text-amber-400/80">{note}</span>}
+    {note && <span className="max-w-44 text-[12.5px] text-amber-400/80">{note}</span>}
   </label>
 );
 
-const AnalyticsTable: React.FC<{ title: string; rows: ApiRecord[]; emptyText: string }> = ({ title, rows, emptyText }) => {
+const AnalyticsTable: React.FC<{ title: string; rows: ApiRecord[]; emptyText: string; emptyHint?: string }> = ({ title, rows, emptyText, emptyHint }) => {
   const columns = rows.length === 0 ? [] : Object.keys(rows[0]).filter((key) => {
     const value = rows[0][key];
     return value === null || ['string', 'number', 'boolean'].includes(typeof value);
   }).slice(0, 6);
 
-  return <section className="rounded-xl border border-slate-800 bg-slate-900/80 p-5"><h2 className="mb-3 text-sm font-bold text-white">{title}</h2>{rows.length === 0 ? <p className="text-xs text-slate-500">{emptyText}</p> : <div className="overflow-x-auto"><table className="w-full text-left text-xs text-slate-300"><thead className="text-[10px] uppercase text-slate-500"><tr>{columns.map((column) => <th key={column} className="whitespace-nowrap px-2 py-2">{labelFor(column)}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={String(row.id || row.date || row.key || row.name || row.source || index)} className="border-t border-slate-800">{columns.map((column) => <td key={column} className="max-w-64 truncate px-2 py-2">{row[column] === null || row[column] === undefined ? '—' : String(row[column])}</td>)}</tr>)}</tbody></table></div>}</section>;
+  return <section className="rounded-2xl bg-slate-900/80 p-5"><h2 className="mb-4 text-section-title">{title}</h2>{rows.length === 0 ? <EmptyState compact icon={Database} title={emptyText} description={emptyHint} /> : <div className="overflow-x-auto"><table className="w-full text-left text-[13px] text-slate-300"><thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400"><tr>{columns.map((column) => <th key={column} className="whitespace-nowrap px-3 py-3.5">{labelFor(column)}</th>)}</tr></thead><tbody className="divide-y divide-slate-800/60">{rows.map((row, index) => <tr key={String(row.id || row.date || row.key || row.name || row.source || index)} className="transition hover:bg-slate-800/40">{columns.map((column) => <td key={column} className="max-w-64 truncate px-3 py-4">{row[column] === null || row[column] === undefined ? '—' : String(row[column])}</td>)}</tr>)}</tbody></table></div>}</section>;
 };

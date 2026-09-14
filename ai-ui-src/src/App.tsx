@@ -1,11 +1,15 @@
 import { hasScope, isSuperAdminRole } from './api/permissions';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { Activity, Award, Compass, ContactRound, Flame, Globe, Inbox, Layers, Search, TrendingUp } from 'lucide-react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { readTabFromUrl, writeTabToUrl } from './tabs';
+import { readTabFromUrl, readViewFromUrl, defaultViewOf, writeNavToUrl } from './tabs';
+import { TabbedShell, useConfirm, useToast } from './components/ui';
+import { DesktopOnlyNotice } from './components/DesktopOnlyNotice';
 import { LoadingState } from './components/LoadingState';
 import { DashboardView } from './components/DashboardView';
-import { GeneratorView } from './components/GeneratorView';
+import { GettingStartedStep } from './components/GettingStartedPanel';
+import { probeTitleReadiness, TitleLibraryReadiness } from './api/titleReadiness';
 import { ArticlesView } from './components/ArticlesView';
 import { ArticleModal } from './components/ArticleModal';
 import { TasksView } from './components/TasksView';
@@ -135,6 +139,16 @@ export default function App() {
     onUnauthorized: () => setApiSession(null),
   }));
   const [apiBooting, setApiBooting] = useState(apiEnabled);
+  /**
+   * 首轮业务数据还没到（外壳可能已放行）。
+   *
+   * 为什么与 `apiBooting` 分开：`bootDeadline` 会在 1.5 秒后放行外壳，此时
+   * `articles` / `tasks` 还是空数组——列表页会把「还没加载」画成「0 条 / 暂无数据」，
+   * 用户分不清「还在读」和「真的没有」（实测登录后 3 秒内仪表盘显示 `0 / 0`，
+   * 6 秒才变成真实值）。这个状态让页面在**首次取数期间**显示骨架而不是假空态；
+   * 已有数据时的刷新不受影响（各页只在「加载中且自己没有数据」时才显示骨架）。
+   */
+  const [bootDataLoading, setBootDataLoading] = useState(apiEnabled);
   const [apiError, setApiError] = useState<GeoFlowApiError | null>(null);
   const [apiReloadToken, setApiReloadToken] = useState(0);
   const [apiCatalog, setApiCatalog] = useState<CatalogResponse>(() => emptyCatalog());
@@ -143,8 +157,22 @@ export default function App() {
   // 用的就是这个格式，旧后台退役后它取代了原先的 Laravel 路由名。
   const [currentTab, setCurrentTab] = useState(() => readTabFromUrl());
 
-  // 页签变化时同步到地址栏（replaceState，不堆历史记录），让深链始终反映当前页。
-  useEffect(() => { writeTabToUrl(currentTab); }, [currentTab]);
+  /**
+   * 合并入口的**内层视图**（`?tab=<宿主>&view=<key>`）。
+   *
+   * 例：`?tab=competitor` 打开的是「AI 引用监测」页的竞品对比 Tab——
+   * 高亮落在合并后的入口上，内容仍是原来那一页。非合并页签恒为 null。
+   */
+  const [currentView, setCurrentView] = useState<string | null>(() => readViewFromUrl() ?? defaultViewOf(readTabFromUrl()));
+
+  /** 全局操作反馈：成功给「下一步」，失败给「为什么 + 怎么办」（原来这些位置是 window.alert）。 */
+  const toast = useToast();
+  /** 统一的确认对话框（原生 confirm 在内嵌浏览器里不渲染，见 AGENTS.md）。 */
+  const confirmAction = useConfirm();
+
+  // 页签/内层视图变化时同步到地址栏（replaceState，不堆历史记录），让深链始终反映当前页。
+  // 合并入口写成 `?tab=<宿主>&view=<key>`：复制给同事落到的仍是同一个子视图。
+  useEffect(() => { writeNavToUrl(currentTab, currentView); }, [currentTab, currentView]);
   const [lang, setLang] = useState<'zh' | 'en'>('zh');
   const [hasGeminiKey, setHasGeminiKey] = useState(false);
 
@@ -164,6 +192,40 @@ export default function App() {
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   /** 「概览大盘」用的真实分析投影；取不到就保持 null，界面显示「—」。 */
   const [analyticsOverview, setAnalyticsOverview] = useState<ApiRecord | null>(null);
+  /**
+   * 本部署有没有 AI 助手（`GET ai-workspace/status` 的 `runtime_enabled`）。
+   *
+   * 这是**特性开关**控制的能力：生产默认关（`GEOFLOW_AI_WORKSPACE_RUNTIME_ENABLED`），
+   * 关掉的部署连入口都不该有——「有入口却用不了」比没有入口更糟。
+   *
+   * **刻意看 `runtime_enabled` 而不看 `ready`**：两者含义不同。`runtime_enabled=false`
+   * 是「这个部署根本没有这个能力」（隐藏入口）；`ready=false` 是「能力在、但模型还没配好」，
+   * 那种情况该把入口留着，由页面自己说明原因并指向模型配置——藏起来用户就无从知道要配什么。
+   *
+   * **三态**：`null` = 还没问到，`true` / `false` = 后端已明确回答。必须区分「还不知道」
+   * 与「关掉了」，见下面那个 effect。
+   */
+  const [aiWorkspaceEnabled, setAiWorkspaceEnabled] = useState<boolean | null>(null);
+
+  /**
+   * 上面那次探测**没问到**（请求失败），与「后端明确回答没开」是两件事。
+   *
+   * 两者对**入口显隐**的处理相同（都藏起来），对**深链**的处理相反：明确没开就该退回总览，
+   * 没问到则必须原样保留——否则一次网络抖动就会把用户粘贴的入口链接改写成总览。
+   * 这个状态同时也是给冒烟测试的钩子：它要能区分「后端说没开」和「没问到」。
+   */
+  const [aiWorkspaceProbeFailed, setAiWorkspaceProbeFailed] = useState(false);
+
+  // 深链落在「本部署已关闭」的 AI 助手上时退回总览——否则用户会停在一个导航里根本
+  // 没有入口的页面上。**只在后端明确回答「关了」时才退**：深链
+  // `/geo_admin?tab=ai-workspace`（也正是后端助手回复里给出的入口格式）在**登录页**
+  // 就会渲染一次，那时开关状态无从得知，若把「未问到」当成「关掉了」，地址栏会被
+  // 立刻改写成 `?tab=dashboard`，链接在用户登录之前就永久失效。
+  useEffect(() => {
+    if (aiWorkspaceEnabled === false && currentTab === 'ai-workspace') {
+      setCurrentTab('dashboard');
+    }
+  }, [aiWorkspaceEnabled, currentTab]);
   // 演示数据已删除：初值只能是空投影，真实数据由 API 引导后写入。
   const [analytics, setAnalytics] = useState<AnalyticsOverview>({
     totalPvs: 0,
@@ -269,7 +331,28 @@ export default function App() {
     }, 1500);
     const fetchApiData = async () => {
       setApiBooting(true);
+      setBootDataLoading(true);
       setApiError(null);
+      // AI 助手是**特性开关**控制的能力（GEOFLOW_AI_WORKSPACE_RUNTIME_ENABLED）。
+      // **单独发、不并在下面那批里**：入口的可见性不该等那批里最慢的请求——排进批次
+      // 就会跟着一起等（实测 dev 下外壳放行数秒后入口才出现，用户看到的是「导航先少
+      // 一项、过一会儿又冒出来」）。取不到就当作未启用（对可选功能宁可不显示），
+      // 但**不抛出去**，免得一个可选功能的失败拖垮整批启动请求。
+      apiClient.getAiWorkspaceStatus()
+        .then((status) => {
+          if (!cancelled) setAiWorkspaceEnabled(asRecord(status).runtime_enabled === true);
+        })
+        .catch(() => {
+          // **探测失败 ≠ 后端说「这个部署没有这个能力」**，所以保持 `null`（还不知道），
+          // 不写 `false`。入口的显隐不受影响（只有 `=== true` 才渲染），但深链的命运不同：
+          // 下面那个 effect 只在**明确回答「关了」**时才把地址改写成总览。
+          // 本机实测过这条路径：同一个部署两次加载，一次探到 true、一次因为连接被重置
+          // 探失败——若把失败写成 false，用户粘贴的 `?tab=ai-workspace` 就会被悄悄改掉。
+          if (!cancelled) {
+            setAiWorkspaceEnabled(null);
+            setAiWorkspaceProbeFailed(true);
+          }
+        });
       try {
         const canReadCatalog = hasScope(apiSession, 'catalog:read');
         const canReadArticles = hasScope(apiSession, 'articles:read');
@@ -395,7 +478,10 @@ export default function App() {
         if (apiFailure.status === 401) setApiSession(null);
       } finally {
         window.clearTimeout(bootDeadline);
-        if (!cancelled) setApiBooting(false);
+        if (!cancelled) {
+          setApiBooting(false);
+          setBootDataLoading(false);
+        }
       }
     };
 
@@ -581,7 +667,15 @@ export default function App() {
   };
 
   const handleDeleteArticle = async (id: string) => {
-    if (!confirm(lang === 'zh' ? '确定要删除该文章吗？' : 'Delete this article?')) return;
+    const confirmed = await confirmAction({
+      title: lang === 'zh' ? '删除这篇文章？' : 'Delete this article?',
+      description: lang === 'zh'
+        ? '文章会移入回收站，之后仍可恢复；不会立刻永久删除。'
+        : 'The article moves to trash and can still be restored.',
+      confirmLabel: lang === 'zh' ? '移入回收站' : 'Move to trash',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     if (apiEnabled) {
       try {
         await apiClient.trashArticle(id);
@@ -660,7 +754,7 @@ export default function App() {
     }
   };
 
-  type BatchArticleAction = 'review' | 'publish' | 'trash' | 'restore' | 'retract';
+  type BatchArticleAction = 'review' | 'reject' | 'publish' | 'trash' | 'restore' | 'retract';
   const handleBatchArticleAction = async (
     action: BatchArticleAction,
     ids: string[],
@@ -675,6 +769,13 @@ export default function App() {
             review_status: 'approved',
             review_note: '管理员从内容列表提交批量审核',
           })
+        // 「退回修改」是审核结论，不是删除：文章回到草稿、留在列表里等改稿。
+        // 早先这里错接成 `trash`，把待改的文章扔进了回收站——那是不可见的破坏。
+        : action === 'reject'
+          ? await apiClient.batchReviewArticles(ids, {
+              review_status: 'rejected',
+              review_note: '管理员从连续审核模式退回修改',
+            })
         : action === 'publish'
           ? await apiClient.batchPublishArticles(ids)
           : action === 'trash'
@@ -705,7 +806,16 @@ export default function App() {
         }
       }
       setApiError(null);
-      setApiReloadToken((value) => value + 1);
+      // **只有「服务端过滤规则会改变列表成员」的动作才整页重载**：回收站与恢复的逐条
+      // 返回里刻意只带审计安全的 id/status（见上），列表得重新向服务端要一遍。
+      //
+      // 审核 / 发布 / 撤回的响应带的是**完整文章投影**，上面已经逐条应用，再重载一次不只是
+      // 多余——重载会把整个外壳换成启动遮罩（`apiBooting` 时 App 提前 return），文章页连同
+      // 它挂着的「连续审核模式」一起被卸载、本地 state 归零。实测后果就是**每审一篇就被
+      // 弹出审核模式**，计划里承诺的「连续过审」根本连续不起来。
+      if (action === 'trash' || action === 'restore') {
+        setApiReloadToken((value) => value + 1);
+      }
       return result;
     } catch (error) {
       reportApiError(error, '文章批量操作失败');
@@ -838,22 +948,37 @@ export default function App() {
     return updated;
   };
 
+  /**
+   * 把文章加入分发队列，并把结果写回本地状态。**失败会抛出。**
+   *
+   * 拆出来是因为存在两种调用方：列表行上的「分发」点了就走（失败弹一条错误提示就够了），
+   * 而文章弹窗里的「发布并分发」必须知道分发到底成没成——它要显示的是一条
+   * 「已发布并分发到 N 个渠道」的结论文案，吞掉失败就等于给了一句假承诺。
+   */
+  const queueArticleDistribution = async (id: string, channelIds: string[]): Promise<number> => {
+    const result = asRecord(await apiClient.distributeArticle(id, channelIds));
+    const items = Array.isArray(result.items) ? result.items as ApiRecord[] : [];
+    const distributedTo = items
+      .map((item) => asRecord(asRecord(item.channel)))
+      .map((channel) => String(channel.name || channel.domain || '').trim())
+      .filter(Boolean);
+    setArticles((prev) => prev.map((article) => (article.id === id
+      ? { ...article, distributedTo: distributedTo.length > 0 ? distributedTo : article.distributedTo }
+      : article)));
+    setApiError(null);
+    const refreshedJobs = await apiClient.listDistributionJobs({ page: 1, per_page: 100 });
+    setDistributionJobs(refreshedJobs.items || []);
+    return items.length || distributedTo.length;
+  };
+
   const handleDistributeArticle = async (id: string, channelIds?: string[]) => {
     if (apiEnabled) {
       try {
-        const result = asRecord(await apiClient.distributeArticle(id, channelIds || []));
-        const items = Array.isArray(result.items) ? result.items as ApiRecord[] : [];
-        const distributedTo = items
-          .map((item) => asRecord(asRecord(item.channel)))
-          .map((channel) => String(channel.name || channel.domain || '').trim())
-          .filter(Boolean);
-        setArticles((prev) => prev.map((article) => (article.id === id
-          ? { ...article, distributedTo: distributedTo.length > 0 ? distributedTo : article.distributedTo }
-          : article)));
-        setApiError(null);
-        const refreshedJobs = await apiClient.listDistributionJobs({ page: 1, per_page: 100 });
-        setDistributionJobs(refreshedJobs.items || []);
-        alert(lang === 'zh' ? `已将文章加入 ${items.length || distributedTo.length} 个渠道的分发队列。` : 'The article was queued for distribution.');
+        const queued = await queueArticleDistribution(id, channelIds || []);
+        toast.success(
+          lang === 'zh' ? '已加入分发队列' : 'Queued for distribution',
+          lang === 'zh' ? `将投递到 ${queued} 个渠道；到「分发渠道」页可以看投递结果。` : `Delivering to ${queued} channels; track it on the Channels page.`,
+        );
       } catch (error) {
         reportApiError(error, '文章分发入队失败');
       }
@@ -868,11 +993,28 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setArticles((prev) => prev.map((article) => (article.id === id ? { ...article, distributedTo: data.distributedTo } : article)));
-        alert(lang === 'zh' ? '分发成功！远端站点已接收并触发静态页编译。' : 'Distributed successfully!');
+        toast.success(lang === 'zh' ? '分发成功' : 'Distributed', lang === 'zh' ? '远端站点已接收并触发静态页编译。' : 'The remote site accepted it and started building.');
       }
     } catch (error) {
       console.error(error);
     }
+  };
+
+  /**
+   * 文章弹窗的「发布并分发」：先过发布门禁，再让服务端按文章所属任务已绑定的启用渠道投递。
+   *
+   * 渠道列表传空数组是**刻意的**：`POST articles/{id}/distribute` 只接受「已绑到该任务且
+   * 启用中」的渠道 id（否则 409 `distribution_channel_not_bound`），而那份绑定清单前端拿不到
+   * ——传空数组时服务端按任务边界自己解析，也是既有调用点一直在用的方式。
+   *
+   * 两步都**不做错误兜底**：任何一步失败都往上抛给弹窗显示（尤其渠道为空时后端会明确报
+   * 「没有可用的活动分发渠道，请先配置并关联渠道」）。这里刻意不复用
+   * `handleDistributeArticle`——那个函数成功后会 alert，而弹窗自己会给出结论文案，
+   * 两条提示叠在一起只会让人以为发了两遍。
+   */
+  const handlePublishAndDistributeArticle = async (id: string): Promise<void> => {
+    await handlePublishArticle(id);
+    await queueArticleDistribution(id, []);
   };
 
   const handleRetryDistribution = async (id: string) => {
@@ -949,6 +1091,24 @@ export default function App() {
     }
   };
 
+  /**
+   * 人工放行某篇文章的 AI 质检（判定为「待人工复核」时唯一的出路）。
+   * 放行后立刻刷新这篇文章的投影，让连续审核模式/详情面板马上看到 is_overridden。
+   */
+  const handleReleaseArticleAiQuality = async (id: string, reason: string) => {
+    const result = await apiClient.overrideArticleAiQuality(id, reason);
+    try {
+      const detail = mapArticle(await apiClient.getArticle(id));
+      if (detail.id) {
+        setArticles((prev) => prev.map((article) => (article.id === detail.id ? detail : article)));
+        setActiveArticleModal((current) => (current && current.id === detail.id ? detail : current));
+      }
+    } catch {
+      // 投影刷新失败不影响放行本身（后端已记录），下次刷新会补齐。
+    }
+    return result;
+  };
+
   const handleRunTask = async (taskId: string) => {
     if (apiEnabled) {
       try {
@@ -973,7 +1133,10 @@ export default function App() {
           void startLatestTaskJobPolling(taskId);
         }
         setApiError(null);
-        alert(lang === 'zh' ? '任务已提交 桐灼GEO 队列，文章将在后台生成并经过质量门禁。' : 'Task queued in 桐灼GEO; generated articles will pass the quality gate.');
+        toast.success(
+          lang === 'zh' ? '已提交生成队列' : 'Queued for generation',
+          lang === 'zh' ? '文章会在后台生成并过质检门禁，约 1 分钟后到「文章与审核」查看。' : 'The article appears in Articles & Review in about a minute.',
+        );
       } catch (error) {
         reportApiError(error, '任务未能启动');
       }
@@ -985,7 +1148,7 @@ export default function App() {
         const data = await res.json();
         if (data.article) setArticles((prev) => [data.article, ...prev]);
         if (data.task) setTasks((prev) => prev.map((task) => (task.id === taskId ? data.task : task)));
-        alert(data.message || (lang === 'zh' ? '任务已执行完成！' : 'Task executed!'));
+        toast.success(data.message ? String(data.message) : (lang === 'zh' ? '任务已执行完成' : 'Task executed'));
       }
     } catch (error) {
       console.error('Task run failed:', error);
@@ -1469,7 +1632,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setChannels((prev) => prev.map((channel) => (channel.id === id ? { ...channel, lastSyncedAt: new Date().toISOString().replace('T', ' ').slice(0, 16) } : channel)));
-        alert(data.message || (lang === 'zh' ? '同步已完成！' : 'Synced!'));
+        toast.success(data.message ? String(data.message) : (lang === 'zh' ? '同步已完成' : 'Synced'));
       }
     } catch (error) {
       console.error(error);
@@ -1566,12 +1729,33 @@ export default function App() {
   };
 
   const navigateToTab = (tab: string) => {
-    if (apiEnabled && API_DISABLED_TABS.includes(tab)) {
+    // `materials:titles` —— 带子视图的导航：直接落在素材库的「标题库」页签。
+    // 生成弹窗的「去补充标题 →」用它，用户看到的就该是标题库本身（前置条件的去处）。
+    // **意图只对这一次导航有效**：不复位的话，此后每次进素材库都会粘在标题库
+    // （复核工作流抓到的 P2——MaterialsView 每次挂载都读初值，而它随页签切换重新挂载）。
+    const [baseTab, subView] = tab.split(':');
+    setMaterialsTypeIntent(baseTab === 'materials' && subView === 'titles' ? 'title-libraries' : null);
+    if (apiEnabled && API_DISABLED_TABS.includes(baseTab)) {
       reportApiError(new GeoFlowApiError('桐灼GEO API v1 尚未提供此功能', 0, 'unsupported_capability'), '当前部署尚未提供此功能');
       return;
     }
-    setCurrentTab(tab);
+    setCurrentTab(baseTab);
+    // 点侧栏 = 回到该入口的默认视角：合并入口不要停在上次看过的内层 Tab 上
+    // （否则「点了 AI 引用监测 却还停在竞品对比」）。深链进来时仍按 URL 的 view 走。
+    setCurrentView(defaultViewOf(baseTab));
   };
+
+  /**
+   * 顶栏「AI 创作」/ 总览「开始生成」共用的入口：跳到文章页并**直接打开生成弹窗**。
+   * 只跳页不弹窗会让用户落在列表上自己找按钮（旧行为），与按钮名字（创作）不符。
+   */
+  const openAiGenerate = () => {
+    setAiGenerateIntent(true);
+    navigateToTab('articles');
+  };
+
+  /** 素材库被要求打开的具体资产类型（`materials:titles` 导航设置，此后一直生效到下次导航）。 */
+  const [materialsTypeIntent, setMaterialsTypeIntent] = useState<string | null>(null);
 
   const handleNavigateToArticle = (slugOrTitle: string) => {
     const found = articles.find(
@@ -1596,6 +1780,183 @@ export default function App() {
       knowledgeBases.map((base) => ({ id: base.id, name: base.name })),
     ),
   };
+
+  // 进行中的一次性生成任务：AI 生成弹窗建的任务（非循环、还没产够 article_limit 篇）。
+  // 有它在跑，文章页顶部就显示「生成中」占位，并触发下面的轮询。
+  const generatingTasks = useMemo(
+    () => tasks.filter((task) => task.status === 'running' && task.isLoop !== true && task.generatedCount < task.batchLimit),
+    [tasks],
+  );
+
+  // —— 总览页「开始使用」清单 ——
+  // 每一步的 done 都从**真实数据**推导：目录里有没有可用的内容模型/提示词、有没有知识库、
+  // 标题库还有没有可用标题、有没有产出过第一篇文章。刻意不引入「用户点过下一步」这类伪状态，
+  // 否则换个浏览器就出现「向导说你没配、页面说你配好了」。
+  const [onboardingTitleReadiness, setOnboardingTitleReadiness] = useState<Record<string, TitleLibraryReadiness>>({});
+  /**
+   * 上面那次探测走到哪一步了。
+   *
+   * 需要它是因为「正在检查」和「这次没取到」在界面上必须分开：`probeTitleReadiness` 会吞掉
+   * 单个库的失败，若每个库都失败，`onboardingTitleReadiness` 就是空的——只按数据判断的话
+   * 界面会**永远停在「正在检查标题库存…」**，没人能知道它其实是失败了。
+   */
+  const [onboardingTitleProbe, setOnboardingTitleProbe] = useState<'idle' | 'loading' | 'ready' | 'failed'>('idle');
+  /** 从总览向导跳去「文章」页时，直接打开 AI 生成弹窗；处理完立刻清掉。 */
+  const [aiGenerateIntent, setAiGenerateIntent] = useState(false);
+
+  // 标题库的可用条数只有后端知道，且**只在真的打开总览、且还没产出过内容时才问**——
+  // 清单一旦不会出现，这几个请求就是纯浪费（本地 dev 每个请求要几秒）。
+  const onboardingLibraryKey = apiTaskCatalog.titleLibraries.map((library) => String(library.id)).join(',');
+  useEffect(() => {
+    if (!apiEnabled || !apiClient.authenticated || currentTab !== 'dashboard') return;
+    if (articles.length > 0 || tasks.length > 0) return;
+    if (onboardingLibraryKey === '') {
+      setOnboardingTitleReadiness({});
+      return;
+    }
+    let cancelled = false;
+    setOnboardingTitleProbe('loading');
+    void (async () => {
+      const next = await probeTitleReadiness(
+        (params) => apiClient.getTaskTitleReadiness(params),
+        apiTaskCatalog.titleLibraries,
+      );
+      if (cancelled) return;
+      setOnboardingTitleReadiness(next);
+      // 一个库都没问到 = 这次没取到，界面要说得出这句话，而不是永远转在「正在检查」上。
+      setOnboardingTitleProbe(Object.keys(next).length > 0 ? 'ready' : 'failed');
+    })();
+    return () => { cancelled = true; };
+    // apiTaskCatalog 每次渲染都是新对象，用它的 id 清单当依赖（清单变了才重问）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiEnabled, apiClient, currentTab, onboardingLibraryKey]);
+
+  const canGenerateArticle = apiEnabled
+    && hasScope(apiSession, 'catalog:read')
+    && hasScope(apiSession, 'tasks:write');
+
+  const gettingStartedSteps = useMemo<GettingStartedStep[]>(() => {
+    if (!apiEnabled) return [];
+    const zh = lang === 'zh';
+
+    // **只要产出过内容就不再显示这张清单。**
+    // 它的目标读者是「还没开工的人」；判据一旦放宽到「每一项都配好」，一个用完了标题的
+    // 标题库就会让清单在成熟部署上永久常驻——那是噪音，而且会把已经会用的用户当成新手。
+    // 清单消失后由下面那条「下一步」横幅接手，两者不会同时出现。
+    if (articles.length > 0 || tasks.length > 0) return [];
+
+    // 判据一律取「AI 生成弹窗自己用的那一份数据」（apiTaskCatalog），
+    // 这样清单和弹窗不可能一个说能用、一个说缺东西。
+    const chatModels = apiTaskCatalog.models.filter((model) => !model.type || model.type === 'chat');
+    const contentPrompts = apiTaskCatalog.prompts;
+    const qualityPrompts = apiTaskCatalog.qualityPrompts ?? [];
+
+    const libraries = apiTaskCatalog.titleLibraries;
+    const usableTitles = libraries.reduce(
+      (sum, library) => sum + (onboardingTitleReadiness[String(library.id)]?.available ?? 0),
+      0,
+    );
+    // 「还在问」「问到了」「没问到」三态必须分开：把一次取数失败说成「标题用完了」
+    // 会让人去补一批并不需要的标题，而永远显示「正在检查」则是一个走不到终态的进行中状态。
+    const titleProbeFailed = libraries.length > 0 && onboardingTitleProbe === 'failed';
+
+    const openGenerate = () => {
+      setAiGenerateIntent(true);
+      navigateToTab('articles');
+    };
+
+    return [
+      {
+        key: 'model',
+        title: zh ? '配置内容模型' : 'Configure a content model',
+        detail: chatModels.length > 0
+          ? (zh ? `已配置 ${chatModels.length} 个可用于生成正文的对话模型` : `${chatModels.length} chat models available`)
+          : (zh ? '还没有可用于生成正文的对话模型，AI 无法写文章' : 'No chat model available for generation'),
+        done: chatModels.length > 0,
+        action: { label: zh ? '去配置 →' : 'Configure →', onClick: () => navigateToTab('ai-models') },
+      },
+      {
+        key: 'prompt',
+        title: zh ? '配置生成提示词' : 'Configure a generation prompt',
+        detail: contentPrompts.length > 0
+          ? (zh
+              ? `已配置 ${contentPrompts.length} 条生成提示词${qualityPrompts.length === 0 ? '；仍缺质检方案，开启质检门禁前必须补上' : ''}`
+              : `${contentPrompts.length} generation prompts`)
+          : (zh ? '没有生成提示词，新建生成任务时选不到东西' : 'No generation prompt exists'),
+        done: contentPrompts.length > 0,
+        action: { label: zh ? '去配置 →' : 'Configure →', onClick: () => navigateToTab('ai-models') },
+      },
+      {
+        key: 'knowledge',
+        title: zh ? '准备知识库' : 'Prepare a knowledge base',
+        detail: knowledgeBases.length > 0
+          ? (zh ? `已有 ${knowledgeBases.length} 个知识库可供正文引用` : `${knowledgeBases.length} knowledge bases`)
+          : (zh ? '正文要靠知识库事实支撑，没有它只能凭空写' : 'No knowledge base to ground the content'),
+        done: knowledgeBases.length > 0,
+        action: { label: zh ? '去新建 →' : 'Create →', onClick: () => navigateToTab('knowledge') },
+      },
+      {
+        key: 'title-library',
+        title: zh ? '准备标题库' : 'Prepare a title library',
+        detail: libraries.length === 0
+          ? (zh ? '还没有标题库，生成任务不知道每篇文章该写什么' : 'No title library yet')
+          : usableTitles > 0
+            ? (zh ? `可用标题 ${usableTitles} 条` : `${usableTitles} titles available`)
+            : titleProbeFailed
+              ? (zh ? '这次没读到标题库存量，去素材库确认还有没有可用标题' : 'Could not read title availability')
+              : onboardingTitleProbe === 'ready'
+                ? (zh ? '标题已全部用完，先补充标题再生成' : 'All titles are used up')
+                : (zh ? '正在检查标题库存…' : 'Checking title availability…'),
+        done: usableTitles > 0,
+        action: { label: zh ? '去补充 →' : 'Add titles →', onClick: () => navigateToTab('materials') },
+      },
+      {
+        key: 'first-article',
+        title: zh ? '生成第一篇文章' : 'Generate your first article',
+        detail: articles.length > 0 || tasks.length > 0
+          ? (zh ? `已有 ${articles.length} 篇文章、${tasks.length} 个任务` : `${articles.length} articles, ${tasks.length} tasks`)
+          : (zh ? '上面几步齐了就能开工：选标题库与知识库，建一条生成任务' : 'Once the steps above are green, create a generation task'),
+        done: articles.length > 0 || tasks.length > 0,
+        action: { label: zh ? '开始生成 →' : 'Generate →', onClick: openGenerate },
+        blockedReason: canGenerateArticle
+          ? undefined
+          : (zh ? '当前账号没有「catalog:read + tasks:write」权限，无法创建生成任务' : 'Missing catalog:read / tasks:write scope'),
+      },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiEnabled, lang, apiTaskCatalog, knowledgeBases, articles.length, tasks.length, onboardingTitleReadiness, onboardingTitleProbe, canGenerateArticle]);
+
+  // 有一次性生成任务在跑时，轻量轮询文章与任务列表，让「生成中」占位行自动走到终态、
+  // 新文章自动冒出来。刻意不调 setApiReloadToken（那会整页重载、弹出启动遮罩，每 3 秒闪一次
+  // 比状态不动更糟）；只用两条 GET，任务跑完（generatingTaskKey 变空）轮询自然停。
+  const generatingTaskKey = generatingTasks.map((task) => task.id).join(',');
+  useEffect(() => {
+    if (!apiEnabled || generatingTaskKey === '' || !apiClient.authenticated) return;
+    let cancelled = false;
+    let attempts = 0;
+    const poll = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      if (attempts > 100) return; // 约 5 分钟兜底，避免任务卡死时无限轮询
+      try {
+        const [taskPage, articlePage] = await Promise.all([
+          apiClient.listTasks({ page: 1, per_page: 100 }),
+          apiClient.listArticles({ page: 1, per_page: 100 }),
+        ]);
+        if (cancelled) return;
+        setTasks(mapTasks(taskPage));
+        setArticles(mapArticles(articlePage));
+      } catch {
+        // 单轮读取失败不打断，下一轮再试。
+      }
+      if (!cancelled) setTimeout(() => void poll(), 3000);
+    };
+    const timer = setTimeout(() => void poll(), 3000);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [apiEnabled, apiClient, generatingTaskKey]);
 
   // 编辑器内联助手需要的真实选项：catalog 里的 prompts 服务端已按 type=content 过滤。
   const editorAssistantCatalog = apiEnabled ? {
@@ -1652,6 +2013,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      {/* 窄屏守卫：<1024px 时盖一层「请用桌面浏览器」的受控提示（见组件注释）。 */}
+      <DesktopOnlyNotice />
       {/* Top Header */}
       <Header
         lang={lang}
@@ -1661,7 +2024,7 @@ export default function App() {
         adminName={apiSession?.admin.display_name || apiSession?.admin.username}
         adminRole={apiSession?.admin.role}
         onLogout={apiEnabled ? handleApiLogout : undefined}
-        onQuickGenerate={() => navigateToTab('generator')}
+        onQuickGenerate={apiEnabled && hasScope(apiSession, 'catalog:read') && hasScope(apiSession, 'tasks:write') ? openAiGenerate : undefined}
         onOpenPreview={() => navigateToTab('preview')}
       />
 
@@ -1674,11 +2037,14 @@ export default function App() {
           lang={lang}
           mode="geoflow"
           disabledTabs={apiEnabled ? API_DISABLED_TABS : []}
+          aiWorkspaceEnabled={aiWorkspaceEnabled}
+          aiWorkspaceProbeFailed={aiWorkspaceProbeFailed}
           badgeCounts={{
             articles: articles.filter((a) => a.status === 'review').length,
             tasks: tasks.filter((t) => t.status === 'running').length,
             channels: channels.length,
           }}
+          badgesLoading={apiEnabled && bootDataLoading}
         />
 
         {/* Content View Container */}
@@ -1712,21 +2078,9 @@ export default function App() {
                 lang={lang}
                 apiMode={apiEnabled}
                 analyticsOverview={analyticsOverview}
-              />
-            )}
-
-            {currentTab === 'generator' && (
-              <GeneratorView
-                knowledgeBases={knowledgeBases}
-                onSaveArticle={handleSaveArticle}
-                lang={lang}
-                apiMode={apiEnabled}
-                apiCatalog={apiTaskCatalog}
-                onCreateTask={apiEnabled ? handleCreateTask : undefined}
-                onCheckTitleReadiness={apiEnabled ? handleCheckTaskTitleReadiness : undefined}
-                onNavigate={navigateToTab}
-                canRead={hasScope(apiSession, 'catalog:read')}
-                canWrite={hasScope(apiSession, 'tasks:write')}
+                gettingStarted={gettingStartedSteps}
+                loading={apiEnabled && bootDataLoading && articles.length === 0}
+                onGenerate={apiEnabled && hasScope(apiSession, 'catalog:read') && hasScope(apiSession, 'tasks:write') ? openAiGenerate : undefined}
               />
             )}
 
@@ -1761,6 +2115,17 @@ export default function App() {
                 lang={lang}
                 apiMode={apiEnabled}
                 distributionAvailable={channels.length > 0}
+                apiCatalog={apiTaskCatalog}
+                knowledgeBases={knowledgeBases}
+                onCreateTask={apiEnabled ? handleCreateTask : undefined}
+                onCheckTitleReadiness={apiEnabled ? handleCheckTaskTitleReadiness : undefined}
+                canGenerate={apiEnabled && hasScope(apiSession, 'catalog:read') && hasScope(apiSession, 'tasks:write')}
+                generatingTasks={generatingTasks}
+                onNavigate={navigateToTab}
+                onReleaseArticle={apiEnabled ? handleReleaseArticleAiQuality : undefined}
+                autoOpenAiGenerate={aiGenerateIntent}
+                onAutoOpenGenerateHandled={() => setAiGenerateIntent(false)}
+                loading={apiEnabled && bootDataLoading && articles.length === 0}
               />
             )}
 
@@ -1780,10 +2145,12 @@ export default function App() {
                 onLoadRecentRuns={apiEnabled ? async () => asRecord(await apiClient.listRecentTaskRuns({ per_page: 10 })) : undefined}
                 onRestoreTask={apiEnabled ? handleRestoreTask : undefined}
                 onCheckTitleReadiness={apiEnabled ? handleCheckTaskTitleReadiness : undefined}
+                onOpenAiGenerate={apiEnabled && hasScope(apiSession, 'catalog:read') && hasScope(apiSession, 'tasks:write') ? openAiGenerate : undefined}
                 lang={lang}
                 apiMode={apiEnabled}
                 scopes={apiSession?.scopes}
                 apiCatalog={apiTaskCatalog}
+                loading={apiEnabled && bootDataLoading && tasks.length === 0}
               />
             )}
 
@@ -1811,6 +2178,7 @@ export default function App() {
                 lang={lang}
                 canRead={hasScope(apiSession, 'materials:read')}
                 canWrite={hasScope(apiSession, 'materials:write')}
+                initialType={materialsTypeIntent === 'title-libraries' ? 'title-libraries' : undefined}
               />
             )}
 
@@ -1884,78 +2252,142 @@ export default function App() {
               />
             )}
 
-            {currentTab === 'competitor' && (
-              <CompetitorRadarView
-                lang={lang}
-                apiClient={apiEnabled ? apiClient : undefined}
-                canRead={hasScope(apiSession, 'analytics:read')}
-                canCollect={hasScope(apiSession, 'analytics:collect')}
-                onNavigateToDraft={() => setCurrentTab('generator')}
+            {/* ── GEO 效果 · AI 引用监测：三个同源页面合成一个入口，内部 Tab 切换 ──
+                （原「AI 问答监测 / 竞品对比 / 引用测试」三个侧栏入口；三个 id 的深链仍有效） */}
+            {(currentTab === 'query_radar' || currentTab === 'competitor' || currentTab === 'sandbox') && (
+              <TabbedShell
+                icon={Search}
+                group={lang === 'zh' ? 'GEO 效果' : 'Results'}
+                title={lang === 'zh' ? 'AI 引用监测' : 'AI citations'}
+                description={lang === 'zh'
+                  ? '看 AI 在回答里怎么提到你：自己的问题有没有被提及、竞品被引用得多不多、换一个问法会不会引用你。'
+                  : 'How AI answers treat your brand: mentions, competitor citations, and citation tests.'}
+                view={currentView}
+                onViewChange={setCurrentView}
+                tabs={[
+                  {
+                    key: 'query_radar', label: lang === 'zh' ? '问答监测' : 'Tracking', icon: Search,
+                    render: () => (
+                      <QueryRadarView
+                        embedded
+                        onNavigate={navigateToTab}
+                        lang={lang}
+                        apiClient={apiEnabled ? apiClient : undefined}
+                        canRead={hasScope(apiSession, 'analytics:read')}
+                        canCollect={hasScope(apiSession, 'analytics:collect')}
+                        canDraft={hasScope(apiSession, 'articles:write')}
+                        categories={apiCatalog.categories}
+                        authors={apiCatalog.authors}
+                        onArticleCreated={(newArt) => {
+                          setArticles((prev) => [newArt, ...prev]);
+                        }}
+                        onOpenArticleModal={(art) => setActiveArticleModal(art)}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'competitor', label: lang === 'zh' ? '竞品对比' : 'Competitors', icon: Flame,
+                    render: () => (
+                      <CompetitorRadarView
+                        embedded
+                        lang={lang}
+                        apiClient={apiEnabled ? apiClient : undefined}
+                        canRead={hasScope(apiSession, 'analytics:read')}
+                        canCollect={hasScope(apiSession, 'analytics:collect')}
+                        onNavigateToDraft={() => setCurrentTab('articles')}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'sandbox', label: lang === 'zh' ? '引用测试' : 'Citation test', icon: Compass,
+                    render: () => (
+                      <AiSandboxView embedded lang={lang} apiClient={apiEnabled ? apiClient : undefined} />
+                    ),
+                  },
+                ]}
               />
             )}
 
-            {currentTab === 'query_radar' && (
-              <QueryRadarView
-                lang={lang}
-                apiClient={apiEnabled ? apiClient : undefined}
-                canRead={hasScope(apiSession, 'analytics:read')}
-                canCollect={hasScope(apiSession, 'analytics:collect')}
-                canDraft={hasScope(apiSession, 'articles:write')}
-                categories={apiCatalog.categories}
-                authors={apiCatalog.authors}
-                onArticleCreated={(newArt) => {
-                  setArticles((prev) => [newArt, ...prev]);
-                }}
-                onOpenArticleModal={(art) => setActiveArticleModal(art)}
-              />
-            )}
-
-            {currentTab === 'url_scanner' && (
-              <UrlScannerView
-                lang={lang}
-                apiClient={apiEnabled ? apiClient : undefined}
-                canRead={hasScope(apiSession, 'materials:read')}
-                canWrite={hasScope(apiSession, 'materials:write')}
-              />
-            )}
-
-
-
-
-            {currentTab === 'brand_entity' && (
-              <BrandEntityEeatView
-                lang={lang}
-                apiClient={apiEnabled ? apiClient : undefined}
-              />
-            )}
-
-            {currentTab === 'attribution_funnel' && (
-              <AiAttributionFunnelView
-                lang={lang}
-                apiClient={apiEnabled ? apiClient : undefined}
-                canRead={hasScope(apiSession, 'analytics:read')}
-                canWrite={hasScope(apiSession, 'analytics:write')}
+            {/* ── GEO 诊断 · 可发现性总览：总览 + 页面体检 ── */}
+            {apiEnabled && (currentTab === 'seo_dashboard' || currentTab === 'url_scanner') && (
+              <TabbedShell
+                icon={Activity}
+                group={lang === 'zh' ? 'GEO 诊断' : 'Diagnosis'}
+                title={lang === 'zh' ? '可发现性总览' : 'Discoverability'}
+                description={lang === 'zh'
+                  ? '一条链看全：能不能被 AI 抓到 → 有没有被抓 → 有没有被引用 → 带来了什么；也可以拿任意网址单独体检。'
+                  : 'Crawlable → crawled → cited → converted; plus a per-URL inspection.'}
+                view={currentView}
+                onViewChange={setCurrentView}
+                tabs={[
+                  {
+                    key: 'overview', label: lang === 'zh' ? '总览' : 'Overview', icon: Activity,
+                    // onNavigate 必须走 navigateToTab：它同时重置内层视图（currentView），
+                    // 否则页内的「竞品雷达」会落在合并页的第一个 Tab 上（复核工作流抓到的 P1）。
+                    render: () => (
+                      <RealSeoDashboardView embedded lang={lang} apiClient={apiClient} onNavigate={navigateToTab} />
+                    ),
+                  },
+                  {
+                    key: 'scanner', label: lang === 'zh' ? '页面体检' : 'Page inspector', icon: Globe,
+                    render: () => (
+                      <UrlScannerView
+                        embedded
+                        lang={lang}
+                        apiClient={apiEnabled ? apiClient : undefined}
+                        canRead={hasScope(apiSession, 'materials:read')}
+                        canWrite={hasScope(apiSession, 'materials:write')}
+                      />
+                    ),
+                  },
+                ]}
               />
             )}
 
 
-            {currentTab === 'sandbox' && (
-              <AiSandboxView
-                lang={lang}
-                apiClient={apiEnabled ? apiClient : undefined}
-              />
-            )}
+
 
             {apiEnabled && currentTab === 'analytics' && (
               <AnalyticsApiView apiClient={apiClient} lang={lang} scopes={apiSession?.scopes} onNavigate={navigateToTab} />
             )}
 
-            {apiEnabled && currentTab === 'leads' && (
-              <LeadManagementView
-                apiClient={apiClient}
-                lang={lang}
-                canRead={hasScope(apiSession, 'leads:read')}
-                canWrite={hasScope(apiSession, 'leads:write')}
+            {/* ── GEO 效果 · 转化与线索：AI 引流归因 + 线索跟进（同一件事的两段） ── */}
+            {apiEnabled && (currentTab === 'attribution_funnel' || currentTab === 'leads') && (
+              <TabbedShell
+                icon={ContactRound}
+                group={lang === 'zh' ? 'GEO 效果' : 'Results'}
+                title={lang === 'zh' ? '转化与线索' : 'Conversion & leads'}
+                description={lang === 'zh'
+                  ? 'AI 带来的访问有没有变成客户：先看归因漏斗，再跟进每一条线索。'
+                  : 'Whether AI traffic turns into customers: attribution funnel first, then each lead.'}
+                view={currentView}
+                onViewChange={setCurrentView}
+                tabs={[
+                  {
+                    key: 'funnel', label: lang === 'zh' ? '引流与转化' : 'Traffic & conversion', icon: TrendingUp,
+                    render: () => (
+                      <AiAttributionFunnelView
+                        embedded
+                        lang={lang}
+                        apiClient={apiEnabled ? apiClient : undefined}
+                        canRead={hasScope(apiSession, 'analytics:read')}
+                        canWrite={hasScope(apiSession, 'analytics:write')}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'leads', label: lang === 'zh' ? '线索' : 'Leads', icon: Inbox,
+                    render: () => (
+                      <LeadManagementView
+                        embedded
+                        apiClient={apiClient}
+                        lang={lang}
+                        canRead={hasScope(apiSession, 'leads:read')}
+                        canWrite={hasScope(apiSession, 'leads:write')}
+                      />
+                    ),
+                  },
+                ]}
               />
             )}
 
@@ -2005,16 +2437,39 @@ export default function App() {
               <SeoConfigurationView apiClient={apiClient} lang={lang} initialTab="robots"
                 canRead={hasScope(apiSession, 'seo:read')} canWrite={hasScope(apiSession, 'seo:write')} />
             )}
-            {apiEnabled && currentTab === 'seo_foundation' && (
-              <SeoConfigurationView apiClient={apiClient} lang={lang} initialTab="sitemap"
-                canRead={hasScope(apiSession, 'seo:read')} canWrite={hasScope(apiSession, 'seo:write')} />
-            )}
+            {/* llmstxt 也必须有自己的分支：它在 ADMIN_TABS 里、后端帮助目录也引用它，
+                少了这条「深链进来是空白页」（复核工作流抓到的 P1 回归）。 */}
             {apiEnabled && currentTab === 'llmstxt' && (
               <SeoConfigurationView apiClient={apiClient} lang={lang} initialTab="llms"
                 canRead={hasScope(apiSession, 'seo:read')} canWrite={hasScope(apiSession, 'seo:write')} />
             )}
-            {apiEnabled && currentTab === 'seo_dashboard' && (
-              <RealSeoDashboardView lang={lang} apiClient={apiClient} onNavigate={(tab) => setCurrentTab(tab)} />
+            {/* ── GEO 诊断 · 站点与品牌设置：站点级 SEO（robots/sitemap/llms.txt）+ 品牌实体 ── */}
+            {apiEnabled && (currentTab === 'seo_foundation' || currentTab === 'brand_entity') && (
+              <TabbedShell
+                icon={Layers}
+                group={lang === 'zh' ? 'GEO 诊断' : 'Diagnosis'}
+                title={lang === 'zh' ? '站点与品牌设置' : 'Site & brand'}
+                description={lang === 'zh'
+                  ? '给搜索引擎和 AI「交代清楚你是谁」：站点抓取规则（robots / sitemap / llms.txt）+ 品牌实体的权威信息。'
+                  : 'What crawlers and AI engines should know: crawler files plus authoritative brand entity data.'}
+                view={currentView}
+                onViewChange={setCurrentView}
+                tabs={[
+                  {
+                    key: 'site', label: lang === 'zh' ? '站点 SEO' : 'Site SEO', icon: Globe,
+                    render: () => (
+                      <SeoConfigurationView embedded apiClient={apiClient} lang={lang} initialTab="sitemap"
+                        canRead={hasScope(apiSession, 'seo:read')} canWrite={hasScope(apiSession, 'seo:write')} />
+                    ),
+                  },
+                  {
+                    key: 'brand', label: lang === 'zh' ? '品牌实体' : 'Brand entity', icon: Award,
+                    render: () => (
+                      <BrandEntityEeatView embedded lang={lang} apiClient={apiEnabled ? apiClient : undefined} />
+                    ),
+                  },
+                ]}
+              />
             )}
 
             {currentTab === 'preview' && (
@@ -2052,6 +2507,8 @@ export default function App() {
         onListEditorTitles={apiEnabled ? (params) => apiClient.listEditorTitles(params) : undefined}
         onEditorGenerate={apiEnabled ? handleEditorGenerate : undefined}
         editorAssistantCatalog={editorAssistantCatalog}
+        hasDistributionChannels={channels.length > 0}
+        onPublishAndDistribute={apiEnabled ? handlePublishAndDistributeArticle : undefined}
         onArticleStateChange={apiEnabled ? ((updated) => {
           setArticles((prev) => prev.map((item) => item.id === updated.id ? updated : item));
           setActiveArticleModal(updated);

@@ -18,6 +18,8 @@ import { GeoFlowApiClient } from '../api/geoflowClient';
 import { LoadingState } from './LoadingState';
 
 interface BrandEntityEeatViewProps {
+  /** 合并入口的内层 Tab 渲染：隐藏自身页面标题（由外层 TabbedShell 统一画），只留操作区。 */
+  embedded?: boolean;
   lang: 'zh' | 'en';
   apiClient?: GeoFlowApiClient;
 }
@@ -41,7 +43,7 @@ const EMPTY_BRAND_ENTITY_CONFIG: BrandEntityConfig = {
   contactEmail: '',
 };
 
-export const BrandEntityEeatView: React.FC<BrandEntityEeatViewProps> = ({ lang, apiClient }) => {
+export const BrandEntityEeatView: React.FC<BrandEntityEeatViewProps> = ({ lang, apiClient, embedded = false }) => {
   const [config, setConfig] = useState<BrandEntityConfig>(EMPTY_BRAND_ENTITY_CONFIG);
   const [eeatReport, setEeatReport] = useState<EeatAuditReport | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -195,7 +197,7 @@ ${jsonLdScript}
   };
 
   return (
-    <div className="space-y-6" id="brand-entity-container">
+    <div className="space-y-8" id="brand-entity-container">
       {/* Toast */}
       {toastMsg && (
         <div
@@ -209,32 +211,34 @@ ${jsonLdScript}
       {errorMsg && <div className="rounded-lg border border-rose-800 bg-rose-950/40 px-4 py-3 text-xs text-rose-300">{errorMsg}</div>}
 
       {/* Header Banner */}
-      <div className="flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/90 p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className={`flex flex-col gap-4 rounded-2xl bg-slate-900/80 p-6 sm:flex-row sm:items-center ${embedded ? 'sm:justify-end' : 'sm:justify-between'}`}>
+        {!embedded && (
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-md bg-indigo-500/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-300 border border-indigo-500/30">
               <Award className="h-3.5 w-3.5" />
-              {lang === 'zh' ? '阶段 2 · 知识图谱对齐' : 'Phase 2 · Entity Disambiguation'}
+              {lang === 'zh' ? '品牌实体' : 'Brand entity'}
             </span>
-            <span className="text-xs text-slate-400">
-              {lang === 'zh' ? 'Schema.org sameAs 实体锚定' : 'E-E-A-T & Knowledge Graph'}
+            <span className="text-caption">
+              {lang === 'zh' ? '让 AI 明确「这个品牌名对应哪家公司」' : 'Tell AI which company the brand is'}
             </span>
           </div>
           <h2 className="text-xl font-bold tracking-tight text-white">
-            {lang === 'zh' ? '品牌实体消歧与 E-E-A-T 权威锚定中心' : 'Brand Entity Disambiguation & E-E-A-T Hub'}
+            {lang === 'zh' ? '品牌实体' : 'Brand entity'}
           </h2>
-          <p className="text-sm text-slate-400">
+          <p className="text-[13px] text-slate-400">
             {lang === 'zh'
-              ? '大模型在生成答案时，优先信任具备清晰实体拓扑的企业。通过 sameAs 将官网与百科、工信部、Crunchbase 权威节点强绑定，消除实体歧义并激活顶级可信度。'
-              : 'Anchor your organization entity with external authoritative knowledge bases (Baidu Baike, Wikipedia, Crunchbase, Gov registries) to maximize LLM citation confidence.'}
+              ? '把企业名称、官网、权威页面链接（百科、企查查等）登记在这里。AI 回答里引用你的时候，靠的就是这些信息——填得越全，越不容易被搞混或忽略。'
+              : 'Register your legal name, official site and authoritative links so AI engines can identify and trust your brand.'}
           </p>
         </div>
+        )}
 
         <div className="flex flex-col items-end gap-1.5">
           <button
             onClick={handleSave}
             disabled={isSaving || loadState !== 'ready'}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" />
             {isSaving
@@ -246,7 +250,7 @@ ${jsonLdScript}
               : 'Save Entity'}
           </button>
           {loadState !== 'ready' && (
-            <span className="text-[11px] text-amber-300">
+            <span className="text-[12px] text-amber-300">
               {loadState === 'loading'
                 ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取现有配置…' : 'Loading current configuration…'} />
                 : lang === 'zh' ? '未取到现有配置，已禁用保存以免覆盖线上实体' : 'Existing configuration unavailable; saving is disabled to avoid overwriting it'}
@@ -257,7 +261,7 @@ ${jsonLdScript}
 
       {/* E-E-A-T 不计算总分：只展示可核验的配置完整度与真实计数，不给维度打分。 */}
       {eeatReport === null ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 text-xs text-slate-400">
+        <div className="rounded-2xl bg-slate-900/80 p-4 text-[13px] text-slate-400">
           {loadState === 'loading'
             ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取品牌实体报告…' : 'Loading brand entity report…'} />
             : lang === 'zh'
@@ -266,20 +270,20 @@ ${jsonLdScript}
         </div>
       ) : (
         <>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4">
+          <div className="rounded-2xl bg-slate-900/80 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs font-bold text-slate-300">
+              <span className="text-[13px] font-bold text-slate-300">
                 {lang === 'zh' ? 'E-E-A-T 评分口径' : 'E-E-A-T scoring basis'}
               </span>
-              <span className="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[11px] font-bold text-slate-300">
+              <span className="rounded border border-slate-700 bg-slate-800 px-2 py-0.5 text-[12px] font-bold text-slate-300">
                 {lang === 'zh' ? '不计算总分' : 'No composite score'}
               </span>
             </div>
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-slate-400">
               {String(eeatReport.score_reason || (lang === 'zh' ? '未提供口径说明。' : 'No basis provided.'))}
             </p>
             {Array.isArray(eeatReport.missing_fields) && eeatReport.missing_fields.length > 0 && (
-              <p className="mt-2 text-[11px] leading-relaxed text-amber-300">
+              <p className="mt-2 text-[12.5px] leading-relaxed text-amber-300">
                 {lang === 'zh' ? '尚未配置：' : 'Not configured: '}
                 {eeatReport.missing_fields.join('、')}
               </p>
@@ -313,12 +317,12 @@ ${jsonLdScript}
                 detail: lang === 'zh' ? '仅反映是否填写，不代表可信度高低' : 'Presence only, not a trust judgement',
               },
             ].map((card) => (
-              <div key={card.title} className="rounded-xl border border-slate-800 bg-slate-900/90 p-5 shadow-sm">
-                <span className="text-xs font-bold text-slate-400">{card.title}</span>
+              <div key={card.title} className="rounded-2xl bg-slate-900/80 p-5">
+                <span className="text-[12.5px] font-semibold text-slate-400">{card.title}</span>
                 <div className="mt-2 text-sm font-bold text-white">
-                  {card.value} <span className="text-[11px] font-normal text-slate-400">{card.unit}</span>
+                  {card.value} <span className="text-[12px] font-normal text-slate-400">{card.unit}</span>
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{card.detail}</p>
+                <p className="mt-1 text-[12px] leading-relaxed text-slate-500">{card.detail}</p>
               </div>
             ))}
           </div>
@@ -330,10 +334,10 @@ ${jsonLdScript}
         {/* Left Column (6 cols) */}
         <div className="space-y-6 lg:col-span-6">
           {/* Base Entity Profile */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-5 shadow-sm">
+          <div className="rounded-2xl bg-slate-900/80 p-5">
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-indigo-400" />
-              <h3 className="text-sm font-bold text-white">
+              <h3 className="text-section-title">
                 {lang === 'zh' ? '企业实体基础信息档案' : 'Organization Entity Profile'}
               </h3>
             </div>
@@ -349,7 +353,7 @@ ${jsonLdScript}
                   onChange={(e) =>
                     setConfig((prev) => ({ ...prev, organizationName: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition"
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white placeholder:text-slate-400 outline-none transition focus:border-indigo-500"
                 />
               </div>
 
@@ -363,7 +367,7 @@ ${jsonLdScript}
                   onChange={(e) =>
                     setConfig((prev) => ({ ...prev, alternateName: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition"
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white placeholder:text-slate-400 outline-none transition focus:border-indigo-500"
                 />
               </div>
 
@@ -377,7 +381,7 @@ ${jsonLdScript}
                   onChange={(e) =>
                     setConfig((prev) => ({ ...prev, legalName: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition"
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white placeholder:text-slate-400 outline-none transition focus:border-indigo-500"
                 />
               </div>
 
@@ -391,20 +395,20 @@ ${jsonLdScript}
                   onChange={(e) =>
                     setConfig((prev) => ({ ...prev, officialDomain: e.target.value }))
                   }
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-white placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition"
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white placeholder:text-slate-400 outline-none transition focus:border-indigo-500"
                 />
               </div>
             </div>
           </div>
 
           {/* SameAs Authority Anchors */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-5 shadow-sm">
+          <div className="rounded-2xl bg-slate-900/80 p-5">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-sm font-bold text-white">
+                <h3 className="text-section-title">
                   {lang === 'zh' ? 'Schema sameAs 外部权威信源锚定列表' : 'sameAs Authority Node Anchors'}
                 </h3>
-                <p className="mt-0.5 text-xs text-slate-400">
+                <p className="text-caption mt-0.5">
                   {lang === 'zh'
                     ? '大模型知识图谱会定期交叉比对以下外部实体，确认你的品牌真实存在且权威可信。'
                     : 'Entities cross-referenced by LLMs to verify organizational authenticity.'}
@@ -412,7 +416,7 @@ ${jsonLdScript}
               </div>
               <button
                 onClick={() => setShowAddModal(true)}
-                className="inline-flex items-center gap-1 rounded-lg bg-slate-800 border border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
               >
                 <Plus className="h-3 w-3" />
                 {lang === 'zh' ? '添加节点' : 'Add Node'}
@@ -421,7 +425,7 @@ ${jsonLdScript}
 
             <div className="mt-4 space-y-2.5">
               {config.sameAsLinks.length === 0 && (
-                <p className="rounded-lg border border-slate-800/80 bg-slate-950/60 p-3 text-xs text-slate-400">
+                <p className="rounded-xl bg-slate-950/40 px-4 py-3 text-[13px] text-slate-400">
                   {lang === 'zh'
                     ? '尚未配置 sameAs 外部实体。这些链接会原样写入 JSON-LD 的 sameAs 数组，需逐条人工核验后再填写。'
                     : 'No sameAs entity configured yet. These links are emitted verbatim into the JSON-LD sameAs array.'}
@@ -430,7 +434,7 @@ ${jsonLdScript}
               {config.sameAsLinks.map((item, idx) => (
                 <div
                   key={item.id || item.url || `sameas-item-${idx}`}
-                  className="flex items-center justify-between rounded-lg border border-slate-800/80 bg-slate-950/60 p-3 text-xs hover:bg-slate-800/40 transition"
+                  className="flex items-center justify-between rounded-xl bg-slate-950/40 px-4 py-3 text-[13px] transition hover:bg-slate-800/40"
                 >
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
@@ -442,7 +446,7 @@ ${jsonLdScript}
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:underline"
+                      className="inline-flex items-center gap-1 text-[12px] text-indigo-400 hover:underline"
                     >
                       <span className="truncate max-w-[280px]">{item.url}</span>
                       <ExternalLink className="h-2.5 w-2.5 shrink-0" />
@@ -452,7 +456,7 @@ ${jsonLdScript}
                   <button
                     onClick={() => handleRemoveSameAs(idx)}
                     title={lang === 'zh' ? '移除该信源' : 'Remove this source'}
-                    className="text-slate-400 hover:text-rose-400"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-rose-400"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -464,7 +468,7 @@ ${jsonLdScript}
 
         {/* Right Column: Live Schema.org JSON-LD Code & DevOps Injection (6 cols) */}
         <div className="space-y-4 lg:col-span-6">
-          <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-md">
+          <div className="overflow-hidden rounded-2xl bg-slate-950 shadow-md">
             <div className="flex items-center justify-between border-b border-slate-800 bg-slate-900/90 px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="flex gap-1.5">
@@ -475,7 +479,7 @@ ${jsonLdScript}
                 <div className="flex items-center gap-1 ml-2">
                   <button
                     onClick={() => setActiveCodeView('jsonld')}
-                    className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                    className={`px-2 py-0.5 text-[12px] rounded transition-colors ${
                       activeCodeView === 'jsonld'
                         ? 'bg-slate-800 text-indigo-400 font-semibold'
                         : 'text-slate-400 hover:text-slate-200'
@@ -485,7 +489,7 @@ ${jsonLdScript}
                   </button>
                   <button
                     onClick={() => setActiveCodeView('nextjs')}
-                    className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                    className={`px-2 py-0.5 text-[12px] rounded transition-colors ${
                       activeCodeView === 'nextjs'
                         ? 'bg-slate-800 text-indigo-400 font-semibold'
                         : 'text-slate-400 hover:text-slate-200'
@@ -495,7 +499,7 @@ ${jsonLdScript}
                   </button>
                   <button
                     onClick={() => setActiveCodeView('html')}
-                    className={`px-2 py-0.5 text-[11px] rounded transition-colors ${
+                    className={`px-2 py-0.5 text-[12px] rounded transition-colors ${
                       activeCodeView === 'html'
                         ? 'bg-slate-800 text-indigo-400 font-semibold'
                         : 'text-slate-400 hover:text-slate-200'
@@ -509,7 +513,7 @@ ${jsonLdScript}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleCopy(getCodeSnippet())}
-                  className="inline-flex items-center gap-1 rounded bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 border border-slate-700 hover:bg-slate-700"
+                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[12px] font-semibold text-slate-200 transition hover:bg-slate-800"
                 >
                   {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                   {copied ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制' : 'Copy')}
@@ -517,7 +521,7 @@ ${jsonLdScript}
                 {activeCodeView === 'jsonld' && (
                   <button
                     onClick={handleDownload}
-                    className="inline-flex items-center gap-1 rounded bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 border border-slate-700 hover:bg-slate-700"
+                    className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[12px] font-semibold text-slate-200 transition hover:bg-slate-800"
                   >
                     <Download className="h-3 w-3" />
                     {lang === 'zh' ? '下载' : 'Download'}
@@ -547,11 +551,11 @@ ${jsonLdScript}
       {/* Add SameAs Node Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl bg-slate-900 border border-slate-800 p-6 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl bg-slate-900 p-6 shadow-2xl">
             <h3 className="text-base font-bold text-white">
               {lang === 'zh' ? '添加权威外部实体节点 (sameAs)' : 'Add Authority Node'}
             </h3>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-[13px] text-slate-400">
               {lang === 'zh'
                 ? '例如维基百科、百度百科、企查查、Crunchbase、GitHub 或官方社交媒体机构主页。'
                 : 'Enter authoritative external profile URL to anchor.'}
@@ -567,7 +571,7 @@ ${jsonLdScript}
                   value={newPlatformName}
                   onChange={(e) => setNewPlatformName(e.target.value)}
                   placeholder={lang === 'zh' ? '例如: 维基百科英文词条 / 企查查官方核准' : 'e.g. Wikipedia / Crunchbase'}
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition"
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white placeholder:text-slate-400 outline-none transition focus:border-indigo-500"
                 />
               </div>
 
@@ -580,7 +584,7 @@ ${jsonLdScript}
                   value={newPlatformUrl}
                   onChange={(e) => setNewPlatformUrl(e.target.value)}
                   placeholder="https://en.wikipedia.org/wiki/..."
-                  className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none transition"
+                  className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white placeholder:text-slate-400 outline-none transition focus:border-indigo-500"
                 />
               </div>
             </div>
@@ -588,14 +592,14 @@ ${jsonLdScript}
             <div className="mt-6 flex justify-end gap-2.5">
               <button
                 onClick={() => setShowAddModal(false)}
-                className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-slate-700 transition cursor-pointer"
+                className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 cursor-pointer"
               >
                 {lang === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button
                 onClick={handleAddSameAs}
                 disabled={!newPlatformName.trim() || !newPlatformUrl.trim()}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition disabled:opacity-50 cursor-pointer"
+                className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50 cursor-pointer"
               >
                 {lang === 'zh' ? '确认添加' : 'Add Node'}
               </button>

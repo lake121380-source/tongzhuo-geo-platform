@@ -4,6 +4,7 @@ import { Article } from '../types';
 import { GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import { ArticleQualityPanel } from './ArticleQualityPanel';
+import { StatusBadge, qualityStatusSpec } from './StatusBadge';
 
 /** 内联助手在编辑器里需要的最小选项集（由 App 从真实 catalog 注入）。 */
 export interface EditorAssistantCatalog {
@@ -40,6 +41,19 @@ interface ArticleModalProps {
   ) => Promise<string>;
   /** 生成所需的真实选项；缺省时生成入口不渲染（而不是给一个假的空下拉）。 */
   editorAssistantCatalog?: EditorAssistantCatalog;
+  /**
+   * 该部署有没有可用的分发渠道。一条都没有时整个「发布并分发」按钮不渲染——
+   * 与其给一个必然失败的按钮，不如不给。
+   */
+  hasDistributionChannels?: boolean;
+  /**
+   * 「发布并分发」：先过发布门禁，再投递到**文章所属任务已绑定的启用渠道**。
+   *
+   * 刻意不在这里收渠道参数：`POST /articles/{id}/distribute` 只接受「已绑到该任务且
+   * 启用中」的渠道 id（否则 409 `distribution_channel_not_bound`），而前端拿不到那份
+   * 绑定清单。传空数组时服务端按任务边界自己解析——这是唯一不会 409 的正确调用方式。
+   */
+  onPublishAndDistribute?: (articleId: string) => Promise<void>;
 }
 
 export const ArticleModal: React.FC<ArticleModalProps> = ({
@@ -58,6 +72,8 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   onListEditorTitles,
   onEditorGenerate,
   editorAssistantCatalog,
+  hasDistributionChannels = false,
+  onPublishAndDistribute,
 }) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishError, setPublishError] = useState('');
@@ -67,7 +83,12 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
-  const [actionBusy, setActionBusy] = useState<'risk' | 'wechat' | 'image' | null>(null);
+  const [actionBusy, setActionBusy] = useState<'risk' | 'wechat' | 'image' | 'publish-and-distribute' | null>(null);
+  /** 「发布并分发」成功后延时关窗；卸载时清掉，免得定时器在已关闭的弹窗上再关一次。 */
+  const closeTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+  }, []);
   const [draft, setDraft] = useState({
     title: '',
     summary: '',
@@ -253,6 +274,23 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     }
   };
 
+  const handlePublishAndDistribute = async () => {
+    if (!article || actionBusy || !onPublishAndDistribute) return;
+    setActionBusy('publish-and-distribute');
+    setPublishError('');
+    try {
+      await onPublishAndDistribute(article.id);
+      setActionNotice(lang === 'zh'
+        ? '已发布，并已加入该任务已绑定渠道的分发队列。'
+        : 'Published and queued for the task’s bound channels.');
+      closeTimer.current = window.setTimeout(() => onClose(), 1500);
+    } catch (error) {
+      setPublishError(error instanceof Error ? error.message : (lang === 'zh' ? '发布或分发失败' : 'Publish or distribution failed'));
+    } finally {
+      setActionBusy(null);
+    }
+  };
+
   const handleRiskRecheck = async () => {
     if (!onRiskRecheck || actionBusy) return;
     setActionBusy('risk'); setActionNotice('');
@@ -316,10 +354,14 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               >
                 {article.status}
               </span>
-              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1 border border-slate-700 text-slate-500">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>{article.aiQualityStatus || (lang === 'zh' ? '后端未质检' : 'Not inspected')}</span>
-              </span>
+              {/* 质检徽标必须按「判定」显示：原来直接渲染 status（`completed`），
+                  用户看到英文枚举，也分不清"跑完了"与"通过了"（2026-09-14）。 */}
+              <StatusBadge
+                spec={qualityStatusSpec(article.aiQualityStatus, article.aiQualityDecision)}
+                lang={lang}
+                icon={<ShieldCheck className="w-3.5 h-3.5" />}
+                className="!text-[11px]"
+              />
               {apiMode && onRiskRecheck && (
                 <button type="button" onClick={() => void handleRiskRecheck()} disabled={actionBusy !== null} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-1 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50" title={lang === 'zh' ? '重新执行风险扫描' : 'Run risk scan again'}>
                   {actionBusy === 'risk' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
@@ -344,7 +386,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                   <input
                     value={draft.title}
                     onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                    className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xl font-black leading-tight text-white focus:border-red-500 focus:outline-none"
+                    className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xl font-black leading-tight text-white focus:border-indigo-500 focus:outline-none"
                     aria-label={lang === 'zh' ? '文章标题' : 'Article title'}
                   />
                 ) : (
@@ -372,7 +414,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                   rows={2}
                   value={draft.keywords}
                   onChange={(event) => setDraft((current) => ({ ...current, keywords: event.target.value }))}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white focus:border-red-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
                 />
               </div>
             ) : article.seoKeywords?.length > 0 && (
@@ -397,7 +439,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                   rows={14}
                   value={draft.content}
                   onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 p-4 text-xs leading-relaxed text-slate-100 focus:border-red-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950/80 p-4 text-xs leading-relaxed text-slate-100 focus:border-indigo-500 focus:outline-none"
                 />
               </div>
             ) : (
@@ -416,14 +458,14 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                     value={draft.summary}
                     onChange={(event) => setDraft((current) => ({ ...current, summary: event.target.value }))}
                     placeholder={lang === 'zh' ? '文章摘要' : 'Excerpt'}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-red-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
                   />
                   <textarea
                     rows={2}
                     value={draft.description}
                     onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
                     placeholder={lang === 'zh' ? 'Meta description（可选）' : 'Meta description (optional)'}
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-red-500 focus:outline-none"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
               ) : (
@@ -462,9 +504,15 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               </div>
               <div className="mt-1 text-xs leading-relaxed text-amber-100">{publishError}</div>
               <div className="mt-2 text-xs leading-relaxed text-amber-100">
-                {lang === 'zh'
-                  ? '可以这样处理：① 到下方「AI 质检」区点『启动 AI 优化』，让模型重写正文后重新质检；② 或点『编辑文章』自己改；③ 处理完再回来点一次「通过终审并上线」。'
-                  : 'Next steps: ① open the AI quality section below and click "Start AI optimization" to rewrite and re-check; ② or click "Edit article" to fix it yourself; ③ then press "Approve & Publish" again.'}
+                {/* 处理建议必须与质检**判定**一致：判定是「待人工复核」时，出路是人工放行，
+                    不是"去优化"——原来两句都写"去优化"，用户会一直绕圈（2026-09-14 哥哥报的 bug）。 */}
+                {article.aiQualityDecision === 'needs_review'
+                  ? (lang === 'zh'
+                    ? '质检结论是「待人工复核」——到下方「AI 质检」区填写理由后点『人工放行』，再回来发布；也可以先点『启动 AI 优化』重写后复检。'
+                    : 'The verdict is “needs review”: release it manually in the AI quality section below (a reason is required), or optimize and re-check first.')
+                  : (lang === 'zh'
+                    ? '可以这样处理：① 到下方「AI 质检」区点『启动 AI 优化』，让模型重写正文后重新质检；② 或点『编辑文章』自己改；③ 处理完再回来点一次「通过终审并上线」。'
+                    : 'Next steps: ① open the AI quality section below and click "Start AI optimization" to rewrite and re-check; ② or click "Edit article" to fix it yourself; ③ then press "Approve & Publish" again.')}
               </div>
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <button
@@ -472,7 +520,9 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                   onClick={() => qualitySectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
                   className="rounded-lg border border-amber-500/40 px-3 py-1.5 text-xs font-semibold text-amber-100 transition hover:bg-amber-900/40"
                 >
-                  {lang === 'zh' ? '去 AI 质检区优化 →' : 'Go to AI quality →'}
+                  {article.aiQualityDecision === 'needs_review'
+                    ? (lang === 'zh' ? '去 AI 质检区放行 →' : 'Go to AI quality →')
+                    : (lang === 'zh' ? '去 AI 质检区优化 →' : 'Go to AI quality →')}
                 </button>
                 <button
                   type="button"
@@ -525,14 +575,34 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                     </button>
                   )}
                   {article.status !== 'published' && (
-                <button
-                  onClick={() => void handlePublish()}
-                  disabled={isPublishing}
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                  <span>{isPublishing ? (lang === 'zh' ? '发布中...' : 'Publishing...') : (lang === 'zh' ? '通过终审并上线' : 'Approve & Publish')}</span>
-                </button>
+                    <>
+                      <button
+                        onClick={() => void handlePublish()}
+                        disabled={isPublishing}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        <span>{isPublishing ? (lang === 'zh' ? '发布中...' : 'Publishing...') : (lang === 'zh' ? '通过终审并上线' : 'Approve & Publish')}</span>
+                      </button>
+
+                      {/* 发布并分发：渠道由服务端按文章所属任务的绑定解析，所以这里不选渠道。
+                          按钮上写明去向，避免用户以为它发到了全部渠道。 */}
+                      {hasDistributionChannels && onPublishAndDistribute && (
+                        <button
+                          onClick={() => void handlePublishAndDistribute()}
+                          disabled={actionBusy === 'publish-and-distribute' || isPublishing}
+                          title={lang === 'zh'
+                            ? '发布后投递到本任务已绑定的启用渠道（不改变任务的渠道配置）'
+                            : 'Publish, then deliver to this task’s bound active channels'}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {actionBusy === 'publish-and-distribute' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                          <span>{actionBusy === 'publish-and-distribute'
+                            ? (lang === 'zh' ? '发布并分发中...' : 'Publishing & distributing...')
+                            : (lang === 'zh' ? '发布并分发到已绑渠道' : 'Publish & distribute')}</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </>
               )}

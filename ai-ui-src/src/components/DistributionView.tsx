@@ -18,9 +18,13 @@ import {
   Wrench,
   Search,
   Archive,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { DistributionChannel } from '../types';
 import PermissionNotice from './PermissionNotice';
+import { PageHeader } from './PageHeader';
+import { EmptyState } from './ui';
 import { describeApiError } from '../api/permissions';
 
 interface DistributionViewProps {
@@ -291,7 +295,13 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
       await onHostedSiteAction(id, action, payload);
       setActionError('');
     } catch (error) {
-      setActionError(describeApiError(error, lang === 'zh' ? 'Hosted Site 操作失败' : 'Hosted Site action failed', lang));
+      // 后端对这类前置失败会抛**英文** DomainException 原文，中文界面里直接显示英文
+      // 既看不懂也不知道该做什么——这里映射成可操作的中文。
+      const raw = describeApiError(error, lang === 'zh' ? 'Hosted Site 操作失败' : 'Hosted Site action failed', lang);
+      const localized = lang === 'zh' && /preflight/i.test(raw)
+        ? '上线前必须先「预检」：健康检查未通过或已过期（超过 15 分钟）。请先点「预检」再上线。'
+        : raw;
+      setActionError(localized);
     } finally {
       setHostedBusy('');
     }
@@ -498,34 +508,23 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-              <Radio className="w-6 h-6 text-purple-500" />
-              <span>{lang === 'zh' ? '多端渠道分发与 Agent 部署中台' : 'Multi-Site Distribution Hub'}</span>
-            </h1>
-            <span className="text-[11px] px-2.5 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-              桐灼GEO API v1
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            {lang === 'zh'
-              ? '通过 桐灼GEO Agent 协议，把生成文章推送到远端独立站与博客；站点设置可在本页「预览 → 执行同步」两步推送到各渠道前端的 /llms.txt 与 sitemap.xml。'
-              : 'Securely publish articles to remote static sites, WordPress blogs, and custom HTTP API endpoints.'}
-          </p>
-        </div>
-
-        {/* View Switcher Tabs */}
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={Radio}
+        group={lang === 'zh' ? '发布中心' : 'Publishing'}
+        title={lang === 'zh' ? '分发渠道' : 'Distribution'}
+        description={lang === 'zh'
+          ? '把发布好的文章投递到你的各个站点（独立站、博客、接口）；站点上的 llms.txt 与 sitemap.xml 也可以在这页同步过去。'
+          : 'Deliver published articles to your sites and sync llms.txt / sitemap.xml to each channel.'}
+        actions={(
+        <div className="flex items-center gap-1 rounded-xl bg-slate-800/50 p-1.5">
           <button
             onClick={() => setActiveTab('channels')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${
               activeTab === 'channels'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-                : 'bg-slate-800 text-slate-300 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <Server className="w-3.5 h-3.5" />
@@ -533,17 +532,18 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('deployment')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${
               activeTab === 'deployment'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
-                : 'bg-slate-800 text-slate-300 hover:text-white'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white'
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
             <span>{lang === 'zh' ? 'Agent 部署状态' : 'Agent Deployment'}</span>
           </button>
         </div>
-      </div>
+        )}
+      />
 
       {!canRead && <PermissionNotice lang={lang} mode="read" requiredScope="distribution:read" />}
       {canRead && !canWrite && <PermissionNotice lang={lang} requiredScope="distribution:write" />}
@@ -553,25 +553,30 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
         <>
           {/* Hosted Sites have their own lifecycle, quality gate and allocation domain. */}
           {apiMode && canManageHostedSites && (
-            <section className="space-y-4 rounded-2xl border border-cyan-500/20 bg-slate-900/80 p-5">
+            <section className="space-y-4 rounded-2xl bg-slate-900/80 p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Globe2 className="h-5 w-5 text-cyan-300" />
-                    <h2 className="text-base font-bold text-white">{lang === 'zh' ? 'Hosted Site 托管站点' : 'Hosted Sites'}</h2>
-                    <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-200">{hostedSites.length}</span>
+                    <Globe2 className="h-5 w-5 text-slate-400" />
+                    <h2 className="text-section-title">{lang === 'zh' ? 'Hosted Site 托管站点' : 'Hosted Sites'}</h2>
+                    <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[11.5px] font-semibold text-slate-300">{hostedSites.length}</span>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-400">{lang === 'zh' ? '独立站点的上线、索引、质量门禁和文章容量分配。' : 'Lifecycle, indexing, quality gates, and article capacity for hosted sites.'}</p>
+                  <p className="text-caption mt-1">{lang === 'zh' ? '独立站点的上线、索引、质量门禁和文章容量分配。' : 'Lifecycle, indexing, quality gates, and article capacity for hosted sites.'}</p>
                 </div>
                 <button
                   type="button"
                   disabled={!canWrite || !onCreateHostedSite}
                   onClick={() => { setHostedDraft(newHostedDraft()); setHostedEditingId(null); setHostedModal('create'); }}
-                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-cyan-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-cyan-500 disabled:opacity-50"
+                  className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                 ><Plus className="h-4 w-4" />{lang === 'zh' ? '新增 Hosted Site' : 'Add Hosted Site'}</button>
               </div>
-              {!canRead ? <div className="py-6 text-center text-xs text-slate-500">{lang === 'zh' ? '没有 Hosted Site 读取权限' : 'Hosted Site read access is not granted'}</div> : hostedSites.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-700 px-4 py-8 text-center text-xs text-slate-500">{lang === 'zh' ? '暂无托管站点' : 'No hosted sites yet'}</div>
+              {!canRead ? <div className="py-6 text-center text-[13px] text-slate-500">{lang === 'zh' ? '没有 Hosted Site 读取权限' : 'Hosted Site read access is not granted'}</div> : hostedSites.length === 0 ? (
+                <EmptyState
+                  compact
+                  icon={Globe2}
+                  title={lang === 'zh' ? '还没有托管站点' : 'No hosted sites yet'}
+                  description={lang === 'zh' ? '点右上角「新增 Hosted Site」创建第一个托管站点，之后可以配置上线、索引与文章容量。' : 'Use “Add Hosted Site” above to create your first one.'}
+                />
               ) : (
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   {hostedSites.map((site) => {
@@ -583,32 +588,49 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                     const statusLabel: Record<string, string> = { online: '线上', maintenance: '维护', archived: '已归档' };
                     const qualityLabel: Record<string, string> = { passed: '质量通过', pending: '待检查', blocked: '质量阻断' };
                     return (
-                      <article key={siteId} className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3">
+                      <article key={siteId} className="space-y-3 rounded-xl bg-slate-950/40 p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="truncate text-sm font-bold text-white">{String(site.name || profile.hostname || 'Hosted Site')}</h3>
-                              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${serving === 'online' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : serving === 'archived' ? 'border-rose-500/20 bg-rose-500/10 text-rose-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>{statusLabel[serving] || serving}</span>
+                              <h3 className="truncate text-card-title">{String(site.name || profile.hostname || 'Hosted Site')}</h3>
+                              <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${serving === 'online' ? 'bg-emerald-500/10 text-emerald-300' : serving === 'archived' ? 'bg-rose-500/10 text-rose-300' : 'bg-amber-500/10 text-amber-300'}`}>{statusLabel[serving] || serving}</span>
                             </div>
-                            <p className="mt-1 truncate font-mono text-[11px] text-slate-400">{String(profile.hostname || site.domain || '—')}</p>
+                            <p className="mt-1 truncate font-mono text-caption">{String(profile.hostname || site.domain || '—')}</p>
                           </div>
-                          <button type="button" onClick={() => startHostedEdit(site)} disabled={!canWrite || !onUpdateHostedSite} className="rounded-lg border border-slate-700 bg-slate-800 p-1.5 text-slate-300 hover:text-white disabled:opacity-50" title={lang === 'zh' ? '编辑站点配置' : 'Edit site'}><Pencil className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => startHostedEdit(site)} disabled={!canWrite || !onUpdateHostedSite} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-50" title={lang === 'zh' ? '编辑站点配置' : 'Edit site'}><Pencil className="h-4 w-4" /></button>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
-                          <div className="rounded-lg border border-slate-800 bg-slate-900 p-2"><span className="text-slate-500">质量</span><div className={quality === 'passed' ? 'text-emerald-300' : quality === 'blocked' ? 'text-rose-300' : 'text-amber-300'}>{qualityLabel[quality] || quality}</div></div>
-                          <div className="rounded-lg border border-slate-800 bg-slate-900 p-2"><span className="text-slate-500">索引</span><div className={indexing === 'index' ? 'text-emerald-300' : 'text-amber-300'}>{indexing === 'index' ? '允许' : '禁止'}</div></div>
-                          <div className="rounded-lg border border-slate-800 bg-slate-900 p-2"><span className="text-slate-500">今日容量</span><div className="text-slate-200">{String(profile.today_used_count ?? 0)} / {String(profile.daily_publish_limit ?? 0)}</div></div>
-                          <div className="rounded-lg border border-slate-800 bg-slate-900 p-2"><span className="text-slate-500">文章 / 线索</span><div className="text-slate-200">{String(site.articles_count ?? 0)} / {String(site.lead_count ?? 0)}</div></div>
+                        <div className="grid grid-cols-2 gap-2 text-[12px] sm:grid-cols-4">
+                          <div className="rounded-lg bg-slate-900 px-3 py-2"><span className="text-slate-500">质量</span><div className={quality === 'passed' ? 'text-emerald-300' : quality === 'blocked' ? 'text-rose-300' : 'text-amber-300'}>{qualityLabel[quality] || quality}</div></div>
+                          <div className="rounded-lg bg-slate-900 px-3 py-2"><span className="text-slate-500">索引</span><div className={indexing === 'index' ? 'text-emerald-300' : 'text-amber-300'}>{indexing === 'index' ? '允许' : '禁止'}</div></div>
+                          <div className="rounded-lg bg-slate-900 px-3 py-2"><span className="text-slate-500">今日容量</span><div className="text-slate-200">{String(profile.today_used_count ?? 0)} / {String(profile.daily_publish_limit ?? 0)}</div></div>
+                          <div className="rounded-lg bg-slate-900 px-3 py-2"><span className="text-slate-500">文章 / 线索</span><div className="text-slate-200">{String(site.articles_count ?? 0)} / {String(site.lead_count ?? 0)}</div></div>
                         </div>
-                        {site.last_error_message && <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-[11px] text-rose-200">{String(site.last_error_message)}</div>}
+                        {site.last_error_message && <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2 text-[12px] text-rose-200">{String(site.last_error_message)}</div>}
                         <div className="flex flex-wrap gap-1.5 border-t border-slate-800 pt-3">
-                          <button type="button" disabled={!canWrite || hostedBusy === `preflight-${siteId}`} onClick={() => void runHostedAction(siteId, 'preflight')} className="inline-flex items-center gap-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-[10px] font-semibold text-blue-200 disabled:opacity-50"><Search className="h-3 w-3" />预检</button>
-                          {serving === 'online' ? <button type="button" disabled={!canWrite || hostedBusy === `pause-${siteId}`} onClick={() => void runHostedAction(siteId, 'pause')} className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200 disabled:opacity-50"><Pause className="h-3 w-3" />暂停</button> : serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `activate-${siteId}`} onClick={() => void runHostedAction(siteId, 'activate')} className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold text-emerald-200 disabled:opacity-50"><Play className="h-3 w-3" />上线</button>}
-                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `maintenance-${siteId}`} onClick={() => void runHostedAction(siteId, 'maintenance')} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-200 disabled:opacity-50"><Wrench className="h-3 w-3" />维护</button>}
-                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `indexing-${siteId}`} onClick={() => void runHostedAction(siteId, 'indexing', { indexing_status: indexing === 'index' ? 'noindex' : 'index', quality_confirmed: quality === 'passed' })} className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-200 disabled:opacity-50"><Globe2 className="h-3 w-3" />{indexing === 'index' ? '设为不索引' : '允许索引'}</button>}
-                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `archive-${siteId}`} onClick={() => { if (window.confirm(`确认归档 ${String(profile.hostname || site.name || '')}？`)) void runHostedAction(siteId, 'archive', { hostname: String(profile.hostname || site.domain || '') }); }} className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-200 disabled:opacity-50"><Archive className="h-3 w-3" />归档</button>}
+                          <button type="button" disabled={!canWrite || hostedBusy === `preflight-${siteId}`} onClick={() => void runHostedAction(siteId, 'preflight')} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"><Search className="h-3 w-3" />预检</button>
+                          {serving === 'online' ? <button type="button" disabled={!canWrite || hostedBusy === `pause-${siteId}`} onClick={() => void runHostedAction(siteId, 'pause')} className="inline-flex h-8 items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-[11.5px] font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-50"><Pause className="h-3 w-3" />暂停</button> : serving !== 'archived' && (() => {
+                            // 上线有前置：后端要求健康检查通过（15 分钟内）且质检通过。
+                            // 不判前置的话按钮永远可点、点了必然 409（原来还会弹一句英文原始异常）。
+                            const activateReady = quality === 'passed';
+                            return (
+                              <button
+                                type="button"
+                                disabled={!canWrite || hostedBusy === `activate-${siteId}` || !activateReady}
+                                title={activateReady
+                                  ? undefined
+                                  : (lang === 'zh' ? '还不能上线：需要先点「预检」并通过健康检查与内容质检' : 'Run preflight first; health checks and quality must pass')}
+                                onClick={() => void runHostedAction(siteId, 'activate')}
+                                className="inline-flex h-8 items-center gap-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-[11.5px] font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <Play className="h-3 w-3" />{lang === 'zh' ? '上线' : 'Activate'}
+                              </button>
+                            );
+                          })()}
+                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `maintenance-${siteId}`} onClick={() => void runHostedAction(siteId, 'maintenance')} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"><Wrench className="h-3 w-3" />维护</button>}
+                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `indexing-${siteId}`} onClick={() => void runHostedAction(siteId, 'indexing', { indexing_status: indexing === 'index' ? 'noindex' : 'index', quality_confirmed: quality === 'passed' })} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"><Globe2 className="h-3 w-3" />{indexing === 'index' ? '设为不索引' : '允许索引'}</button>}
+                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `archive-${siteId}`} onClick={() => { if (window.confirm(`确认归档 ${String(profile.hostname || site.name || '')}？`)) void runHostedAction(siteId, 'archive', { hostname: String(profile.hostname || site.domain || '') }); }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 text-[11.5px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"><Archive className="h-3 w-3" />归档</button>}
                         </div>
-                        {onAssignHostedArticle && serving !== 'archived' && <div className="flex gap-2 border-t border-slate-800 pt-3"><input value={hostedArticleIds[siteId] || ''} onChange={(event) => setHostedArticleIds((current) => ({ ...current, [siteId]: event.target.value }))} placeholder={lang === 'zh' ? '输入文章 ID 分配容量' : 'Article ID'} className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] text-white" /><button type="button" disabled={!canWrite || hostedBusy === `assign-${siteId}`} onClick={() => void assignHostedArticle(siteId)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-[10px] font-semibold text-slate-200 disabled:opacity-50">分配文章</button></div>}
+                        {onAssignHostedArticle && serving !== 'archived' && <div className="flex items-center gap-2 border-t border-slate-800 pt-3"><input value={hostedArticleIds[siteId] || ''} onChange={(event) => setHostedArticleIds((current) => ({ ...current, [siteId]: event.target.value }))} placeholder={lang === 'zh' ? '输入文章 ID 分配容量' : 'Article ID'} className="h-9 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /><button type="button" disabled={!canWrite || hostedBusy === `assign-${siteId}`} onClick={() => void assignHostedArticle(siteId)} className="inline-flex h-9 shrink-0 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50">分配文章</button></div>}
                       </article>
                     );
                   })}
@@ -618,13 +640,13 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           )}
 
           <div className="flex justify-between items-center">
-            <span className="text-xs text-slate-400 font-semibold">
+            <span className="text-caption font-semibold">
               {lang === 'zh' ? `当前管理 ${channels.filter((channel) => channel.type !== 'hosted_site').length} 个分发端点` : `${channels.filter((channel) => channel.type !== 'hosted_site').length} endpoints`}
             </span>
             <button
               onClick={() => setIsModalOpen(true)}
               disabled={!canWrite}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/20 transition"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50"
             >
               <Plus className="w-4 h-4" />
               <span>{lang === 'zh' ? '添加分发节点' : 'Add Endpoint'}</span>
@@ -633,27 +655,36 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
 
           {/* Distribution Channels Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {!canRead ? <div className="md:col-span-3 text-center py-8 text-xs text-slate-500">{lang === 'zh' ? '没有分发渠道读取权限' : 'Distribution read access is not granted'}</div> : channels.filter((channel) => channel.type !== 'hosted_site').map((channel) => {
+            {!canRead ? <div className="md:col-span-3 text-center py-8 text-[13px] text-slate-500">{lang === 'zh' ? '没有分发渠道读取权限' : 'Distribution read access is not granted'}</div> : channels.filter((channel) => channel.type !== 'hosted_site').length === 0 ? (
+              <div className="md:col-span-3">
+                <EmptyState
+                  compact
+                  icon={Radio}
+                  title={lang === 'zh' ? '还没有分发渠道' : 'No channels yet'}
+                  description={lang === 'zh' ? '点上方「添加分发节点」把文章投递到你的独立站、博客或接口。' : 'Use “Add Endpoint” above to deliver articles to your sites.'}
+                />
+              </div>
+            ) : channels.filter((channel) => channel.type !== 'hosted_site').map((channel) => {
               const isSyncing = syncingId === channel.id || channel.status === 'syncing';
               return (
                 <div
                   key={channel.id}
-                  className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-slate-700 transition"
+                  className="rounded-2xl bg-slate-900/80 p-5 flex flex-col justify-between space-y-4 transition hover:shadow-md"
                 >
                   <div className="space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 font-bold border border-purple-500/20">
+                        <span className="rounded-md bg-slate-800 px-2 py-0.5 text-[11.5px] font-semibold text-slate-300">
                           {channel.type === 'tongzhuo_geo_agent' ? '桐灼GEO Agent' : channel.type === 'wordpress_rest' ? 'WordPress REST' : channel.type === 'hosted_site' ? 'Hosted Site' : 'HTTP API'}
                         </span>
-                        <h3 className="text-sm font-bold text-white mt-1.5 line-clamp-1">{channel.name}</h3>
+                        <h3 className="text-card-title mt-1.5 line-clamp-1">{channel.name}</h3>
                       </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+                      <span className={`text-[11.5px] px-2.5 py-0.5 rounded-full flex items-center gap-1 ${
                         channel.status === 'active'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          ? 'bg-emerald-500/10 text-emerald-400'
                           : channel.status === 'deleting'
-                            ? 'bg-rose-500/10 text-rose-300 border-rose-500/20'
-                            : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+                            ? 'bg-rose-500/10 text-rose-300'
+                            : 'bg-amber-500/10 text-amber-300'
                       }`}>
                         <CheckCircle2 className="w-2.5 h-2.5" />
                         <span>{({
@@ -666,10 +697,10 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs space-y-1.5">
+                    <div className="space-y-1.5 rounded-xl bg-slate-950/40 px-4 py-3 text-[12.5px]">
                       <div className="text-slate-400 truncate">
                         <span className="text-slate-400">{lang === 'zh' ? '目标 URL' : 'Target URL'}:</span>{' '}
-                        <span className="text-slate-200 font-mono text-[11px]">{channel.targetUrl}</span>
+                        <span className="text-slate-200 font-mono text-[12px]">{channel.targetUrl}</span>
                       </div>
                       <div className="flex justify-between text-slate-400">
                         <span>{lang === 'zh' ? '鉴权方式' : 'Auth'}:</span>
@@ -677,22 +708,22 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                       </div>
                       <div className="flex justify-between text-slate-400 pt-1 border-t border-slate-800">
                         <span>{lang === 'zh' ? '累计接收' : 'Total Pushed'}:</span>
-                        <strong className="text-purple-400 font-mono">{channel.articlesCount} {lang === 'zh' ? '篇' : 'arts'}</strong>
+                        <strong className="text-indigo-400 font-mono">{channel.articlesCount} {lang === 'zh' ? '篇' : 'arts'}</strong>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <div className="space-y-2 border-t border-slate-800 pt-2">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-caption">
                         {lang === 'zh' ? '最后同步' : 'Last sync'}: {channel.lastSyncedAt ? channel.lastSyncedAt.split(' ')[0] : '—'}
                       </span>
                       <button
                         onClick={() => void handleSync(channel.id)}
                         disabled={isSyncing || !canRead}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white disabled:opacity-50 transition border border-slate-700"
+                        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-purple-400' : 'text-slate-300'}`} />
+                        <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-indigo-400' : 'text-slate-400'}`} />
                         <span>{isSyncing ? (lang === 'zh' ? '检查中...' : 'Checking...') : (lang === 'zh' ? '健康检查' : 'Health check')}</span>
                       </button>
                     </div>
@@ -703,14 +734,14 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                             type="button"
                             disabled={busyAction === `status-${channel.id}`}
                             onClick={() => void runChannelAction(`status-${channel.id}`, () => onSetChannelStatus(channel.id, channel.status !== 'active'), channel.status === 'active' ? '暂停渠道失败' : '启用渠道失败')}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-200 disabled:opacity-50"
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                           >
                             {channel.status === 'active' ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
                             {channel.status === 'active' ? '暂停' : '启用'}
                           </button>
                         )}
                         {onUpdateChannel && channel.status !== 'deleting' && (
-                          <button type="button" onClick={() => beginEdit(channel)} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-200">
+                          <button type="button" onClick={() => beginEdit(channel)} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800">
                             <Pencil className="h-3 w-3" />编辑
                           </button>
                         )}
@@ -722,18 +753,18 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                               const secret = await onRotateChannelSecret(channel.id);
                               if (secret) setOneTimeSecret(secret);
                             }, '轮换密钥失败')}
-                            className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold text-amber-200 disabled:opacity-50"
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-[11.5px] font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-50"
                           >
                             <Key className="h-3 w-3" />轮换密钥
                           </button>
                         )}
                         {onRevealChannelSecret && canManageSecrets && channel.status !== 'deleting' && (
-                          <button type="button" onClick={() => { setSecretPassword(''); setSecretPrompt({ id: channel.id, purpose: 'reveal' }); }} className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-200">
+                          <button type="button" onClick={() => { setSecretPassword(''); setSecretPrompt({ id: channel.id, purpose: 'reveal' }); }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800">
                             <Key className="h-3 w-3" />查看密钥
                           </button>
                         )}
                         {onDownloadChannelPackage && canManageSecrets && channel.type === 'tongzhuo_geo_agent' && channel.status !== 'deleting' && (
-                          <button type="button" onClick={() => { setSecretPassword(''); setSecretPrompt({ id: channel.id, purpose: 'package' }); }} className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-200">
+                          <button type="button" onClick={() => { setSecretPassword(''); setSecretPrompt({ id: channel.id, purpose: 'package' }); }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800">
                             <Download className="h-3 w-3" />接入包
                           </button>
                         )}
@@ -742,7 +773,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                             type="button"
                             disabled={busyAction === `capabilities-${channel.id}`}
                             onClick={() => void runChannelAction(`capabilities-${channel.id}`, () => onRefreshChannelCapabilities(channel.id), '刷新前端能力失败')}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-200 disabled:opacity-50"
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                           >
                             <RefreshCw className="h-3 w-3" />刷新能力
                           </button>
@@ -752,7 +783,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                             type="button"
                             disabled={busyAction === `preview-delete-${channel.id}`}
                             onClick={() => void beginDelete(channel)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-200 disabled:opacity-50"
+                            className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 text-[11.5px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"
                           >
                             <Trash2 className="h-3 w-3" />删除
                           </button>
@@ -766,23 +797,23 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           </div>
 
           {apiMode && (onPreviewSettingsSync || onSyncSettings) && (
-            <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-5 space-y-3">
+            <div className="space-y-3 rounded-2xl bg-slate-900/80 p-5">
               <div>
-                <h3 className="text-sm font-bold text-white">{lang === 'zh' ? '站点设置同步到渠道前端' : 'Sync site settings to channel frontends'}</h3>
-                <p className="mt-1 text-[11px] text-slate-400">
+                <h3 className="text-section-title">{lang === 'zh' ? '站点设置同步到渠道前端' : 'Sync site settings to channel frontends'}</h3>
+                <p className="text-caption mt-1">
                   {lang === 'zh'
                     ? '改了站点信息、主题或首页编排后，要推到各渠道前端才生效。先预览、再同步——预览和执行必须用同一个范围。'
                     : 'After changing site info, theme or homepage composition, push it to channel frontends. Preview first, and use the same scope for both.'}
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-300">
+              <div className="flex flex-wrap items-center gap-3 text-[13px] text-slate-300">
                 <label className="inline-flex items-center gap-1.5">
-                  <input type="radio" checked={syncScope === 'all'} onChange={() => { setSyncScope('all'); setSyncPreview(null); setSyncConfirmed(false); }} className="accent-purple-500" />
+                  <input type="radio" checked={syncScope === 'all'} onChange={() => { setSyncScope('all'); setSyncPreview(null); setSyncConfirmed(false); }} className="accent-indigo-500" />
                   {lang === 'zh' ? '全部可同步渠道' : 'All syncable channels'}
                 </label>
                 <label className="inline-flex items-center gap-1.5">
-                  <input type="radio" checked={syncScope === 'selected'} onChange={() => { setSyncScope('selected'); setSyncPreview(null); setSyncConfirmed(false); }} className="accent-purple-500" />
+                  <input type="radio" checked={syncScope === 'selected'} onChange={() => { setSyncScope('selected'); setSyncPreview(null); setSyncConfirmed(false); }} className="accent-indigo-500" />
                   {lang === 'zh' ? '选定渠道' : 'Selected channels'}
                 </label>
                 {syncScope === 'selected' && (
@@ -797,7 +828,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                             if (next.has(channel.id)) next.delete(channel.id); else next.add(channel.id);
                             return next;
                           })}
-                          className="accent-purple-500"
+                          className="accent-indigo-500"
                         />
                         {channel.name}
                       </label>
@@ -815,11 +846,11 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                     setSyncPreview(report ?? null);
                     setSyncConfirmed(false);
                   }, '同步预览失败')}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-[11px] font-semibold text-slate-200 disabled:opacity-50"
+                  className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                 >
                   <RefreshCw className="h-3 w-3" />{lang === 'zh' ? '预览' : 'Preview'}
                 </button>
-                <label className="inline-flex items-center gap-1.5 text-[11px] text-amber-200">
+                <label className="inline-flex items-center gap-1.5 text-[13px] text-amber-200">
                   <input type="checkbox" checked={syncConfirmed} onChange={(event) => setSyncConfirmed(event.target.checked)} className="accent-amber-500" />
                   {lang === 'zh' ? '我已查看预览并确认前台体验风险' : 'I reviewed the preview and accept the frontend risk'}
                 </label>
@@ -830,28 +861,33 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                     const result = await onSyncSettings?.(syncScope, Array.from(syncSelected), syncConfirmed);
                     setSyncResult(result ?? null);
                   }, '同步失败')}
-                  className="inline-flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-purple-500 disabled:opacity-50"
+                  className="inline-flex h-9 items-center gap-1 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50"
                 >
                   {lang === 'zh' ? '执行同步' : 'Sync now'}
                 </button>
               </div>
 
-              {syncPreview && <pre className="max-h-40 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-[10px] text-slate-400">{JSON.stringify(syncPreview, null, 2)}</pre>}
-              {syncResult && <pre className="max-h-40 overflow-auto rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3 text-[10px] text-emerald-200">{JSON.stringify(syncResult, null, 2)}</pre>}
+              {syncPreview && <pre className="max-h-40 overflow-auto rounded-xl bg-slate-950/40 p-3 text-[11.5px] text-slate-400">{JSON.stringify(syncPreview, null, 2)}</pre>}
+              {syncResult && <pre className="max-h-40 overflow-auto rounded-xl bg-emerald-950/20 p-3 text-[11.5px] text-emerald-200">{JSON.stringify(syncResult, null, 2)}</pre>}
             </div>
           )}
 
           {apiMode && (
-            <div className="bg-slate-900/80 rounded-2xl border border-slate-800 overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+            <div className="overflow-hidden rounded-2xl bg-slate-900/80">
+              <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
                 <div>
-                  <h3 className="text-sm font-bold text-white">真实分发任务与回执</h3>
-                  <p className="text-[11px] text-slate-400 mt-1">队列状态来自 桐灼GEO 后端；“已同步”才代表远端回执已确认。</p>
+                  <h3 className="text-section-title">真实分发任务与回执</h3>
+                  <p className="text-caption mt-1">队列状态来自 桐灼GEO 后端；“已同步”才代表远端回执已确认。</p>
                 </div>
-                <span className="text-[11px] text-slate-500">{distributionJobs.length} 条</span>
+                <span className="text-caption">{distributionJobs.length} 条</span>
               </div>
               {distributionJobs.length === 0 ? (
-                <div className="px-5 py-8 text-center text-xs text-slate-500">暂无分发任务</div>
+                <EmptyState
+                  compact
+                  icon={Radio}
+                  title={lang === 'zh' ? '暂无分发任务' : 'No distribution jobs'}
+                  description={lang === 'zh' ? '在「文章」页把文章分发到渠道后，任务与远端回执会出现在这里。' : 'Distribute an article to a channel and its job will show up here.'}
+                />
               ) : (
                 <div className="divide-y divide-slate-800">
                   {distributionJobs.map((job) => {
@@ -863,23 +899,33 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                       queued: '排队中', sending: '发送中', synced: '已同步', failed: '失败', outcome_unknown: '待对账',
                     };
                     return (
-                      <div key={String(job.id)} className="px-5 py-3 flex flex-col md:flex-row md:items-center gap-3 md:gap-5">
+                      <div key={String(job.id)} className="px-5 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-5 transition hover:bg-slate-800/40">
                         <div className="min-w-0 flex-1">
-                          <div className="text-xs font-semibold text-slate-200 truncate">{String(article.title || `文章 #${job.article_id || '—'}`)}</div>
-                          <div className="text-[11px] text-slate-500 mt-1 truncate">{String(channel.name || channel.domain || `渠道 #${job.channel_id || '—'}`)}</div>
+                          <div className="text-[13.5px] font-semibold text-slate-200 truncate">{String(article.title || `文章 #${job.article_id || '—'}`)}</div>
+                          <div className="text-caption mt-1 truncate">{String(channel.name || channel.domain || `渠道 #${job.channel_id || '—'}`)}</div>
                         </div>
-                        <div className="flex items-center gap-2 text-[11px]">
-                          {status === 'failed' ? <AlertCircle className="w-3.5 h-3.5 text-rose-400" /> : <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                        <div className="flex items-center gap-2 text-[12.5px]">
+                          {status === 'synced'
+                            ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            : status === 'failed'
+                              ? <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                              : status === 'outcome_unknown'
+                                ? <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                                : <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />}
                           <span className={status === 'failed' ? 'text-rose-300' : status === 'synced' ? 'text-emerald-300' : 'text-amber-300'}>{statusLabel[status] || status}</span>
                         </div>
-                        <div className="text-[11px] text-slate-500 md:w-48 truncate" title={String(job.last_error_message || '')}>
-                          {status === 'failed' ? String(job.last_error_message || '远端返回失败') : String(job.remote_url || job.remote_id || '等待 Worker 回执')}
+                        <div className="text-caption md:w-48 truncate" title={String(job.last_error_message || '')}>
+                          {status === 'failed'
+                            ? String(job.last_error_message || (lang === 'zh' ? '远端返回失败' : 'Remote failed'))
+                            : status === 'outcome_unknown'
+                              ? (lang === 'zh' ? '远端可能已发出但没收到回执：确认远端状态后，可「修正分发内容」重投，或删除该任务' : 'No receipt from the remote — verify it, then re-send or delete')
+                              : String(job.remote_url || job.remote_id || (lang === 'zh' ? '等待 Worker 回执' : 'Waiting for receipt'))}
                         </div>
                         {retryable && onRetryDistribution && canWrite && (
                           <button
                             type="button"
                             onClick={() => void handleRetry(String(job.id))}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
                           >
                             <RotateCcw className="w-3.5 h-3.5" /> 重试
                           </button>
@@ -888,7 +934,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                           <button
                             type="button"
                             onClick={() => void openJobEdit(String(job.id), String(job.article_id || ''))}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
                           >
                             <Pencil className="w-3.5 h-3.5" /> 修正
                           </button>
@@ -897,7 +943,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                           <button
                             type="button"
                             onClick={() => void runChannelAction(`job-delete-${job.id}`, () => onDeleteDistributionJob(String(job.id)), '删除分发记录失败')}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-200 border border-rose-500/30"
+                            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 text-[13px] font-semibold text-rose-200 transition hover:bg-rose-500/20"
                           >
                             <Trash2 className="w-3.5 h-3.5" /> 删除
                           </button>
@@ -911,35 +957,35 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           )}
 
           {/* Deployment availability banner */}
-          {!apiMode && <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 flex items-center justify-between">
+          {!apiMode && <div className="flex items-center justify-between gap-3 rounded-2xl bg-slate-900/80 p-5">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400">
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-xs font-bold text-white">Agent 安装包由后端管理</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <h4 className="text-[13.5px] font-semibold text-white">Agent 安装包由后端管理</h4>
+                <p className="text-caption mt-0.5">
                   当前部署实例尚未提供签名安装包下载；前端不会生成密钥或可执行脚本。
                 </p>
               </div>
             </div>
             <button
               onClick={() => setActiveTab('deployment')}
-              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700 transition shrink-0"
+              className="inline-flex h-9 shrink-0 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
             >
               查看状态
             </button>
           </div>}
         </>
       ) : (
-          <div className="lg:col-span-8 bg-slate-900/80 p-6 rounded-2xl border border-slate-800 space-y-5">
+          <div className="space-y-5 rounded-2xl bg-slate-900/80 p-6">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-300 shrink-0">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-300">
                 <Shield className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base font-bold text-white">{lang === 'zh' ? 'Agent 部署状态' : 'Agent deployment status'}</h2>
-                <p className="text-xs text-slate-400 mt-1">
+                <h2 className="text-section-title">{lang === 'zh' ? 'Agent 部署状态' : 'Agent deployment status'}</h2>
+                <p className="text-[13px] text-slate-400 mt-1">
                   {lang === 'zh'
                     ? '安装包、签名密钥和版本信息必须由 桐灼GEO 后端签发；当前前端不会生成或下载可执行脚本。'
                     : 'Packages, signing credentials, and versions must be issued by the 桐灼GEO backend. This UI does not generate or download executable scripts.'}
@@ -947,22 +993,22 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[13px]">
+              <div className="rounded-xl bg-slate-950/40 p-4">
                 <div className="text-slate-500">{lang === 'zh' ? '安装包接口' : 'Package endpoint'}</div>
                 <div className="mt-2 font-semibold text-amber-300">{lang === 'zh' ? '尚未提供' : 'Not available'}</div>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="rounded-xl bg-slate-950/40 p-4">
                 <div className="text-slate-500">{lang === 'zh' ? '签名密钥' : 'Signing secret'}</div>
                 <div className="mt-2 font-semibold text-amber-300">{lang === 'zh' ? '仅由后端签发' : 'Backend-issued only'}</div>
               </div>
-              <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="rounded-xl bg-slate-950/40 p-4">
                 <div className="text-slate-500">{lang === 'zh' ? '校验摘要' : 'Checksum'}</div>
                 <div className="mt-2 font-semibold text-amber-300">{lang === 'zh' ? '等待后端接口' : 'Awaiting backend API'}</div>
               </div>
             </div>
 
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-xs leading-relaxed text-blue-200">
+            <div className="rounded-xl bg-slate-950/40 p-4 text-[13px] leading-relaxed text-slate-300">
               {lang === 'zh'
                 ? '可以先在“已连入站点节点”中创建渠道并使用后端返回的一次性凭据。关闭一次性凭据提示后，密钥不会再次显示。待后端提供带版本和校验摘要的安装包接口后，再开放下载。'
                 : 'You can create a channel from Connected Sites and use the one-time credentials returned by the backend. Once dismissed, the secret is not shown again. Downloads will be enabled after the backend exposes a versioned package and checksum endpoint.'}
@@ -972,9 +1018,9 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
 
       {hostedModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <form onSubmit={(event) => void submitHosted(event)} className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-cyan-500/30 bg-slate-900 p-6 shadow-2xl">
+          <form onSubmit={(event) => void submitHosted(event)} className="max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="flex items-center gap-2 text-base font-bold text-white"><Globe2 className="h-5 w-5 text-cyan-300" />{hostedModal === 'edit' ? '编辑 Hosted Site' : '新增 Hosted Site'}</h3>
+              <h3 className="flex items-center gap-2 text-base font-bold text-white"><Globe2 className="h-5 w-5 text-indigo-500" />{hostedModal === 'edit' ? '编辑 Hosted Site' : '新增 Hosted Site'}</h3>
               <button type="button" onClick={() => setHostedModal(null)} className="text-slate-400 hover:text-white">✕</button>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -985,20 +1031,20 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                 ['min_publish_interval_minutes', '最小发布间隔（分钟）', 'number'], ['min_articles_before_index', '允许索引前最少文章', 'number'],
                 ['contact_email', '联系邮箱', 'email'], ['lead_form_slugs', 'Lead Form Slugs（逗号分隔）', 'text'],
               ] as Array<[string, string, string]>).map(([key, label, type]) => (
-                <label key={key} className="text-[11px] font-semibold text-slate-300">{label}
-                  <input required={['name', 'hostname', 'topic', 'locale', 'timezone', 'template_key'].includes(key)} type={type} value={hostedDraft[key] || ''} onChange={(event) => setHostedDraft((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:outline-none" />
+                <label key={key} className="text-[12px] font-semibold text-slate-300">{label}
+                  <input required={['name', 'hostname', 'topic', 'locale', 'timezone', 'template_key'].includes(key)} type={type} value={hostedDraft[key] || ''} onChange={(event) => setHostedDraft((current) => ({ ...current, [key]: event.target.value }))} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
                 </label>
               ))}
-              <label className="text-[11px] font-semibold text-slate-300 sm:col-span-2">站点描述
-                <textarea value={hostedDraft.site_description || ''} onChange={(event) => setHostedDraft((current) => ({ ...current, site_description: event.target.value }))} rows={2} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:outline-none" />
+              <label className="text-[12px] font-semibold text-slate-300 sm:col-span-2">站点描述
+                <textarea value={hostedDraft.site_description || ''} onChange={(event) => setHostedDraft((current) => ({ ...current, site_description: event.target.value }))} rows={2} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" />
               </label>
-              <label className="text-[11px] font-semibold text-slate-300 sm:col-span-2">About 内容
-                <textarea value={hostedDraft.about_content || ''} onChange={(event) => setHostedDraft((current) => ({ ...current, about_content: event.target.value }))} rows={3} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white focus:border-cyan-500 focus:outline-none" />
+              <label className="text-[12px] font-semibold text-slate-300 sm:col-span-2">About 内容
+                <textarea value={hostedDraft.about_content || ''} onChange={(event) => setHostedDraft((current) => ({ ...current, about_content: event.target.value }))} rows={3} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" />
               </label>
             </div>
             <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
-              <button type="button" onClick={() => setHostedModal(null)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300">取消</button>
-              <button type="submit" disabled={hostedBusy === 'save'} className="rounded-lg bg-cyan-600 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">{hostedBusy === 'save' ? '保存中...' : '保存 Hosted Site'}</button>
+              <button type="button" onClick={() => setHostedModal(null)} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">取消</button>
+              <button type="submit" disabled={hostedBusy === 'save'} className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50">{hostedBusy === 'save' ? '保存中...' : '保存 Hosted Site'}</button>
             </div>
           </form>
         </div>
@@ -1009,16 +1055,16 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-amber-500/30 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-2 text-amber-300 font-bold"><Key className="w-5 h-5" />{lang === 'zh' ? '渠道密钥仅显示这一次' : 'One-time channel secret'}</div>
-            <p className="text-xs text-slate-400">{lang === 'zh' ? '请立即复制并保存。后端只保存加密密文，关闭后无法再次查看。' : 'Copy it now. The backend stores only ciphertext and cannot show it again.'}</p>
-            <div className="space-y-2 text-xs">
+            <p className="text-caption">{lang === 'zh' ? '请立即复制并保存。后端只保存加密密文，关闭后无法再次查看。' : 'Copy it now. The backend stores only ciphertext and cannot show it again.'}</p>
+            <div className="space-y-2 text-[12.5px]">
               <div className="text-slate-400">Key ID</div>
-              <code className="block bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 break-all">{oneTimeSecret.key_id}</code>
+              <code className="block rounded-xl bg-slate-950/40 p-3 text-slate-200 break-all">{oneTimeSecret.key_id}</code>
               <div className="text-slate-400">Secret</div>
-              <code className="block bg-slate-950 border border-slate-800 rounded-xl p-3 text-amber-200 break-all">{oneTimeSecret.secret}</code>
+              <code className="block rounded-xl bg-slate-950/40 p-3 text-amber-200 break-all">{oneTimeSecret.secret}</code>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => navigator.clipboard?.writeText(`${oneTimeSecret.key_id}\n${oneTimeSecret.secret}`)} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200">{lang === 'zh' ? '复制密钥' : 'Copy credentials'}</button>
-              <button type="button" onClick={() => setOneTimeSecret(null)} className="px-4 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white">{lang === 'zh' ? '我已保存' : 'I saved it'}</button>
+              <button type="button" onClick={() => navigator.clipboard?.writeText(`${oneTimeSecret.key_id}\n${oneTimeSecret.secret}`)} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">{lang === 'zh' ? '复制密钥' : 'Copy credentials'}</button>
+              <button type="button" onClick={() => setOneTimeSecret(null)} className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500">{lang === 'zh' ? '我已保存' : 'I saved it'}</button>
             </div>
           </div>
         </div>
@@ -1039,40 +1085,40 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                 meta_description: draft.meta_description,
               }) ?? Promise.resolve(), '修正分发内容失败');
             }}
-            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-3 shadow-2xl"
+            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-3 shadow-2xl"
           >
             <div className="flex items-center gap-2 text-white font-bold"><Pencil className="w-4 h-4" />{lang === 'zh' ? '修正这条分发的内容' : 'Correct this distribution'}
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-caption">
               {lang === 'zh'
                 ? '这里改的是**这次分发推出去的内容快照**，不会改动文章本身。改完需要重新分发才生效。'
                 : 'This edits the content snapshot for this distribution only; the article itself is untouched.'}
             </p>
-            <label className="block text-[11px] text-slate-400">
+            <label className="block text-caption">
               {lang === 'zh' ? '标题' : 'Title'}
-              <input value={jobEdit.title} onChange={(event) => setJobEdit({ ...jobEdit, title: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
+              <input value={jobEdit.title} onChange={(event) => setJobEdit({ ...jobEdit, title: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
             </label>
-            <label className="block text-[11px] text-slate-400">
+            <label className="block text-caption">
               {lang === 'zh' ? '摘要' : 'Excerpt'}
-              <input value={jobEdit.excerpt} onChange={(event) => setJobEdit({ ...jobEdit, excerpt: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
+              <input value={jobEdit.excerpt} onChange={(event) => setJobEdit({ ...jobEdit, excerpt: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
             </label>
-            <label className="block text-[11px] text-slate-400">
+            <label className="block text-caption">
               {lang === 'zh' ? '正文' : 'Content'}
-              <textarea required rows={10} value={jobEdit.content} onChange={(event) => setJobEdit({ ...jobEdit, content: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-white" />
+              <textarea required rows={10} value={jobEdit.content} onChange={(event) => setJobEdit({ ...jobEdit, content: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
             </label>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="block text-[11px] text-slate-400">
+              <label className="block text-caption">
                 {lang === 'zh' ? '关键词' : 'Keywords'}
-                <input value={jobEdit.keywords} onChange={(event) => setJobEdit({ ...jobEdit, keywords: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
+                <input value={jobEdit.keywords} onChange={(event) => setJobEdit({ ...jobEdit, keywords: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
               </label>
-              <label className="block text-[11px] text-slate-400">
+              <label className="block text-caption">
                 {lang === 'zh' ? '描述' : 'Meta description'}
-                <input value={jobEdit.meta_description} onChange={(event) => setJobEdit({ ...jobEdit, meta_description: event.target.value })} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
+                <input value={jobEdit.meta_description} onChange={(event) => setJobEdit({ ...jobEdit, meta_description: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
               </label>
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <button type="button" onClick={() => setJobEdit(null)} className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-400">{lang === 'zh' ? '取消' : 'Cancel'}</button>
-              <button type="submit" disabled={jobEdit.title.trim() === '' || jobEdit.content.trim() === ''} className="rounded-lg bg-purple-600 px-4 py-1.5 text-xs font-bold text-white hover:bg-purple-500 disabled:opacity-50">{lang === 'zh' ? '保存修正' : 'Save'}</button>
+              <button type="button" onClick={() => setJobEdit(null)} className="inline-flex h-9 items-center rounded-xl px-3.5 text-[13px] font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-white">{lang === 'zh' ? '取消' : 'Cancel'}</button>
+              <button type="submit" disabled={jobEdit.title.trim() === '' || jobEdit.content.trim() === ''} className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50">{lang === 'zh' ? '保存修正' : 'Save'}</button>
             </div>
           </form>
         </div>
@@ -1096,27 +1142,27 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                 void runChannelAction(`package-${prompt.id}`, () => onDownloadChannelPackage?.(prompt.id, password) ?? Promise.resolve(), '接入包下载失败');
               }
             }}
-            className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
+            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-center gap-2 text-white font-bold"><Key className="w-5 h-5" />{lang === 'zh' ? '需要二次验证' : 'Confirm your password'}</div>
-            <p className="text-xs text-slate-400">
+            <p className="text-caption">
               {secretPrompt.purpose === 'reveal'
                 ? (lang === 'zh' ? '查看渠道密钥的明文属于敏感操作，需要重新输入你的登录密码。' : 'Revealing the plaintext channel secret requires your login password.')
                 : (lang === 'zh' ? '接入包里含有可用密钥，需要重新输入你的登录密码。' : 'The package contains a usable secret; re-enter your login password.')}
             </p>
-            <label className="block text-xs text-slate-400">
+            <label className="block text-caption">
               {lang === 'zh' ? '登录密码' : 'Password'}
               <input
                 type="password"
                 autoFocus
                 value={secretPassword}
                 onChange={(event) => setSecretPassword(event.target.value)}
-                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white"
+                className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
               />
             </label>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => { setSecretPrompt(null); setSecretPassword(''); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400">{lang === 'zh' ? '取消' : 'Cancel'}</button>
-              <button type="submit" disabled={secretPassword === ''} className="px-4 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-50">{lang === 'zh' ? '确认' : 'Confirm'}</button>
+              <button type="button" onClick={() => { setSecretPrompt(null); setSecretPassword(''); }} className="inline-flex h-9 items-center rounded-xl px-3.5 text-[13px] font-semibold text-slate-400 transition hover:bg-slate-800 hover:text-white">{lang === 'zh' ? '取消' : 'Cancel'}</button>
+              <button type="submit" disabled={secretPassword === ''} className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50">{lang === 'zh' ? '确认' : 'Confirm'}</button>
             </div>
           </form>
         </div>
@@ -1129,21 +1175,21 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
             className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2"><Pencil className="h-4 w-4 text-purple-400" />编辑分发渠道</h3>
-              <button type="button" onClick={() => setEditingId(null)} className="text-slate-400 hover:text-slate-200">✕</button>
+              <h3 className="text-base font-bold text-white flex items-center gap-2"><Pencil className="h-4 w-4 text-indigo-400" />编辑分发渠道</h3>
+              <button type="button" onClick={() => setEditingId(null)} className="text-slate-400 hover:text-white">✕</button>
             </div>
-            <label className="block text-xs text-slate-400">渠道名称
-              <input required value={editName} onChange={(event) => setEditName(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white" />
+            <label className="block text-caption">渠道名称
+              <input required value={editName} onChange={(event) => setEditName(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
             </label>
-            <label className="block text-xs text-slate-400">目标端点 URL
-              <input required type="url" value={editUrl} onChange={(event) => setEditUrl(event.target.value)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white" />
+            <label className="block text-caption">目标端点 URL
+              <input required type="url" value={editUrl} onChange={(event) => setEditUrl(event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
             </label>
-            <label className="block text-xs text-slate-400">描述
-              <textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} rows={3} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white" />
+            <label className="block text-caption">描述
+              <textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} rows={3} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" />
             </label>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setEditingId(null)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300">取消</button>
-              <button type="submit" disabled={busyAction.startsWith('edit-')} className="rounded-lg bg-purple-600 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">保存</button>
+              <button type="button" onClick={() => setEditingId(null)} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">取消</button>
+              <button type="submit" disabled={busyAction.startsWith('edit-')} className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50">保存</button>
             </div>
           </form>
         </div>
@@ -1154,10 +1200,10 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           <section className="bg-slate-900 border border-rose-500/30 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-rose-200 flex items-center gap-2"><Trash2 className="h-4 w-4" />删除分发渠道</h3>
-              <button type="button" onClick={() => setDeleteState(null)} className="text-slate-400 hover:text-slate-200">✕</button>
+              <button type="button" onClick={() => setDeleteState(null)} className="text-slate-400 hover:text-white">✕</button>
             </div>
-            <p className="text-xs leading-5 text-slate-300">删除会解除任务关联、移除本地分发记录和凭据；远端已发布内容不会被自动删除。请先准备删除，再完成确认。</p>
-            <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3 text-[11px] text-slate-400">
+            <p className="text-[13px] leading-5 text-slate-300">删除会解除任务关联、移除本地分发记录和凭据；远端已发布内容不会被自动删除。请先准备删除，再完成确认。</p>
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-950/40 p-3 text-[12px] text-slate-400">
               <span>关联任务：<strong className="text-slate-200">{String(deleteState.impact.linked_task_count || 0)}</strong></span>
               <span>远端内容：<strong className="text-slate-200">{String(deleteState.impact.remote_content_count || 0)}</strong></span>
               <span>凭据：<strong className="text-slate-200">{String(deleteState.impact.secret_count || 0)}</strong></span>
@@ -1165,20 +1211,20 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
             </div>
             {!deleteState.prepared ? (
               <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setDeleteState(null)} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300">取消</button>
-                {onPrepareChannelDeletion && <button type="button" onClick={() => void prepareDelete()} disabled={busyAction.startsWith('prepare-delete-')} className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">准备删除</button>}
+                <button type="button" onClick={() => setDeleteState(null)} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">取消</button>
+                {onPrepareChannelDeletion && <button type="button" onClick={() => void prepareDelete()} disabled={busyAction.startsWith('prepare-delete-')} className="inline-flex h-9 items-center rounded-xl bg-rose-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-rose-500 disabled:opacity-50">准备删除</button>}
               </div>
             ) : (
               <div className="space-y-3">
-                <label className="block text-xs text-slate-400">输入渠道名称确认
-                  <input value={deleteState.confirmationName} onChange={(event) => setDeleteState((current) => current ? { ...current, confirmationName: event.target.value } : current)} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 py-2 text-xs text-white" placeholder={channels.find((channel) => channel.id === deleteState.id)?.name || ''} />
+                <label className="block text-caption">输入渠道名称确认
+                  <input value={deleteState.confirmationName} onChange={(event) => setDeleteState((current) => current ? { ...current, confirmationName: event.target.value } : current)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" placeholder={channels.find((channel) => channel.id === deleteState.id)?.name || ''} />
                 </label>
-                {Number(deleteState.impact.remote_content_count || 0) > 0 && <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={deleteState.ackRemote} onChange={(event) => setDeleteState((current) => current ? { ...current, ackRemote: event.target.checked } : current)} />确认远端内容影响</label>}
-                {Number(deleteState.impact.linked_task_count || 0) > 0 && <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={deleteState.ackTasks} onChange={(event) => setDeleteState((current) => current ? { ...current, ackTasks: event.target.checked } : current)} />确认任务关联影响</label>}
-                {Number(deleteState.impact.secret_count || 0) > 0 && <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={deleteState.ackCredentials} onChange={(event) => setDeleteState((current) => current ? { ...current, ackCredentials: event.target.checked } : current)} />确认凭据失效影响</label>}
-                <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" checked={deleteState.ackHistory} onChange={(event) => setDeleteState((current) => current ? { ...current, ackHistory: event.target.checked } : current)} />确认历史记录将被清理</label>
-                {Number(deleteState.impact.stale_sending_count || 0) > 0 && <label className="flex items-center gap-2 text-xs text-amber-200"><input type="checkbox" checked={deleteState.forceSending} onChange={(event) => setDeleteState((current) => current ? { ...current, forceSending: event.target.checked } : current)} />确认处理过期发送任务</label>}
-                {Number(deleteState.impact.stale_operation_count || 0) > 0 && <label className="flex items-center gap-2 text-xs text-amber-200"><input type="checkbox" checked={deleteState.forceOperations} onChange={(event) => setDeleteState((current) => current ? { ...current, forceOperations: event.target.checked } : current)} />确认处理过期操作租约</label>}
+                {Number(deleteState.impact.remote_content_count || 0) > 0 && <label className="flex items-center gap-2 text-[13px] text-slate-300"><input type="checkbox" checked={deleteState.ackRemote} onChange={(event) => setDeleteState((current) => current ? { ...current, ackRemote: event.target.checked } : current)} />确认远端内容影响</label>}
+                {Number(deleteState.impact.linked_task_count || 0) > 0 && <label className="flex items-center gap-2 text-[13px] text-slate-300"><input type="checkbox" checked={deleteState.ackTasks} onChange={(event) => setDeleteState((current) => current ? { ...current, ackTasks: event.target.checked } : current)} />确认任务关联影响</label>}
+                {Number(deleteState.impact.secret_count || 0) > 0 && <label className="flex items-center gap-2 text-[13px] text-slate-300"><input type="checkbox" checked={deleteState.ackCredentials} onChange={(event) => setDeleteState((current) => current ? { ...current, ackCredentials: event.target.checked } : current)} />确认凭据失效影响</label>}
+                <label className="flex items-center gap-2 text-[13px] text-slate-300"><input type="checkbox" checked={deleteState.ackHistory} onChange={(event) => setDeleteState((current) => current ? { ...current, ackHistory: event.target.checked } : current)} />确认历史记录将被清理</label>
+                {Number(deleteState.impact.stale_sending_count || 0) > 0 && <label className="flex items-center gap-2 text-[13px] text-amber-200"><input type="checkbox" checked={deleteState.forceSending} onChange={(event) => setDeleteState((current) => current ? { ...current, forceSending: event.target.checked } : current)} />确认处理过期发送任务</label>}
+                {Number(deleteState.impact.stale_operation_count || 0) > 0 && <label className="flex items-center gap-2 text-[13px] text-amber-200"><input type="checkbox" checked={deleteState.forceOperations} onChange={(event) => setDeleteState((current) => current ? { ...current, forceOperations: event.target.checked } : current)} />确认处理过期操作租约</label>}
                 {/*
                   删除确认的校验错误必须显示在**弹窗内部**。
                   原先 completeDelete() 只调 setActionError()，而那处渲染在页面顶部的
@@ -1191,8 +1237,8 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                   </div>
                 )}
                 <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => void cancelDelete()} className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-300">{lang === 'zh' ? '取消删除' : 'Cancel deletion'}</button>
-                  <button type="button" onClick={() => void completeDelete()} disabled={busyAction.startsWith('delete-')} className="rounded-lg bg-rose-600 px-4 py-1.5 text-xs font-bold text-white disabled:opacity-50">{lang === 'zh' ? '永久删除' : 'Delete permanently'}</button>
+                  <button type="button" onClick={() => void cancelDelete()} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">{lang === 'zh' ? '取消删除' : 'Cancel deletion'}</button>
+                  <button type="button" onClick={() => void completeDelete()} disabled={busyAction.startsWith('delete-')} className="inline-flex h-9 items-center rounded-xl bg-rose-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-rose-500 disabled:opacity-50">{lang === 'zh' ? '永久删除' : 'Delete permanently'}</button>
                 </div>
               </div>
             )}
@@ -1208,13 +1254,13 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Radio className="w-5 h-5 text-purple-500" />
+                <Radio className="w-5 h-5 text-indigo-600" />
                 <span>{lang === 'zh' ? '添加分发目标节点' : 'Add Distribution Channel'}</span>
               </h3>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-200 text-sm"
+                className="text-slate-400 hover:text-white text-sm"
               >
                 ✕
               </button>
@@ -1230,7 +1276,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 transition"
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   placeholder="e.g. 亚太独立站官网 GEO 频道"
                 />
               </div>
@@ -1243,7 +1289,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                   value={apiMode ? 'tongzhuo_geo_agent' : type}
                   disabled={apiMode}
                   onChange={(e: any) => setType(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 transition"
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                 >
                   <option value="tongzhuo_geo_agent">桐灼GEO Agent (PHP / Static Site)</option>
                   <option value="wordpress_rest">WordPress REST API</option>
@@ -1260,7 +1306,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                   required
                   value={targetUrl}
                   onChange={(e) => setTargetUrl(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 transition"
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   placeholder="https://mysite.com/agent.php"
                 />
               </div>
@@ -1273,7 +1319,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                   type="text"
                   value={authMethod}
                   onChange={(e) => setAuthMethod(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 transition"
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                 />
               </div>
             </div>
@@ -1282,14 +1328,14 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300"
+                className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800"
               >
                 {lang === 'zh' ? '取消' : 'Cancel'}
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting || !canWrite}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white shadow-sm"
+                className="inline-flex h-9 items-center rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-50"
               >
                 {isSubmitting ? (lang === 'zh' ? '保存中...' : 'Saving...') : (lang === 'zh' ? '保存节点' : 'Save Endpoint')}
               </button>

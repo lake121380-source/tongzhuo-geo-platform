@@ -34,3 +34,29 @@ Thumbs.db
 .env.integrated
 .npm-cache/
 /dist/
+
+# 手工跑的界面验证脚本（依赖 playwright，必须留在这个目录下才能解析到它）。
+# `_review-flow.mjs` 会真的创建/删除文章；`_onboarding-check.mjs` 只读，
+# 但它要靠截断列表响应把界面推到「全新部署」状态——都不能进版本控制。
+# `_remote-check.mjs` 打的是服务器上那套（经 `.review/_tunnel.py` 的隧道），同样只读。
+/_review-flow.mjs
+/_onboarding-check.mjs
+/_remote-check.mjs
+# D0/D1 期间新增的本地脚本（截图/勘察/复核用，依赖 playwright，且_ux-audit 会写测试数据）
+/_shot.mjs
+/_ux-audit.mjs
+/_visual-inventory.mjs
+/_diag.mjs
+# 2026-09-14 质检链路排查/取证期间新增的本地脚本：都依赖 playwright 真机驱动后台，
+# `_fixture-kb-article.mjs` 会真的建文章、`_verify-publish-passed.mjs` 会真的发布。
+# 它们是排查工具，不是产品产物，同样不进版本控制。
+/_verify-quality.mjs
+/_verify-review.mjs
+/_verify-backend-fix.mjs
+/_verify-release-ui.mjs
+/_verify-release-e2e.mjs
+/_verify-autopass.mjs
+/_verify-publish-passed.mjs
+/_proof-auto-pass.mjs
+/_fixture-kb-article.mjs
+/_shot-quality.mjs

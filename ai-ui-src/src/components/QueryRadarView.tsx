@@ -1,21 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  Bot,
-  CheckCircle2,
-  Compass,
-  Database,
-  FileText,
-  Link2,
-  Loader2,
-  RefreshCw,
-  Search,
-} from 'lucide-react';
+import { AlertTriangle, Bot, CheckCircle2, Compass, Database, FileText, Link2, Loader2, RefreshCw, Search, ChevronDown } from 'lucide-react';
 import { Article } from '../types';
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { PermissionNotice } from './PermissionNotice';
 
 interface QueryRadarViewProps {
+  /** 合并入口的内层 Tab 渲染：隐藏自身页面标题（由外层 TabbedShell 统一画），只留操作区。 */
+  embedded?: boolean;
+  /** 站内跳转（用于「去配置」出口：配置好品牌/域名后这些指标才算得出来）。 */
+  onNavigate?: (tab: string) => void;
   lang: 'zh' | 'en';
   onArticleCreated?: (newArticle: Article) => void;
   onOpenArticleModal?: (article: Article) => void;
@@ -66,6 +59,24 @@ function idempotencyKey(prefix: string): string {
   return `${prefix}-${uuid || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
 }
 
+/**
+ * 「不可计算」背后的原因（后端枚举 → 一句话）。
+ * 界面直接渲染 raw 值（brand_not_configured / not_collected）时用户看不懂，
+ * 这正是「用户看不懂的操作界面」的一个来源。
+ */
+function availabilityText(reason: string, lang: 'zh' | 'en'): string {
+  const labels: Record<string, [string, string]> = {
+    brand_not_configured: ['还没配置品牌名称，无法匹配', 'Brand name not configured yet'],
+    brand_not_ready: ['品牌名称还没配置好', 'Brand name not ready'],
+    not_collected: ['还没有采集到数据', 'No collection data yet'],
+    no_completed_runs: ['还没有跑完的采集', 'No completed runs yet'],
+    no_answers: ['这一时间窗内没有回答记录', 'No answers in this window'],
+    unknown: ['暂不可计算', 'Unavailable'],
+  };
+  const label = labels[reason] || [reason || '暂不可计算', reason || 'Unavailable'];
+  return lang === 'zh' ? label[0] : label[1];
+}
+
 function statusText(status: string, lang: 'zh' | 'en'): string {
   const labels: Record<string, [string, string]> = {
     not_collected: ['未采集', 'Not collected'],
@@ -79,6 +90,8 @@ function statusText(status: string, lang: 'zh' | 'en'): string {
 }
 
 export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
+  embedded = false,
+  onNavigate,
   lang,
   onArticleCreated,
   onOpenArticleModal,
@@ -226,17 +239,19 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          {!embedded && (
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-md border border-indigo-800/50 bg-indigo-950/60 px-2.5 py-1 text-xs font-semibold text-indigo-300">
-              <Compass className="h-3.5 w-3.5" />{lang === 'zh' ? '查询采集与引用账本' : 'Query collection and citation ledger'}
+              <Compass className="h-3.5 w-3.5" />{lang === 'zh' ? 'AI 问答监测' : 'AI answer tracking'}
             </div>
-            <h2 className="mt-3 text-xl font-bold text-white">{lang === 'zh' ? '查询雷达' : 'Query Radar'}</h2>
+            <h2 className="mt-3 text-xl font-bold text-white">{lang === 'zh' ? 'AI 问答监测' : 'AI answer tracking'}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-300">
               {lang === 'zh'
-                ? '问题来自 桐灼GEO 关键词库；运行、模型、回答和引用来自真实 AI 可见性采集，品牌提及率按已配置的品牌名称在回答文本中匹配，未配置时不可计算。未接入外部问题量时不显示搜索热度，也不计算公式化机会指数。'
-                : 'Queries come from the 桐灼GEO keyword library. Runs, models, answers and citations come from persisted AI visibility collection; brand mention rate matches the configured brand names in answer text and stays unavailable until configured. External volume and formula-based opportunity scores are not fabricated.'}
+                ? '看你在意的那些问题，AI 回答里有没有提到你。问题来自关键词库；运行、回答和引用都来自真实采集。品牌名称没配置之前，提及率会显示「不可计算」，不会用估算值凑数。'
+                : 'See whether AI answers mention your brand for the questions you care about. All numbers come from real collection runs.'}
             </p>
           </div>
+          )}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               [lang === 'zh' ? '问题样本' : 'Queries', summary.configured_query_count],
@@ -253,17 +268,35 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
         </div>
       </section>
 
-      {ownership.configured !== true && (
-        <div className="flex gap-3 rounded-xl border border-amber-800/60 bg-amber-950/30 p-4 text-xs leading-5 text-amber-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{lang === 'zh' ? '尚未配置可核验的正式域名，因此“自有引用份额”显示不可计算；请先在品牌/站点配置中设置正式域名。' : 'No verifiable owned hostname is configured, so owned citation share is unavailable.'}</span>
-        </div>
-      )}
-
-      {brand.configured !== true && (
-        <div className="flex gap-3 rounded-xl border border-amber-800/60 bg-amber-950/30 p-4 text-xs leading-5 text-amber-200">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{lang === 'zh' ? '尚未配置品牌实体名称，因此“品牌提及率”显示不可计算；系统不会用内置默认名代替你的品牌名做匹配，请先在品牌实体中填写组织名称。' : 'No brand name is configured, so brand mention rate is unavailable. The built-in default name is never used as your brand.'}</span>
+      {/* 两条警告合并成一条：它们说的是同一件事（缺两项配置 → 两个指标算不出来）。
+          原来是两条各自占一整行、把主信息挤到中间，且没有出口。 */}
+      {(ownership.configured !== true || brand.configured !== true) && (
+        <div className="flex items-start gap-3 rounded-2xl bg-amber-500/8 px-5 py-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="text-[13.5px] font-semibold text-white">
+              {lang === 'zh' ? '有两个指标暂时算不出来（不是系统故障，是还缺配置）' : 'Two metrics are unavailable until configured'}
+            </div>
+            {brand.configured !== true && (
+              <div className="text-[13px] leading-relaxed text-slate-200">
+                {lang === 'zh' ? '· 「品牌提及率」要先填品牌实体名称——AI 回答里匹配的就是这个名字，系统不会拿默认名冒充。' : '· Brand mention rate needs your brand name in Brand entity.'}
+              </div>
+            )}
+            {ownership.configured !== true && (
+              <div className="text-[13px] leading-relaxed text-slate-200">
+                {lang === 'zh' ? '· 「自有引用份额」要先设置正式域名——用来判断哪些引用是你自己的。' : '· Owned citation share needs your official domain.'}
+              </div>
+            )}
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('seo_foundation')}
+                className="pt-0.5 text-[13px] font-semibold text-indigo-600 hover:underline"
+              >
+                {lang === 'zh' ? '去「站点与品牌设置」填写 →' : 'Configure site & brand →'}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -276,16 +309,16 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-md">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
-          <input value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder={lang === 'zh' ? '筛选问题、词库、Provider 或模型…' : 'Filter query, library, provider or model…'} className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-indigo-500" />
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder={lang === 'zh' ? '筛选问题、词库、Provider 或模型…' : 'Filter query, library, provider or model…'} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 pl-10 pr-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
         </div>
         <div className="flex items-center gap-2">
-          <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white">
+          <select value={days} onChange={(event) => setDays(Number(event.target.value))} className="h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white">
             <option value={7}>{lang === 'zh' ? '近 7 天' : 'Last 7 days'}</option>
             <option value={30}>{lang === 'zh' ? '近 30 天' : 'Last 30 days'}</option>
             <option value={90}>{lang === 'zh' ? '近 90 天' : 'Last 90 days'}</option>
           </select>
-          <button type="button" disabled={loading} onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 disabled:opacity-40">
+          <button type="button" disabled={loading} onClick={() => void load()} className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-700 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-40">
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />{lang === 'zh' ? '刷新' : 'Refresh'}
           </button>
         </div>
@@ -336,9 +369,9 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
                     <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                       <Metric label={lang === 'zh' ? '外部问题量' : 'External volume'} value={lang === 'zh' ? '未采集' : 'Not collected'} detail={lang === 'zh' ? '不使用内部次数冒充热度' : 'Internal counts are not search volume'} />
                       <Metric label={lang === 'zh' ? '采集运行' : 'Collection runs'} value={`${numberValue(observations.completed_run_count)} / ${numberValue(observations.run_count)}`} detail={`${lang === 'zh' ? '失败' : 'Failed'} ${numberValue(observations.failed_run_count)} · ${lang === 'zh' ? '等待' : 'Pending'} ${numberValue(observations.pending_run_count)}`} />
-                      <Metric label={lang === 'zh' ? '品牌提及率' : 'Brand mention rate'} value={mentionRate === null || mentionRate === undefined ? (lang === 'zh' ? '不可计算' : 'Unavailable') : `${numberValue(mentionRate)}%`} detail={mentionRate === null || mentionRate === undefined ? String(mentions.availability || '') : `${numberValue(mentions.mentioned_answer_count)} / ${numberValue(mentions.denominator)}`} />
+                      <Metric label={lang === 'zh' ? '品牌提及率' : 'Brand mention rate'} value={mentionRate === null || mentionRate === undefined ? (lang === 'zh' ? '不可计算' : 'Unavailable') : `${numberValue(mentionRate)}%`} detail={mentionRate === null || mentionRate === undefined ? availabilityText(String(mentions.availability || ''), lang) : `${numberValue(mentions.mentioned_answer_count)} / ${numberValue(mentions.denominator)}`} />
                       <Metric label={lang === 'zh' ? '引用记录' : 'Citation observations'} value={String(numberValue(citations.observation_count))} detail={`${lang === 'zh' ? '唯一信源' : 'Unique sources'} ${numberValue(citations.unique_source_count)}`} />
-                      <Metric label={lang === 'zh' ? '自有引用份额' : 'Owned citation share'} value={ownedShare === null || ownedShare === undefined ? (lang === 'zh' ? '不可计算' : 'Unavailable') : `${numberValue(ownedShare)}%`} detail={ownedShare === null || ownedShare === undefined ? String(citations.availability || '') : `${numberValue(citations.owned_observation_count)} / ${numberValue(citations.denominator)}`} />
+                      <Metric label={lang === 'zh' ? '自有引用份额' : 'Owned citation share'} value={ownedShare === null || ownedShare === undefined ? (lang === 'zh' ? '不可计算' : 'Unavailable') : `${numberValue(ownedShare)}%`} detail={ownedShare === null || ownedShare === undefined ? availabilityText(String(citations.availability || ''), lang) : `${numberValue(citations.owned_observation_count)} / ${numberValue(citations.denominator)}`} />
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -379,24 +412,30 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
         </div>
       )}
 
-      <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-[11px] leading-5 text-slate-400">
-        <div className="flex items-center gap-2 font-semibold text-slate-200"><Database className="h-3.5 w-3.5" />{lang === 'zh' ? '数据口径' : 'Data definitions'}</div>
-        <p className="mt-2">{String(definitions.query_sample || '')}</p>
-        <p>{String(definitions.external_volume || '')}</p>
-        <p>{String(definitions.owned_share_percent || '')}</p>
-        <p>{String(definitions.brand_mention_rate_percent || '')}</p>
-        <p>{String(definitions.brand_names || '')}</p>
-        <p>{String(definitions.opportunity_score || '')}</p>
-        <p className="mt-2 text-slate-500">{dateText(windowData.start, lang)} — {dateText(windowData.end, lang)}</p>
-      </section>
+      <details className="group rounded-2xl bg-slate-900/80 px-5 py-4">
+        <summary className="flex cursor-pointer select-none items-center gap-2 text-[13.5px] font-semibold text-slate-200 [&::-webkit-details-marker]:hidden">
+          <Database className="h-4 w-4 text-slate-400" />
+          {lang === 'zh' ? '数据口径（每个数字怎么算出来的）' : 'Data definitions'}
+          <ChevronDown className="ml-1 h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="mt-3 space-y-1.5 border-t border-slate-800 pt-3 text-[12.5px] leading-relaxed text-slate-400">
+          <p>{String(definitions.query_sample || '')}</p>
+          <p>{String(definitions.external_volume || '')}</p>
+          <p>{String(definitions.owned_share_percent || '')}</p>
+          <p>{String(definitions.brand_mention_rate_percent || '')}</p>
+          <p>{String(definitions.brand_names || '')}</p>
+          <p>{String(definitions.opportunity_score || '')}</p>
+          <p className="pt-1 text-slate-500">{dateText(windowData.start, lang)} — {dateText(windowData.end, lang)}</p>
+        </div>
+      </details>
     </div>
   );
 };
 
 const Metric: React.FC<{ label: string; value: string; detail: string }> = ({ label, value, detail }) => (
-  <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
-    <div className="text-[10px] text-slate-500">{label}</div>
-    <div className="mt-1 text-sm font-bold text-white">{value}</div>
-    <div className="mt-1 text-[9px] text-slate-600">{detail}</div>
+  <div className="rounded-xl bg-slate-950/40 px-4 py-3">
+    <div className="text-[12px] text-slate-400">{label}</div>
+    <div className="mt-1.5 text-[19px] font-black leading-none tabular-nums text-white">{value}</div>
+    <div className="mt-1.5 text-[11.5px] leading-relaxed text-slate-500">{detail}</div>
   </div>
 );
