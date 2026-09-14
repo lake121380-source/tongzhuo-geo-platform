@@ -339,7 +339,10 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
               type="button"
               onClick={() => { setSelectedStatus(tab.key); setShowTrash(false); }}
               className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${
-                !showTrash && selectedStatus === tab.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-900'
+                /* 悬停色用 `text-white`（本项目的"主文字"令牌，亮色下会解析成深色），
+                   **不能用 `text-slate-900`**：亮色主题把 `--color-slate-900` 重映射成了
+                   卡片面色（白），悬停会得到白字白底、文字直接消失。 */
+                !showTrash && selectedStatus === tab.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
             >
               {tab.label} ({countLabel(tab.count)})
@@ -349,7 +352,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
             <button
               type="button"
               onClick={() => { setShowTrash(true); setSelectedIds(new Set()); }}
-              className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${showTrash ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-900'}`}
+              className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${showTrash ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
             >
               {lang === 'zh' ? '回收站' : 'Trash'} ({countLabel(trashedArticles.length)})
             </button>

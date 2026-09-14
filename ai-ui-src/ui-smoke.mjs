@@ -462,10 +462,22 @@ async function main() {
           releaseText: document.querySelector('[data-quality-release]')?.innerText || '',
         };
       });
-      const allowed = ['质检通过', '待人工复核', '质检未通过', '未质检', '待质检', '质检失败'];
+      /*
+       * 判据打在 `data-quality-verdict`（判定码）上，**不再枚举中文文案**。
+       * 2026-09-14 这条红过一次：后端把 blocked 的文案从「质检未通过」改成了
+       * 「AI 质检不通过」，白名单里写的是旧串，于是"文案变了"被误报成"判据坏了"。
+       * 原 bug（把 status=completed 显示成「已完成」）的真正反面判据是两件事：
+       *   ① 主结论不能是「已完成」（那是"跑完了"，不是结论）；
+       *   ② 判定码必须是后端定义的合法值。
+       */
+      const allowedDecisions = ['passed', 'needs_review', 'blocked'];
+      const allowedStatuses = ['not_started', 'queued', 'running', 'failed', 'cancelled', 'stale', 'completed'];
+      const verdictOk = (quality.label || '') !== ''
+        && !(quality.label || '').includes('已完成')
+        && (allowedDecisions.includes(quality.decision) || allowedStatuses.includes(quality.decision));
       record(
         '文章详情：质检主结论是「判定」而不是「已完成」',
-        quality.label !== null && allowed.some((v) => (quality.label || '').includes(v)),
+        verdictOk,
         `结论=${quality.label} decision=${quality.decision}`,
       );
       const needsNextStep = quality.decision !== 'needs_review'
