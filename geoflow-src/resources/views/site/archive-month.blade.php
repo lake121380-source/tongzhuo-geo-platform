@@ -10,7 +10,7 @@
             <span class="text-gray-900">{{ $periodLabel }}</span>
         </nav>
 
-        <h1 class="mb-6 text-3xl font-bold text-gray-900">{{ __('site.archive_month_title', ['period' => $periodLabel]) }}</h1>
+        <h1 class="site-page-title mb-6">{{ __('site.archive_month_title', ['period' => $periodLabel]) }}</h1>
 
         @if($articles->isEmpty())
             <p class="text-gray-600">{{ __('site.archive_empty') }}</p>

@@ -1865,15 +1865,24 @@
      * Article titles should feel editorial, not poster-sized. Keep the detail
      * page readable while avoiding oversized two-line headlines on desktop.
      */
+    /*
+     * ⚠️ `.tt-article-h1` 在本文件里被定义了 **7 次、7 个互斥字号**
+     *   （clamp(32px,5vw,52px) / 34px / clamp(34px,4vw,48px) / clamp(34px,4.2vw,54px)
+     *    / 34px / clamp(30px,3vw,40px)!important / 28px!important），
+     *   实际只有带 `!important` 的这两条生效，其余五条是**死规则**。
+     *   2026-09-16：把生效的两条改到统一的内页标题标度（`--site-h1`，40 / 移动端 30），
+     *   与关于/归档/服务/分类页对齐。死规则暂留（它们可能还带别的属性，
+     *   清理需要按声明逐条比对，单独排期）。
+     */
     .tt-article-h1 {
-        font-size: clamp(30px, 3vw, 40px) !important;
+        font-size: var(--site-h1, 40px) !important;
         line-height: 1.22 !important;
         letter-spacing: -0.03em;
     }
 
     @media (max-width: 768px) {
         .tt-article-h1 {
-            font-size: 28px !important;
+            font-size: var(--site-h1, 30px) !important;
             line-height: 1.24 !important;
             letter-spacing: -0.02em;
         }

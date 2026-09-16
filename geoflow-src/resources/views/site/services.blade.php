@@ -32,7 +32,7 @@
 @section('content')
     <div class="site-container px-4 py-8 sm:px-6 lg:px-8">
         <div class="mb-8">
-            <h1 class="mb-3 text-3xl font-bold text-gray-900">{{ $companyProfile->name }} 的服务</h1>
+            <h1 class="site-page-title mb-3">{{ $companyProfile->name }} 的服务</h1>
             @if($pageDescription !== '')
                 <p class="max-w-3xl text-gray-600">{{ $pageDescription }}</p>
             @endif

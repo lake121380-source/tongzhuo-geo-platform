@@ -487,9 +487,12 @@ html body div.prose-lg blockquote,
 }
 
 .article-hero-title {
-    font-size: 2.65rem;
+    font-size: var(--site-h1, 2.5rem);
+    /* 字重也统一：审计实测同一个站的 H1 有三种字重（800 / 700 / 600），
+       标记是 `font-semibold`(600)，与其它页的 800 对不上。 */
+    font-weight: 800;
     line-height: 1.08;
-    letter-spacing: -0.05em;
+    letter-spacing: -0.03em;
 }
 
 .article-kicker {
@@ -704,7 +707,7 @@ html body div.prose-lg blockquote,
     }
 
     .article-hero-title {
-        font-size: 1.95rem;
+        font-size: var(--site-h1, 1.875rem);
     }
 
     .article-detail-pad {
@@ -1658,7 +1661,7 @@ blockquote {
 }
 
 .geo-home-module--hero .geo-home-module__title {
-    font-size: clamp(2rem, 4.2vw, 3.5rem);
+    font-size: var(--site-display, 3.5rem);
     line-height: 1.1;
     letter-spacing: -0.015em;
 }
@@ -1692,7 +1695,7 @@ blockquote {
 }
 
 .geo-home-module__header .geo-home-module__title {
-    font-size: clamp(1.5rem, 2.2vw, 2.1rem);
+    font-size: var(--site-h2, 1.5rem);
     letter-spacing: -0.01em;
 }
 
@@ -1739,4 +1742,46 @@ blockquote {
 .site-btn-primary:focus-visible {
     color: #fff;
     filter: brightness(1.07);
+}
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ *  前台标题阶梯（2026-09-16）
+ *
+ *  独立审计实测：同一个站的 6 个页面，H1 有 **5 种字号、3 种字重**——
+ *    首页 56/800、文章 40/800、分类 40/800、归档 30/700、关于 42.4/600、服务 30/700。
+ *  其中 42.4px、30.052px、32.256px 都是 `clamp(...vw...)` 算出来的，**没有设计含义**。
+ *  访客从首页点进文章，标题一下缩 16px、字重从 800 掉到 600，观感是"这站没做完"。
+ *
+ *  这里把标题收敛成一套：**内页主标题统一一个尺寸**；首页 hero 作为落地页头图
+ *  保留更大一档（这是有意的层级，不是不一致），但从 vw 计算值改成明确 token。
+ *  移动端同步降一档。
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+:root {
+    --site-h1: 2.5rem;          /* 内页主标题 40px */
+    --site-display: 3.5rem;     /* 首页 hero 56px */
+    --site-h2: 1.5rem;          /* 区块标题 24px */
+}
+
+@media (max-width: 820px) {
+    :root {
+        --site-h1: 1.875rem;      /* 30px */
+        --site-display: 2.125rem; /* 34px */
+        --site-h2: 1.3125rem;     /* 21px */
+    }
+}
+
+/*
+ * `site.*` 视图的页面主标题（归档 / 服务 / 404）。
+ * 这几页原先用 Tailwind 的 `text-3xl`（30px），与主题页的 40px 对不上；
+ * 顺带把「用 Tailwind 类名表达标题层级」改成语义类。
+ */
+.site-page-title {
+    margin: 0 0 1rem;
+    color: #111827;
+    font-size: var(--site-h1);
+    font-weight: 800;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
 }

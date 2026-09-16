@@ -19,7 +19,7 @@
     @endphp
     <div class="site-container px-4 py-16 sm:px-6 lg:px-8" style="min-height: 52vh;">
         <p class="text-sm font-semibold text-gray-500">404</p>
-        <h1 class="mt-2 text-3xl font-bold text-gray-900">这个页面不存在</h1>
+        <h1 class="site-page-title mt-2">这个页面不存在</h1>
         <p class="mt-3 max-w-2xl text-gray-600">
             你访问的地址可能已经改动或被移除。可以从下面几个入口继续：
         </p>

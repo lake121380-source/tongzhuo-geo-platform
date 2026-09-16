@@ -3,7 +3,7 @@
 @section('content')
     <div class="site-container px-4 sm:px-6 lg:px-8 py-8">
         <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900 mb-2">{{ $category->name }}</h1>
+            <h1 class="site-page-title mb-2">{{ $category->name }}</h1>
             @if(trim((string) $category->description) !== '')
                 <p class="text-gray-500 max-w-3xl">{{ $category->description }}</p>
             @endif

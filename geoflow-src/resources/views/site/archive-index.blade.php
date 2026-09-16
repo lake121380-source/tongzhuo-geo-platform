@@ -2,7 +2,7 @@
 
 @section('content')
     <div class="site-container px-4 py-8 sm:px-6 lg:px-8">
-        <h1 class="mb-6 text-3xl font-bold text-gray-900">{{ __('site.archive_title') }}</h1>
+        <h1 class="site-page-title mb-6">{{ __('site.archive_title') }}</h1>
 
         @if(count($archives) === 0)
             <p class="text-gray-600">{{ __('site.archive_empty') }}</p>
