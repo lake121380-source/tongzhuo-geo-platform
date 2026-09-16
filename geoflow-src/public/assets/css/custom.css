@@ -167,16 +167,15 @@ body {
     border-color: #111827 !important;
 }
 
-/* 统计信息容器样式 */
-.flex.items-center.flex-wrap {
+/*
+ * 面包屑容器（site/article.blade.php）。
+ * 2026-09-16：原来写的是 Tailwind 类名组合 `.flex.items-center.flex-wrap`——
+ * 那等于把"这个元素长什么样"当成选择器：模板里把 `flex-wrap` 改成别的，
+ * 样式就**静默失效**，没有任何报错。改用元素自己的语义类。
+ */
+.article-breadcrumb {
     flex: 1 !important;
     min-width: 0 !important;
-}
-
-/* 文章卡片内容区域优化 */
-.bg-white.border.border-gray-100.rounded-lg .p-6,
-.bg-white.border.border-gray-100.rounded-xl .p-8 {
-    padding-bottom: 1.5rem !important;
 }
 
 /* 最终强制覆盖 - 所有可能的引用块样式 */
@@ -227,17 +226,6 @@ html body div.prose-lg blockquote,
     line-height: 1.6 !important;
     position: relative !important;
     z-index: 1 !important;
-}
-
-/* 标签区域与底部统计的间距 */
-.flex.flex-wrap.gap-2.mb-4 {
-    margin-bottom: 1.25rem !important;
-}
-
-/* 文章标签样式统一 */
-.flex.flex-wrap.gap-2 a[href*="/tag/"] {
-    font-size: 0.75rem !important;
-    padding: 0.25rem 0.75rem !important;
 }
 
 /* 响应式设计 */
