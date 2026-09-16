@@ -31,8 +31,9 @@
     <x-json-ld :data="$websiteSchema" />
 </head>
 <body class="tt-body">
+    <a class="tt-skip-link" href="#main">跳到主要内容</a>
     @include('theme.toutiao-news-20260426.partials.header')
-    <main class="tt-main">
+    <main class="tt-main" id="main">
         @yield('content')
     </main>
     @include('theme.toutiao-news-20260426.partials.footer')

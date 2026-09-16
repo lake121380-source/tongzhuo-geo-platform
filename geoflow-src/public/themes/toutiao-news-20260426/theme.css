@@ -1,3 +1,15 @@
+/*
+ * ⚠️ 关于次要文字颜色（2026-09-16）
+ *
+ * 这个文件是**追加式**演进的：同一批选择器被反复重写，后加的层常常把前面已经用变量的
+ * 色值覆盖成硬编码的浅灰。独立审计实测：`.tt-card-meta`（日期/浏览量）在卡片底上是
+ * **2.70:1**、`.tt-page-kicker` 与 `.tt-card-action`（阅读全文）是 **3.47:1**，
+ * 而 WCAG AA 正文要求 ≥4.5:1——列表里唯一告诉用户"这条什么时候发的、点哪里进去"的信息，
+ * 恰恰最看不清。
+ *
+ * 本次把散落的 `#999` / `#87867f` 统一收回 `var(--tt-muted)`（`#5e5d59`，实测 6.25:1），
+ * 与前面各层本来的写法一致。以后加层请用变量，不要再写死浅灰。
+ */
     :root {
         --tt-red: #f04142;
         --tt-red-dark: #d91f26;
@@ -9,10 +21,26 @@
         --tt-soft: #fff4f4;
     }
 
-    .tt-body {
+    /* `.theme-shell` 是 `site.*` 视图（关于/服务/归档/表单/404）用的 body 类。
+       2026-09-16：此前那些页面用 Tailwind 的 `bg-white`，于是**同一个站有两支正文字体**
+       （首页 ui-sans-serif、关于页 PingFang SC）、两种页面底色。统一挂到同一组令牌上。 */
+    .tt-body,
+    .theme-shell {
         background: var(--tt-bg);
         color: var(--tt-ink);
         font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        /* 页脚贴底：两个 shell 的 body 都是 header / main / footer 三段，
+           内容短的页面（如 /archive）此前页脚悬在半空、下面露出一大片底色
+           （独立审计实测 /archive 页脚下方 434px 空白）。 */
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .tt-body > main,
+    .theme-shell > main {
+        flex: 1 0 auto;
     }
 
     .tt-shell {
@@ -644,7 +672,7 @@
 
     .tt-page-kicker {
         margin-bottom: 6px;
-        color: #999;
+        color: var(--tt-muted);
         font-size: 13px;
         font-weight: 500;
         letter-spacing: 0;
@@ -725,7 +753,7 @@
 
     .tt-card-meta {
         gap: 8px;
-        color: #999;
+        color: var(--tt-muted);
         font-size: 13px;
         font-weight: 400;
     }
@@ -733,7 +761,7 @@
     .tt-pill {
         padding: 0;
         background: transparent;
-        color: #999;
+        color: var(--tt-muted);
         font-size: 13px;
         font-weight: 400;
     }
@@ -755,7 +783,7 @@
 
     .tt-card-action {
         margin-top: 8px;
-        color: #999;
+        color: var(--tt-muted);
         font-size: 13px;
         font-weight: 500;
     }
@@ -808,7 +836,7 @@
 
     .tt-hot-index {
         background: transparent;
-        color: #999;
+        color: var(--tt-muted);
         font-size: 15px;
     }
 
@@ -848,7 +876,7 @@
 
     .tt-article-main > .tt-card-meta {
         padding-bottom: 2px;
-        color: #999;
+        color: var(--tt-muted);
     }
 
     .tt-prose {
@@ -929,9 +957,14 @@
         --tt-red-dark: #142946;
         --tt-ink: #141413;
         --tt-muted: #5e5d59;
-        --tt-line: #e8e5da;
+        /* 卡片可读性（2026-09-16）：原来卡片底 #faf9f5 与页底 #f5f4ed 只差 1.05:1、
+           边框 #e8e5da 与页底只差 1.14:1——卡片边界基本靠猜。改成白卡 + 加深的边框 + 轻阴影。
+           （说明：浅色主题下"白卡 vs 米色页"的底色对比度本身就上不去，能拉开层级的是
+           边框与阴影，所以这里三者一起给，而不是只调底色。） */
+        --tt-line: #e0dacb;
         --tt-bg: #f5f4ed;
-        --tt-card: #faf9f5;
+        --tt-card: #ffffff;
+        --tt-card-shadow: 0 1px 2px rgba(20, 20, 19, .05);
         --tt-soft: #EEF2F7;
     }
 
@@ -1036,7 +1069,7 @@
     }
 
     .tt-page-kicker {
-        color: #87867f;
+        color: var(--tt-muted);
         font-size: 13px;
         letter-spacing: .04em;
     }
@@ -1106,7 +1139,7 @@
 
     .tt-card-meta,
     .tt-pill {
-        color: #87867f;
+        color: var(--tt-muted);
         font-size: 13px;
     }
 
@@ -1133,7 +1166,7 @@
     }
 
     .tt-card-action {
-        color: #87867f;
+        color: var(--tt-muted);
     }
 
     .tt-card-action:hover {
@@ -1476,7 +1509,8 @@
      */
     .tt-shell,
     .tt-layout,
-    .tt-article-layout {
+    .tt-article-layout,
+    .tt-body .geo-home-modules {
         width: min(1100px, calc(100vw - 48px));
     }
 
@@ -1531,7 +1565,7 @@
         gap: 8px;
         align-items: center;
         margin-bottom: 0;
-        color: #87867f;
+        color: var(--tt-muted);
         font-size: 13px;
         line-height: 1.5;
     }
@@ -2017,3 +2051,161 @@
             padding: 12px 14px;
         }
     }
+
+/*
+ * 页脚的联系方式与站内入口（2026-09-16）
+ * 此前页脚只有一行版权，全站可见文本里没有任何联系方式——而同一批信息
+ * 早就存在于 CompanyProfile，也输出进了给 AI 读的结构化数据。
+ * 统一用主题自己的变量，跟随亮/暗两套配色。
+ */
+.tt-footer-contact {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 24px;
+    padding: 28px 0 20px;
+    border-bottom: 1px solid var(--tt-line);
+}
+
+.tt-footer-contact-title {
+    margin: 0 0 10px;
+    color: var(--tt-ink);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.tt-footer-contact-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    color: var(--tt-muted);
+    font-size: 14px;
+    line-height: 1.9;
+    word-break: break-word;
+}
+
+.tt-footer-contact-list a {
+    color: var(--tt-muted);
+    text-decoration: none;
+}
+
+.tt-footer-contact-list a:hover,
+.tt-footer-contact-list a:focus-visible {
+    color: var(--tt-red);
+    text-decoration: underline;
+}
+
+
+/*
+ * 首页模块区跟随主题底色（2026-09-16）
+ *
+ * 原先是纯白，压在主题的米色页面上会在 y≈1381 处出现一条硬接缝。
+ * 让它透明，由主题底色贯穿整页；卡片自己仍是白底，反而把对比度拉开了。
+ * 栅格宽度不在这里写——已并入上面那条「统一 1100px 栅格」的选择器组，
+ * 避免以后再调栅格时漏掉这一处。
+ */
+.tt-body .geo-home-modules {
+    background: transparent;
+}
+
+/*
+ * 首页收成「最新观点」后的两处配套（2026-09-16）
+ *
+ * ① `.tt-layout` 是「正文 + 300px 侧栏」的两列栅格。首页不再渲染侧栏后，
+ *    如果不同步收成单列，右侧会留一条 300px 的空带——比原来更难看。
+ *    用 `:has()` 判断：没有 `.tt-sidebar` 子元素就退回单列（搜索/分类页仍有侧栏，不受影响）。
+ * ② 「查看全部 →」入口：推到标题行右侧，与 `.tt-section-title` 的红条标题同一行。
+ */
+.tt-layout:not(:has(.tt-sidebar)) {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.tt-title-more {
+    margin-left: auto;
+    color: var(--tt-muted);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    letter-spacing: 0;
+}
+
+.tt-title-more:hover,
+.tt-title-more:focus-visible {
+    color: var(--tt-red);
+}
+
+
+/* 卡片统一带一层轻阴影（2026-09-16）：与白卡、加深的边框一起把卡片从页底上"抬"起来。 */
+.tt-feed-card,
+.tt-panel,
+.tt-channel-rail {
+    box-shadow: var(--tt-card-shadow, 0 1px 2px rgba(20, 20, 19, .05));
+}
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ *  移动端与可访问性修补（2026-09-16，依据独立 UI/CSS 审计）
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/* ① 移动端表格
+ *   原 `width: max(760px, 100%) !important` 在 375px 下把表格压成 640px 塞进 313px 的容器，
+ *    第 4、5 列完全在可视区外；而页面本身不横滚，用户只会以为"这张表就是这样"——
+ *    等于两列数据在手机上是隐藏的。小屏改为自适应宽度 + 缩小内边距，让每一列都看得见。 */
+@media (max-width: 640px) {
+    .tt-prose .article-table {
+        width: 100% !important;
+        font-size: 13px;
+    }
+
+    .tt-prose .article-table th,
+    .tt-prose .article-table td {
+        padding: 8px 10px;
+    }
+}
+
+/* ② 可点区域
+ *   审计实测：「阅读全文」20px、分类标签 20px、页脚联系链接 18px、首页服务项 21px，
+ *   都低于 24×24 的可点下限（触屏上很容易点不中）。这里补足高度，视觉密度基本不变。 */
+.tt-card-action,
+.tt-pill,
+.tt-title-more,
+.tt-footer-contact-list a {
+    box-sizing: border-box;
+    min-height: 24px;
+}
+
+.tt-card-action,
+.tt-title-more,
+.tt-footer-contact-list a {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* ③ 键盘焦点
+ *   全站此前只有浏览器默认的 1px 细框（审计截图里是贴着文字的细线），和卡片语言无关，
+ *   而且是唯一的键盘可用性线索。统一给一个可见的焦点环。 */
+:focus-visible {
+    outline: 2px solid var(--tt-red);
+    outline-offset: 2px;
+}
+
+/* ④ 跳到主内容
+ *   键盘用户此前每页都要 Tab 过整个页头才能到正文。链接平时视觉隐藏、获得焦点时出现。 */
+.tt-skip-link {
+    position: absolute;
+    left: 12px;
+    top: -60px;
+    z-index: 100;
+    padding: 10px 16px;
+    border-radius: 10px;
+    background: var(--tt-red);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    transition: top .15s ease;
+}
+
+.tt-skip-link:focus {
+    top: 12px;
+}

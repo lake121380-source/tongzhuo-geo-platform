@@ -1621,3 +1621,134 @@ blockquote {
         font-size: 1.8rem;
     }
 }
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════
+ *  首页落地模块的视觉强化（2026-09-16）
+ *
+ *  这套模块原先只有「1px 顶线 + 纯文字」的文档式排版——放在内容站里没问题，
+ *  但用来做官网落地页就显得又平又空：没有卡片、没有底色，CTA 是文字链接而不是按钮，
+ *  4 个能力项还会塞进固定 3 列、第 4 个孤零零掉到第二行。
+ *
+ *  下面只改视觉，不改结构，且只命中 `.geo-home-module*`（只有首页模块会输出这些类，
+ *  不影响主题的其它部分）。列数改成按可用宽度自适应，卡片给四边描边与轻阴影，
+ *  hero 给一层主色淡底并放大标题，CTA 变成真正的按钮。
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/* ── 列数自适应：不再写死 3 列/4 列，避免出现「3+1」的孤儿项 ── */
+.geo-home-module__grid {
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.geo-home-module__metrics {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+/* ── 卡片化：把「一条顶线 + 裸文字」换成有边界的卡片，让每一项站得住 ── */
+.geo-home-module__feature,
+.geo-home-module__metric,
+.geo-home-module__article,
+.geo-home-module__chart-row {
+    padding: 1.15rem 1.2rem;
+    border: 1px solid rgba(17, 24, 39, 0.09);
+    border-top: 1px solid rgba(17, 24, 39, 0.09);
+    border-radius: 12px;
+    background: var(--geo-home-module-surface);
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+}
+
+/* ── hero：给一层主色淡底 + 放大标题 + 留足上下呼吸 ── */
+.geo-home-module--hero {
+    padding: 4rem 0 3.5rem;
+    border-top: 0;
+    background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--geo-home-accent) 9%, transparent),
+        color-mix(in srgb, var(--geo-home-accent) 0%, transparent)
+    );
+}
+
+.geo-home-module--hero .geo-home-module__title {
+    font-size: clamp(2rem, 4.2vw, 3.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+}
+
+/* split 布局没配图时，右侧那一列会空掉半屏——没有媒体就退化成单列。 */
+.geo-home-module--layout-split:not(:has(.geo-home-module__media)) {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+/* ── CTA：文字链接改按钮，落地页需要明确的行动点 ── */
+.geo-home-module__link {
+    margin-top: 1.4rem;
+    padding: 0.72rem 1.35rem;
+    border-radius: 10px;
+    background: var(--geo-home-accent);
+    color: #fff;
+    font-size: 0.95rem;
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.14);
+    transition: filter 0.15s ease;
+}
+
+.geo-home-module__link:hover,
+.geo-home-module__link:focus-visible {
+    color: #fff;
+    filter: brightness(1.07);
+}
+
+/* ── 分区标题：与卡片拉开层级 ── */
+.geo-home-module__header {
+    margin-bottom: 1.6rem;
+}
+
+.geo-home-module__header .geo-home-module__title {
+    font-size: clamp(1.5rem, 2.2vw, 2.1rem);
+    letter-spacing: -0.01em;
+}
+
+.geo-home-module__eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.78rem;
+}
+
+/* ── CTA 带：与 hero 呼应，但不抢 hero 的注意力 ── */
+.geo-home-module--cta_band {
+    padding: 2.75rem 1.5rem;
+    border-top: 0;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--geo-home-accent) 7%, var(--geo-home-module-surface));
+}
+
+/*
+ * 全站主按钮（2026-09-16）
+ *
+ * 审计实测同一站有**四种不同的"主按钮"**：首页 hero（radius 10px / 15.2px / 700）、
+ * 服务页（8px / 14px / 600）、404（8px / 14px / 650）、表单页（近黑底）。
+ * 同一个动作语义不该长得不一样。这里定一个语义类，首页 hero 的按钮本来就是这套规格，
+ * 其余页面挂上它即可。表单页的提交按钮由主题自己控制，未纳入（见审计 P2-8 备注）。
+ */
+.site-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.72rem 1.35rem;
+    border: 0;
+    border-radius: 10px;
+    background: #2563eb;
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.2;
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(17, 24, 39, .14);
+    transition: filter .15s ease;
+}
+
+.site-btn-primary:hover,
+.site-btn-primary:focus-visible {
+    color: #fff;
+    filter: brightness(1.07);
+}
