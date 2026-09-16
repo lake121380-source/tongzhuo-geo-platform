@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
 use App\Models\Article;
+use App\Services\Site\SiteUrlGenerator;
 use App\Support\Site\ArticleHtmlPresenter;
 use App\Support\Site\SiteSettingsBag;
 use App\Support\Site\SiteThemeViewResolver;
@@ -17,6 +18,8 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  */
 class ArchiveController extends Controller
 {
+    public function __construct(private readonly SiteUrlGenerator $urls) {}
+
     public function index(): View
     {
         $map = SiteSettingsBag::all();
@@ -70,7 +73,7 @@ class ArchiveController extends Controller
             'pageDescription' => $siteDescription,
             'pageKeywords' => $siteKeywords,
             'pageOgType' => 'website',
-            'canonicalUrl' => route('site.archive'),
+            'canonicalUrl' => $this->urls->url('/archive'),
         ]);
     }
 
@@ -135,7 +138,7 @@ class ArchiveController extends Controller
             'pageDescription' => $pageTitle,
             'pageKeywords' => $siteKeywords,
             'pageOgType' => 'website',
-            'canonicalUrl' => route('site.archive.month', ['year' => $year, 'month' => $month]),
+            'canonicalUrl' => $this->urls->url(sprintf('/archive/%04d/%02d', (int) $year, (int) $month)),
         ]);
     }
 }

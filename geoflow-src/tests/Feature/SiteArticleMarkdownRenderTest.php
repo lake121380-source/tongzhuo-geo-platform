@@ -45,9 +45,12 @@ MD);
         Schema::dropIfExists('lead_submissions');
         Schema::dropIfExists('lead_forms');
 
+        // 首页主区块在**默认首页**上已从「最新文章」改为「最新观点」（2026-09-16）：
+        // 首页不再铺全部文章的信息流，只留 3 条精选 + 「查看全部」入口。
+        // 这条断言的本意是"首页能渲染出主内容区"，键名跟着新行为走。
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSee(__('site.home_latest'));
+            ->assertSee(__('site.home_insights'));
     }
 
     public function test_published_article_page_outputs_normalized_image_url(): void
@@ -252,7 +255,7 @@ MD);
             ->assertDontSee('data-hot-carousel]).forEach', false);
     }
 
-    public function test_homepage_renders_configured_carousel_and_sidebar_feed_panel(): void
+    public function test_homepage_renders_configured_carousel_and_keeps_the_sidebar_off(): void
     {
         SiteSetting::query()->updateOrCreate(
             ['setting_key' => 'site_name'],
@@ -280,8 +283,10 @@ MD);
             ->assertSee('data-home-poster-carousel', false)
             ->assertSee('https://example.com/banner-one.jpg', false)
             ->assertSee('Banner One')
-            ->assertSee('桐灼GEO Feed')
             ->assertSee('桐灼GEO Demo')
-            ->assertSee('Demo homepage description');
+            ->assertSee('Demo homepage description')
+            // 默认首页不再有侧栏（原「桐灼GEO Feed」面板已随侧栏一起移除）：
+            // 它和 hero 讲同一段话，侧栏的「最新文章」又和主列表是同一批内容。
+            ->assertDontSee('桐灼GEO Feed');
     }
 }

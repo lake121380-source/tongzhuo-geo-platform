@@ -22,6 +22,12 @@ final class SiteUrlGenerator
         return $this->url('/about');
     }
 
+    /** 服务页（2026-09-16 新增）：官网需要"这家公司卖什么"的落地页。 */
+    public function services(): string
+    {
+        return $this->url('/services');
+    }
+
     public function category(Category|string $category): string
     {
         $slug = $category instanceof Category ? $category->slug : $category;

@@ -81,6 +81,7 @@
         class="geo-home-modules {{ $containerClass }} {{ $spacingClass }} {{ $radiusClass }}"
         style="--geo-home-accent: {{ e($style['accent_color']) }}; --geo-home-bg: {{ e($style['background_color']) }}; --geo-home-surface: {{ e($style['surface_color']) }}; --geo-home-text: {{ e($style['text_color']) }}; --geo-home-muted: {{ e($style['muted_color']) }};"
     >
+        @php $heroHeadingUsed = false; @endphp
         @foreach($modules as $module)
             @php
                 $type = (string) ($module['type'] ?? 'rich_text');
@@ -113,6 +114,8 @@
                 $moduleStyle = implode('; ', $moduleStyleParts);
             @endphp
             @continue($type === 'lead_form' && !$selectedLeadForm)
+            {{-- 文章合集没有文章时整块跳过：留一个只有标题的空壳比不显示更糟。 --}}
+            @continue($type === 'article_collection' && $moduleArticles->isEmpty())
 
             <div class="{{ $moduleClass }}" @if($moduleStyle !== '') style="{{ $moduleStyle }}" @endif>
                 @if(in_array($type, ['hero', 'rich_text', 'image_band', 'cta_band'], true))
@@ -120,8 +123,25 @@
                         @if($subtitle !== '')
                             <div class="geo-home-module__eyebrow">{{ $subtitle }}</div>
                         @endif
+                        @php
+                            /*
+                             * 首页第一屏的 hero 是这一页的主标题，必须出 `<h1>`。
+                             * 此前所有模块标题一律 `<h2>`，于是**首页一个 h1 都没有**
+                             * （2026-09-16 实测：渲染 HTML 里 h1 数 = 0）——搜索引擎和
+                             * 读屏软件都拿不到页面主标题。
+                             * 只给「第一个 hero 模块」升级，一页最多一个 h1。
+                             */
+                            $isPrimaryHero = $type === 'hero' && ! $heroHeadingUsed;
+                            if ($isPrimaryHero) {
+                                $heroHeadingUsed = true;
+                            }
+                        @endphp
                         @if($title !== '')
-                            <h2 class="geo-home-module__title">{{ $title }}</h2>
+                            @if($isPrimaryHero)
+                                <h1 class="geo-home-module__title">{{ $title }}</h1>
+                            @else
+                                <h2 class="geo-home-module__title">{{ $title }}</h2>
+                            @endif
                         @endif
                         @if($body !== '')
                             <p class="geo-home-module__body">{{ $body }}</p>

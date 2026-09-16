@@ -2,9 +2,12 @@
 
 namespace App\Services\Site;
 
+use App\Models\Category;
 use App\Models\HostedSiteProfile;
+use App\Support\Site\CompanyProfile;
 use App\Support\Site\CurrentSite;
 use App\Support\Site\SiteSettingsBag;
+use Illuminate\Support\Facades\Schema;
 
 final class SiteDiscoveryRenderer
 {
@@ -88,6 +91,43 @@ final class SiteDiscoveryRenderer
         $title = $this->text($config['site_title']);
         $summary = $this->text($config['summary']);
         $lines = ['# '.$title, '', '> '.$summary, ''];
+        /*
+         * 公司实体段。llms.txt 原先**只有文章列表**——AI 读到「这家站发过什么」，
+         * 读不到「这家站是谁、做什么、怎么联系」。同一份事实在页面上是首页/关于页，
+         * 在结构化数据里是 Organization，在这里就是这段（三处同源，见 CompanyProfile）。
+         * 没配置就整段不输出。
+         */
+        $company = CompanyProfile::fromSettings(SiteSettingsBag::all());
+        if ($company->isConfigured()) {
+            $lines[] = '## About '.$this->text($company->name);
+            if ($company->tagline !== '') {
+                $lines[] = '- 定位：'.$this->text($company->tagline);
+            }
+            if ($company->legalName !== '') {
+                $lines[] = '- 主体：'.$this->text($company->legalName);
+            }
+            if ($company->description !== '') {
+                $lines[] = '- 简介：'.$this->text($company->description);
+            }
+            if ($company->hasServices()) {
+                $lines[] = '- 服务：'.implode('；', array_map(
+                    static fn (array $service): string => $service['description'] !== ''
+                        ? $service['title'].'（'.$service['description'].'）'
+                        : $service['title'],
+                    $company->services,
+                ));
+            }
+            if ($company->phone !== '') {
+                $lines[] = '- 电话：'.$this->text($company->phone);
+            }
+            if ($company->email !== '') {
+                $lines[] = '- 邮箱：'.$this->text($company->email);
+            }
+            if ($company->address !== '') {
+                $lines[] = '- 地址：'.$this->text($company->address);
+            }
+            $lines[] = '';
+        }
         if ($config['core_directives'] !== []) {
             $lines[] = '## Retrieval and citation rules';
             foreach ($config['core_directives'] as $directive) {
@@ -122,6 +162,31 @@ final class SiteDiscoveryRenderer
         $urls = [];
         if ($this->indexingAllowed()) {
             $urls[] = ['loc' => $this->urls->home(), 'lastmod' => null];
+            /*
+             * 静态页与分类页此前**完全不在 sitemap 里**（实测只有首页 + 文章两条），
+             * 而 `/about` 是唯一讲"这家公司是谁"的页面、分类页是天然的落地页——
+             * 等于自己放弃了这批入口。2026-09-16 补上。
+             * `/services` 只在配置了服务清单时才有内容（否则该页 404），所以条件加入。
+             */
+            $urls[] = ['loc' => $this->urls->about(), 'lastmod' => null];
+            $urls[] = ['loc' => $this->urls->url('/archive'), 'lastmod' => null];
+            if (CompanyProfile::fromSettings(SiteSettingsBag::all())->hasServices()) {
+                $urls[] = ['loc' => $this->urls->services(), 'lastmod' => null];
+            }
+            if (Schema::hasTable('categories')) {
+                $categories = Category::query()
+                    ->whereHas('articles', function ($query): void {
+                        $this->articles->apply($query);
+                    })
+                    ->orderBy('sort_order')
+                    ->orderBy('id')
+                    ->get(['id', 'slug', 'created_at']);
+                foreach ($categories as $category) {
+                    // categories 表**没有 updated_at 列**（只有 created_at，2026-09-16 实测），
+                    // 别照抄 articles 的列名。
+                    $urls[] = ['loc' => $this->urls->category($category), 'lastmod' => $category->created_at?->toAtomString()];
+                }
+            }
             foreach ($this->articles->query()->orderByDesc('published_at')->orderByDesc('id')->limit(5000)->get(['id', 'slug', 'updated_at']) as $article) {
                 $urls[] = ['loc' => $this->urls->article($article), 'lastmod' => $article->updated_at?->toAtomString()];
             }

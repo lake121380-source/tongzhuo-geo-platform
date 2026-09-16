@@ -42,7 +42,7 @@ export default function SiteSettingsPanel({ apiClient, lang, canRead, canWrite, 
   const [settings, setSettings] = useState<ApiRecord>({});
   const [themes, setThemes] = useState<ApiRecord[]>([]);
   const [homepage, setHomepage] = useState<ApiRecord>({ style: {}, modules: [], presets: [] });
-  const [draft, setDraft] = useState({ site_name: '', site_subtitle: '', site_description: '', site_keywords: '', copyright_info: '', filing_info: '', filing_url: '', site_logo: '', site_favicon: '', seo_title_template: '', seo_description_template: '', featured_limit: '6', per_page: '12', analytics_code: '' });
+  const [draft, setDraft] = useState({ site_name: '', site_subtitle: '', site_description: '', site_keywords: '', copyright_info: '', filing_info: '', filing_url: '', site_logo: '', site_favicon: '', seo_title_template: '', seo_description_template: '', featured_limit: '6', per_page: '12', analytics_code: '', company_legal_name: '', company_tagline: '', company_services: '', contact_email: '', contact_phone: '', company_address: '', company_founded: '' });
   const [carousel, setCarousel] = useState<CarouselSlide[]>([]);
   const [theme, setTheme] = useState('');
   const [homepageJson, setHomepageJson] = useState('{\n  "style": {},\n  "modules": []\n}');
@@ -194,6 +194,47 @@ export default function SiteSettingsPanel({ apiClient, lang, canRead, canWrite, 
         : <>
       <div className="grid gap-3 md:grid-cols-2">{[['site_name', zh ? '站点名称' : 'Site name'], ['site_subtitle', zh ? '副标题' : 'Subtitle'], ['site_keywords', zh ? '关键词' : 'Keywords'], ['copyright_info', zh ? '版权信息' : 'Copyright'], ['filing_info', zh ? '备案信息' : 'Filing info'], ['filing_url', zh ? '备案链接' : 'Filing URL'], ['site_logo', zh ? 'Logo URL' : 'Logo URL'], ['site_favicon', zh ? 'Favicon URL' : 'Favicon URL'], ['seo_title_template', zh ? 'SEO 标题模板' : 'SEO title template'], ['seo_description_template', zh ? 'SEO 描述模板' : 'SEO description template']].map(([field, label]) => <label key={field} className="text-xs text-slate-400">{label}<input value={String(draft[field as keyof typeof draft] || '')} disabled={!canWrite} onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" /></label>)}</div>
       <label className="block text-xs text-slate-400">{zh ? '站点描述' : 'Site description'}<textarea rows={3} value={draft.site_description} disabled={!canWrite} onChange={(event) => setDraft((current) => ({ ...current, site_description: event.target.value }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50" /></label>
+      {/* 公司实体：同一份事实同时供三处使用——首页/关于页（人看）、Organization 结构化数据（机器读）、
+          llms.txt（AI 读）。填了这里，三个出口一起生效；不填则整段结构化数据不输出，不会产生空壳。 */}
+      <div className="border-t border-slate-800 pt-4">
+        <h3 className="text-xs font-bold text-white">{zh ? '公司实体信息' : 'Company profile'}</h3>
+        <p className="mt-1 text-[11px] text-slate-500">
+          {zh
+            ? '这份信息会同时用于：首页与关于页、搜索引擎的 Organization 结构化数据、llms.txt。填了就有，不填不会输出空壳。'
+            : 'Used by the homepage/about page, the Organization structured data and llms.txt.'}
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          {[
+            ['company_legal_name', zh ? '公司全称' : 'Legal name'],
+            ['company_tagline', zh ? '一句话定位' : 'One-line positioning'],
+            ['contact_email', zh ? '联系邮箱' : 'Contact email'],
+            ['contact_phone', zh ? '联系电话' : 'Contact phone'],
+            ['company_address', zh ? '公司地址' : 'Address'],
+            ['company_founded', zh ? '成立日期（如 2025-09-19）' : 'Founding date'],
+          ].map(([field, label]) => (
+            <label key={field} className="text-xs text-slate-400">
+              {label}
+              <input
+                value={String(draft[field as keyof typeof draft] || '')}
+                disabled={!canWrite}
+                onChange={(event) => setDraft((current) => ({ ...current, [field]: event.target.value }))}
+                className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50"
+              />
+            </label>
+          ))}
+        </div>
+        <label className="mt-3 block text-xs text-slate-400">
+          {zh ? '服务清单（一行一项，格式：名称|一句话说明，最多 12 项）' : 'Services (one per line: name|description, max 12)'}
+          <textarea
+            rows={4}
+            value={draft.company_services}
+            disabled={!canWrite}
+            onChange={(event) => setDraft((current) => ({ ...current, company_services: event.target.value }))}
+            placeholder={zh ? 'GEO 优化|让企业信息能被搜索引擎与 AI 准确理解并引用' : 'GEO optimization|Make your business citable by search and AI'}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-white disabled:opacity-50"
+          />
+        </label>
+      </div>
       <div className="border-t border-slate-800 pt-4">
         <h3 className="text-xs font-bold text-white">{zh ? '统计代码' : 'Analytics code'}</h3>
         <p className="mt-1 text-[11px] text-slate-500">{zh ? '整段注入公开页面的 <head>；只有超级管理员可以修改。' : 'Injected into the public <head>; only super administrators may change it.'}</p>

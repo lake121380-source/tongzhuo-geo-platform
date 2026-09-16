@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Site;
 
 use App\Http\Controllers\Controller;
 use App\Services\Site\SiteUrlGenerator;
+use App\Support\Site\CompanyProfile;
 use App\Support\Site\CurrentSite;
 use App\Support\Site\SiteSettingsBag;
 use App\Support\Site\SiteThemeViewResolver;
@@ -51,6 +52,17 @@ class AboutController extends Controller
             'aboutTitle' => $aboutTitle !== '' ? $aboutTitle : '关于 '.$siteTitle,
             'aboutContent' => $aboutContent,
             'contactEmail' => $contactEmail,
+            /*
+             * 显式传一份公司实体。
+             *
+             * `SiteLayoutComposer` 只注册在 `site.layout` / `theme.*.layout` 上，而
+             * `@extends` 的子视图里，`@section(...)` 的内容是在**子视图自己的作用域**求值的
+             * ——拿不到布局 composer 注入的变量。2026-09-16 我在这里漏了这一点，
+             * 结果 `$companyProfile` 未定义、about 页 500，而 Laravel 每次都要往日志里写
+             * 一份完整堆栈，把日志刷到 179MB、单次请求拖到 60 秒。
+             * 所以凡是子视图里要用到的公共数据，要么控制器显式传，要么视图侧做 `?? null` 兜底。
+             */
+            'companyProfile' => CompanyProfile::fromSettings($map),
             'isHostedAbout' => $isHosted,
         ];
 

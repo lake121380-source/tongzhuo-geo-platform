@@ -48,6 +48,18 @@ final class SiteSettingsController extends BaseApiController
             'home_carousel_slides.*.link_url' => ['nullable', 'string', 'max:500'],
             'home_carousel_slides.*.enabled' => ['nullable', 'boolean'],
             'analytics_code' => ['sometimes', 'nullable', 'string', 'max:50000'],
+            /*
+             * 公司实体：对外一致的那份事实。人看的页面、Organization 结构化数据、
+             * llms.txt 三处共用（见 App\Support\Site\CompanyProfile），所以在这里统一收口。
+             * `company_services` 用「一行一条、名称|描述」的文本，后台一个多行框即可维护。
+             */
+            'company_legal_name' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'company_tagline' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'company_services' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'contact_email' => ['sometimes', 'nullable', 'email', 'max:200'],
+            'contact_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'company_address' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'company_founded' => ['sometimes', 'nullable', 'string', 'max:20'],
         ]);
         if (array_key_exists('analytics_code', $payload) && ! $admin->isSuperAdmin()) {
             throw new ApiException('forbidden', '只有超级管理员可以修改统计代码', 403, [
@@ -175,6 +187,9 @@ final class SiteSettingsController extends BaseApiController
             'seo_title_template' => '{title} - {site_name}', 'seo_description_template' => '{description}',
             'featured_limit' => '6', 'per_page' => '12', 'active_theme' => (string) config('geoflow.default_theme', ''),
             'analytics_code' => '', 'home_carousel_slides' => '[]',
+            // 公司实体（人看的页面 / 结构化数据 / llms.txt 共用的那份事实）
+            'company_legal_name' => '', 'company_tagline' => '', 'company_services' => '',
+            'contact_email' => '', 'contact_phone' => '', 'company_address' => '', 'company_founded' => '',
         ];
         $stored = SiteSetting::query()->whereIn('setting_key', array_keys($defaults))->pluck('setting_value', 'setting_key')->all();
         foreach ($defaults as $key => $default) {

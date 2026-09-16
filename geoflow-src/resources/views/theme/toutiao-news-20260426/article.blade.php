@@ -95,30 +95,12 @@
             </section>
         @endif
 
-        <aside class="tt-sidebar">
-            @if($relatedArticles->isNotEmpty())
-                <section class="tt-panel">
-                    <div class="tt-section-title">
-                        <span class="tt-title-row">{{ __('site.article_related') }}</span>
-                    </div>
-                    <div class="tt-hot-list">
-                        @foreach($relatedArticles as $related)
-                            <a href="{{ route('site.article', $related->slug) }}" class="tt-hot-item">
-                                <span class="tt-hot-index">{{ $loop->iteration }}</span>
-                                <span>{{ $related->title }}</span>
-                            </a>
-                        @endforeach
-                    </div>
-                </section>
-            @endif
-
-            <section class="tt-panel">
-                <div class="tt-section-title">
-                    <span class="tt-title-row">{{ $siteTitle }}</span>
-                </div>
-                <p class="text-sm leading-7 text-gray-600">{{ $siteDescription }}</p>
-                <a href="{{ route('site.home') }}" class="tt-card-action">{{ __('front.nav.home') }} <i data-lucide="arrow-right" class="w-4 h-4"></i></a>
-            </section>
-        </aside>
+        {{--
+            这里原本还有一个 <aside class="tt-sidebar">（内含第二份「相关阅读」+ 站点简介面板）。
+            但 `.tt-article-layout .tt-sidebar { display: none !important }` 在所有断点都把它隐藏
+            （theme.css:1684），于是：DOM 里多一份重复的「相关阅读」、多几个图标节点，
+            对 SEO 是重复内容，对后来改代码的人是"明明有这段为什么看不到"的陷阱。
+            2026-09-16：既然从不显示，就不再渲染。相关阅读已由上面的 tt-related-block 承担。
+        --}}
     </div>
 @endsection

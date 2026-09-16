@@ -149,12 +149,19 @@ class HomeController extends Controller
         }
 
         $canonicalUrl = $this->urls->home();
+        /*
+         * 搜索结果页与"分类不存在"页都是**无限抓取面**（任意 ?search= 都返回 200），
+         * 此前 canonical 指向自己、也没有 robots 指令，实测 `/?search=GEO` 返回 200
+         * 且无 noindex——爬虫可以无限展开。2026-09-16 修：canonical 收回首页，
+         * 并显式 noindex,follow（不 nofollow，页内链接照常传递权重）。
+         */
+        $pageRobots = '';
         if ($search !== '') {
-            $canonicalUrl = $this->urls->home(['search' => $search]);
+            $pageRobots = 'noindex,follow';
         } elseif ($category instanceof Category) {
             $canonicalUrl = $this->urls->category($category);
         } elseif ($categoryMissing) {
-            $canonicalUrl = $this->urls->home(['category' => $categoryId]);
+            $pageRobots = 'noindex,follow';
         }
 
         $showHomepageModules = $search === '' && ! $category && ! $categoryMissing && $page === 1;
@@ -185,6 +192,7 @@ class HomeController extends Controller
             'pageOgType' => 'website',
             'perPage' => $perPage,
             'canonicalUrl' => $canonicalUrl,
+            'pageRobots' => $pageRobots,
         ]);
     }
 

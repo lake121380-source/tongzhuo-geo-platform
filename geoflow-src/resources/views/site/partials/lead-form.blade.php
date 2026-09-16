@@ -14,7 +14,16 @@
     @if($leadFormTitle !== '' || $leadFormDescription !== '')
         <div class="mb-5">
             @if($leadFormTitle !== '')
-                <h2 class="{{ $embedded ? 'text-xl' : 'text-2xl' }} font-semibold text-gray-900">{{ $leadFormTitle }}</h2>
+                {{--
+                    独立表单页没有别的标题，这里的表单名就是页面主标题，必须是 `<h1>`；
+                    嵌在首页模块里时（`$embedded`）才降为 `<h2>`，避免一页多个 h1。
+                    2026-09-16 修：此前两种情况都出 h2，独立表单页实测 `h1 = 0`。
+                --}}
+                @if($embedded)
+                    <h2 class="text-xl font-semibold text-gray-900">{{ $leadFormTitle }}</h2>
+                @else
+                    <h1 class="text-2xl font-semibold text-gray-900">{{ $leadFormTitle }}</h1>
+                @endif
             @endif
             @if($leadFormDescription !== '')
                 <p class="mt-2 text-sm leading-6 text-gray-600">{{ $leadFormDescription }}</p>

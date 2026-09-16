@@ -15,6 +15,7 @@ use App\Http\Controllers\Site\HomeController;
 use App\Http\Controllers\Site\HostedAssetController;
 use App\Http\Controllers\Site\LeadFormController as SiteLeadFormController;
 use App\Http\Controllers\Site\SiteDiscoveryController;
+use App\Http\Controllers\Site\ServiceController as SiteServiceController;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -35,6 +36,8 @@ Route::get('/app', function () {
 Route::middleware(['site.locale', 'site.view_log'])->group(function (): void {
     Route::get('/', [HomeController::class, 'index'])->name('site.home');
     Route::get('/about', [AboutController::class, 'index'])->name('site.about');
+    // 服务页：官网首页的服务卡片要有点得进去的地方（2026-09-16 新增）。
+    Route::get('/services', [SiteServiceController::class, 'index'])->name('site.services');
     Route::get('/robots.txt', [SiteDiscoveryController::class, 'robots'])->name('site.robots');
     Route::get('/sitemap.xml', [SiteDiscoveryController::class, 'sitemap'])->name('site.sitemap');
     Route::get('/llms.txt', [SiteDiscoveryController::class, 'llms'])->name('site.llms');

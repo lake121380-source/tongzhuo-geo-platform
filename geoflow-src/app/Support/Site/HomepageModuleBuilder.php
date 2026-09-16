@@ -2,6 +2,9 @@
 
 namespace App\Support\Site;
 
+use App\Models\LeadForm;
+use Illuminate\Support\Facades\Schema;
+
 final class HomepageModuleBuilder
 {
     public const MAX_MODULES = 30;
@@ -129,32 +132,84 @@ final class HomepageModuleBuilder
      */
     private static function enterpriseBrandPreset(): array
     {
+        /*
+         * 2026-09-16 修：这套预设以前是**写死的演示文案**，卡片链接还指向 `/category/geo-growth`
+         * 这类根本不存在的路由——套用之后首页上每个按钮点下去都是 404（实测四个链接全 404）。
+         * 现在改成「有真实信息就用真实信息」：
+         *   · 已配「公司实体」→ hero 与服务清单直接用这家公司的（与 Organization 结构化数据同源，
+         *     见 App\Support\Site\CompanyProfile）；
+         *   · 没配 → 退回通用文案，但链接一律指向真实存在的路由。
+         * 服务卡片的目标链接**留空**：系统目前没有「服务页」这种页面类型，宁可不出链接，
+         * 也不伪造一个点不通的入口。等做了服务页再接上。
+         */
+        $company = CompanyProfile::fromSettings(SiteSettingsBag::all());
+        $heroSubtitle = $company->name !== '' ? $company->name : '企业品牌首页';
+        $heroTitle = $company->tagline !== '' ? $company->tagline : '把首页升级成业务增长入口';
+        $heroBody = $company->description !== ''
+            ? $company->description
+            : '集中展示业务价值、解决方案、客户证据和最新内容，让首页同时承担认知、信任和转化。';
+        $services = $company->hasServices()
+            ? implode("\n", array_map(
+                // 服务卡片的链接指向服务页（2026-09-16 新增）。此前这里留空是因为
+                // 系统没有「服务页」这种页面类型、宁可不出链接也不伪造入口；
+                // 现在有了真实目标，就该让"讲完服务"能点进去看详情。
+                static fn (array $service): string => $service['title'].'|'.$service['description'].'|/services',
+                $company->services,
+            ))
+            : "GEO 诊断|围绕品牌可见度、引用概率和内容结构定位问题。\n知识库沉淀|把业务资料、FAQ 和案例转化为可复用素材。\n多站分发|把文章按渠道策略同步到目标站点。";
+
+        // 转化目标：系统里能收线索的表单优先，没有才退回关于页。
+        $contactFormSlug = Schema::hasTable('lead_forms')
+            ? LeadForm::query()
+                ->where('status', LeadForm::STATUS_ACTIVE)
+                ->orderBy('id')
+                ->value('slug')
+            : null;
+        $hasContactForm = is_string($contactFormSlug) && $contactFormSlug !== '';
+        $contactLinkText = $hasContactForm ? '在线留言' : '联系我们';
+        $contactLinkUrl = $hasContactForm ? '/forms/'.$contactFormSlug : '/about';
+
         return self::normalizePreset([
             'style' => self::whiteStyle([
                 'accent_color' => '#2563eb',
-                'container_width' => 'wide',
+                /*
+                 * 必须是 `default`（1180px），与主题壳 `.tt-shell` 同宽。
+                 * 2026-09-16 修：这里原先是 `wide`（1360px），于是首页上半屏的模块容器
+                 * 左边缘在 16px、下半屏的文章列表在 133px——**同一页两套栅格，差 117px**，
+                 * 独立审计把它列为 P0。容器宽度不是装饰项，是整页的基线。
+                 */
+                'container_width' => 'default',
                 'section_spacing' => 'relaxed',
                 'radius' => 'soft',
             ]),
             'modules' => [
                 self::presetModule('enterprise_brand', 'hero', 10, [
-                    'layout' => 'split',
-                    'title' => '把首页升级成业务增长入口',
-                    'subtitle' => '企业品牌首页',
-                    'body' => '集中展示业务价值、解决方案、客户证据和最新内容，让首页同时承担认知、信任和转化。',
-                    'link_text' => '查看解决方案',
-                    'link_url' => '/category/geo-growth',
+                    // 没有主视觉图就别用 split：那是两列布局，右列会空掉半屏。
+                    // 单列 + 居中，和绝大多数企业官网首屏一致。
+                    'layout' => 'single',
+                    'alignment' => 'center',
+                    'title' => $heroTitle,
+                    'subtitle' => $heroSubtitle,
+                    'body' => $heroBody,
+                    'link_text' => '进一步了解',
+                    'link_url' => '/about',
                 ]),
                 self::presetModule('enterprise_brand', 'feature_grid', 20, [
                     'layout' => 'grid',
-                    'title' => '核心能力',
-                    'subtitle' => '用结构化模块讲清楚业务价值',
-                    'body' => "GEO 诊断|围绕品牌可见度、引用概率和内容结构定位问题。|/category/geo-growth\n知识库沉淀|把业务资料、FAQ 和案例转化为可复用素材。|/category/ai-content-workflow\n多站分发|把文章按渠道策略同步到目标站点。|/category/tech-news",
+                    'title' => '我们提供的服务',
+                    'subtitle' => '每一项都对应一类可交付的结果',
+                    'body' => $services,
                 ]),
-                self::presetModule('enterprise_brand', 'metric_band', 30, [
+                /*
+                 * 这里原本是 `metric_band`，配的是「内容资产|100+」「渠道站点|12」这类**编造的数字**。
+                 * 指标带是给真实数据用的；没有真实数据就编一个，正是这套系统里最该避免的做法
+                 * （21 号主题硬编码一屏假指标就是反面教材）。改成能力网格：讲做法，不报数。
+                 */
+                self::presetModule('enterprise_brand', 'feature_grid', 30, [
                     'layout' => 'grid',
-                    'title' => '运营概览',
-                    'body' => "内容资产|100+\n渠道站点|12\n知识片段|500+\n更新节奏|每日",
+                    'title' => '我们怎么做',
+                    'subtitle' => '一条从资料到被引用的链路',
+                    'body' => "内容信源|把企业事实整理成可被检索、可被引用的结构化内容。\n知识沉淀|资料、FAQ 与案例都变成可复用的证据。\n多端分发|一处生产，多处可见。\n持续复盘|按实际引用与线索数据调整策略。",
                 ]),
                 self::presetModule('enterprise_brand', 'article_collection', 40, [
                     'layout' => 'grid',
@@ -163,12 +218,18 @@ final class HomepageModuleBuilder
                     'subtitle' => '把最值得阅读的内容前置展示',
                     'limit' => 6,
                 ]),
+                /*
+                 * 这条 CTA 原先写的是「想聊聊你的情况？」→ 按钮却指向 /archive，
+                 * 文案在问要不要聊、按钮把人送去**看归档**；而系统里唯一能收线索的表单
+                 * （/forms/{slug}）全站没有任何入口，是个孤岛。2026-09-16 改成：
+                 * 有可用表单就指向表单，没有才退回关于页——**CTA 必须落在转化目标上**。
+                 */
                 self::presetModule('enterprise_brand', 'cta_band', 50, [
                     'layout' => 'single',
-                    'title' => '从一次诊断开始优化 GEO 内容体系',
-                    'body' => '先确认品牌在 AI 搜索里的可见度，再决定内容、知识库和分发策略。',
-                    'link_text' => '查看最新文章',
-                    'link_url' => '/articles',
+                    'title' => '想聊聊你的情况？',
+                    'body' => '留下联系方式，或者先看看我们公开的内容。',
+                    'link_text' => $contactLinkText,
+                    'link_url' => $contactLinkUrl,
                 ]),
             ],
         ]);
@@ -193,7 +254,7 @@ final class HomepageModuleBuilder
                     'subtitle' => '内容门户首页',
                     'body' => '把专题、精选、最新和热门内容组织成一个可扫描、可复用、可持续更新的内容入口。',
                     'link_text' => '浏览内容',
-                    'link_url' => '/articles',
+                    'link_url' => '/archive',
                 ]),
                 self::presetModule('content_portal', 'article_collection', 20, [
                     'layout' => 'grid',
@@ -243,12 +304,12 @@ final class HomepageModuleBuilder
                     'subtitle' => '服务与解决方案首页',
                     'body' => '围绕客户问题、服务步骤、交付证据和内容案例，让首页变成清晰的方案入口。',
                     'link_text' => '了解服务流程',
-                    'link_url' => '/category/ai-content-workflow',
+                    'link_url' => '/about',
                 ]),
                 self::presetModule('service_solution', 'feature_grid', 20, [
                     'layout' => 'grid',
                     'title' => '服务路径',
-                    'body' => "诊断问题|判断品牌在 AI 搜索和内容结构中的短板。|/category/geo-growth\n建设知识库|沉淀事实、案例和 FAQ，形成可复用证据。|/category/ai-content-workflow\n持续分发|按渠道策略发布内容并观察效果。|/category/tech-news",
+                    'body' => "诊断问题|判断品牌在 AI 搜索和内容结构中的短板。\n建设知识库|沉淀事实、案例和 FAQ，形成可复用证据。\n持续分发|按渠道策略发布内容并观察效果。",
                 ]),
                 self::presetModule('service_solution', 'metric_band', 30, [
                     'layout' => 'grid',
@@ -265,7 +326,7 @@ final class HomepageModuleBuilder
                     'title' => '把分散资料整理成可执行的 GEO 方案',
                     'body' => '从知识库、提示词、任务到分发，形成一条可复盘的内容生产链路。',
                     'link_text' => '查看精选内容',
-                    'link_url' => '/articles',
+                    'link_url' => '/archive',
                 ]),
             ],
         ]);
@@ -332,19 +393,19 @@ final class HomepageModuleBuilder
                     'subtitle' => '产品发布首页',
                     'body' => '通过主视觉、能力介绍、关键指标和发布文章，让用户在一个页面里理解产品定位和使用路径。',
                     'link_text' => '查看发布内容',
-                    'link_url' => '/articles',
+                    'link_url' => '/archive',
                 ]),
                 self::presetModule('product_launch', 'image_band', 20, [
                     'layout' => 'split',
                     'title' => '用一个明确场景承接产品价值',
                     'body' => '把产品适合谁、解决什么问题、为什么现在需要讲清楚，再把用户导向更详细的文章或案例。',
                     'link_text' => '查看案例',
-                    'link_url' => '/category/tech-news',
+                    'link_url' => '/about',
                 ]),
                 self::presetModule('product_launch', 'feature_grid', 30, [
                     'layout' => 'grid',
                     'title' => '产品亮点',
-                    'body' => "更快上线|用模块化首页减少重复设计成本。|/articles\n更易维护|后台配置模块，前台模板自动渲染。|/articles\n更适合增长|内容、转化和 SEO 信息可以统一组织。|/articles",
+                    'body' => "更快上线|用模块化首页减少重复设计成本。\n更易维护|后台配置模块，前台模板自动渲染。\n更适合增长|内容、转化和 SEO 信息可以统一组织。",
                 ]),
                 self::presetModule('product_launch', 'metric_band', 40, [
                     'layout' => 'grid',

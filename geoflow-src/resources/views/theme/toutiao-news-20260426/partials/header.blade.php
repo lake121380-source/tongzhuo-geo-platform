@@ -15,18 +15,28 @@
 
             <nav class="tt-topnav" aria-label="Primary">
                 <a href="{{ route('site.home') }}" data-nav-item="home" class="{{ $isHome ? 'is-active' : '' }}">{{ __('front.nav.home') }}</a>
+                @if(!empty($servicesUrl))
+                    <a href="{{ $servicesUrl }}" data-nav-item="services">服务</a>
+                @endif
+                <a href="{{ route('site.about') }}" data-nav-item="about">关于我们</a>
                 @foreach($navCategories->take(5) as $categoryItem)
                     <a href="{{ route('site.category', $categoryItem->slug) }}">{{ $categoryItem->name }}</a>
                 @endforeach
             </nav>
 
-            <button type="button" class="tt-mobile-menu" onclick="document.getElementById('ttMobileNav')?.classList.toggle('hidden')" aria-label="{{ __('front.nav.categories') }}">
+            {{-- aria-label 原来写的是「分类」，但它控制的是整个移动导航；补上 aria-expanded，
+                 否则屏幕阅读器读不出菜单当前是开还是关。 --}}
+            <button type="button" class="tt-mobile-menu" onclick="const nav=document.getElementById('ttMobileNav'); const open=nav?.classList.toggle('hidden') === false; this.setAttribute('aria-expanded', open ? 'true' : 'false');" aria-label="打开导航菜单" aria-expanded="false" aria-controls="ttMobileNav">
                 <i data-lucide="menu" class="w-7 h-7"></i>
             </button>
         </div>
         <div id="ttMobileNav" class="hidden pb-4">
             <div class="tt-channel-rail !sticky !top-auto">
                 <a href="{{ route('site.home') }}" data-nav-item="home" class="tt-channel {{ $isHome ? 'is-active' : '' }}">{{ __('front.nav.home') }}</a>
+                @if(!empty($servicesUrl))
+                    <a href="{{ $servicesUrl }}" data-nav-item="services" class="tt-channel">服务</a>
+                @endif
+                <a href="{{ route('site.about') }}" data-nav-item="about" class="tt-channel">关于我们</a>
                 @foreach($navCategories as $categoryItem)
                     <a href="{{ route('site.category', $categoryItem->slug) }}" class="tt-channel">{{ $categoryItem->name }}</a>
                 @endforeach

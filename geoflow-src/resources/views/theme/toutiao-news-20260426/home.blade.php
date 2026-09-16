@@ -116,12 +116,23 @@
                 </section>
             @endif
 
+            {{--
+                首页把文章区收成「最新观点」精选 3 条。
+                2026-09-16：此前首页铺的是**全部文章的信息流**（带分页、带侧栏热榜），
+                那是内容站的形态——访客来官网是判断"这家公司行不行"，不是来读资讯的；
+                而且主列表和侧栏「最新文章」列的是同两篇（重复内容）。
+                现在文章在首页只承担"证明这家公司在持续输出"的作用，看更多去归档页。
+                搜索/分类结果页不受影响，仍走原来的完整列表 + 分页。
+            --}}
             <section class="tt-feed-card">
                 <div class="tt-section-title">
-                    <span class="tt-title-row">{{ $viewTitle }}</span>
+                    <span class="tt-title-row">{{ $isDefaultHome ? __('site.home_insights') : $viewTitle }}</span>
+                    @if($isDefaultHome && $articles->isNotEmpty())
+                        <a class="tt-title-more" href="{{ route('site.archive') }}">{{ __('site.home_view_all') }} →</a>
+                    @endif
                 </div>
                 <div class="tt-feed">
-                    @forelse($articles as $article)
+                    @forelse($isDefaultHome ? $articles->take(3) : $articles as $article)
                         @include('theme.toutiao-news-20260426.partials.article-card', ['article' => $article])
                     @empty
                         <div class="rounded-2xl border border-dashed border-gray-200 bg-white p-10 text-center text-gray-500">
@@ -131,11 +142,17 @@
                 </div>
             </section>
 
-            <div class="mt-3">
-                {{ $articles->links() }}
-            </div>
+            @unless($isDefaultHome)
+                <div class="mt-3">
+                    {{ $articles->links() }}
+                </div>
+            @endunless
         </section>
 
-        @include('theme.toutiao-news-20260426.partials.sidebar', ['showFeedPanel' => $isDefaultHome])
+        {{-- 首页不再要侧栏：那栏的「最新文章」和主列表是同一批内容，
+             「桐灼 GEO Feed」面板又把 hero 讲过的话重复一遍。搜索/分类页保留。 --}}
+        @unless($isDefaultHome)
+            @include('theme.toutiao-news-20260426.partials.sidebar', ['showFeedPanel' => false])
+        @endunless
     </div>
 @endsection
