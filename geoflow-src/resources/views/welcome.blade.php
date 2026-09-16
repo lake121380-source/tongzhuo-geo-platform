@@ -4,7 +4,9 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ config('app.name') }}</title>
-    <script src="{{ asset('js/tailwindcss.play-cdn.js') }}"></script>
+    {{-- Tailwind 改为构建期产出（原先加载 407KB 的 Play CDN，官方明确不得用于生产；
+         详见 resources/css/site.css 的说明）。改动前台类名后需重新 vite build。 --}}
+    @vite('resources/css/site.css')
 </head>
 <body class="min-h-screen bg-gray-50 flex items-center justify-center p-6">
     <div class="text-center max-w-lg">

@@ -44,7 +44,10 @@ class TrustedProxyConfigurationTest extends TestCase
         ])
             ->assertOk()
             ->assertSee('href="'.$expectedHomeUrl.'"', false)
-            ->assertSee('src="https://geo.example.com/docs/js/tailwindcss.play-cdn.js"', false);
+            // 样板资源换成仍在渲染的 lucide（原样板 js/tailwindcss.play-cdn.js 已随
+            // 前台 Tailwind 改为构建期产物而删除，2026-09-16）。这里验证的是**代理头下
+            // 资源 URL 的主机/前缀拼接**，与具体是哪个资源无关。
+            ->assertSee('src="https://geo.example.com/docs/js/lucide.min.js"', false);
     }
 
     public function test_trusted_public_scheme_and_port_generate_canonical_https_urls(): void
@@ -53,7 +56,7 @@ class TrustedProxyConfigurationTest extends TestCase
         config(['session.driver' => 'array']);
         config(['geoflow.hosted_sites.primary_hosts' => ['geo.example.com']]);
 
-        $assetPath = '/js/tailwindcss.play-cdn.js';
+        $assetPath = '/js/lucide.min.js';
 
         $this->get('/', [
             'HTTP_X_FORWARDED_PROTO' => 'https',

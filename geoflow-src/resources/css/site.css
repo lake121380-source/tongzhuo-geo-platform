@@ -1,0 +1,33 @@
+/*
+ * 前台站点（官网端）的 Tailwind 入口。
+ *
+ * ⚠️ 为什么要有这个文件（2026-09-16，独立 UI/CSS 审计 P0-3）
+ *
+ * 前台此前加载的是 `public/js/tailwindcss.play-cdn.js`——**Tailwind 的 Play CDN**，
+ * 官方明确写了不得用于生产：它在浏览器里**运行时**扫描 DOM、现算 CSS，两个直接后果：
+ *   ① 首屏渲染绑在一个 407KB 的同步脚本上（FOUC、布局偏移、脚本失败即破版）；
+ *   ② 全站 **30 处 `.hidden`**（移动菜单、分类下拉的开合）只由它注入，
+ *      而站点自己的三份 CSS 里 `.hidden` **一条都没定义**——脚本一挂，面板永久展开、
+ *      所有链接退回浏览器默认的蓝色下划线。审计实测：阻断该脚本后，
+ *      `#ttMobileNav` 的 class 仍是 `hidden`，但 computed display 是 `block`、高度 198px。
+ *
+ * 现在改为**构建期**产出静态 CSS：同一套 Tailwind（v4），但只包含前台真正用到的类。
+ *
+ * `source(none)` 关掉自动扫描，只扫下面显式列出的路径。**这些路径必须覆盖所有
+ * "会产出类名的地方"**——模板之外，`public/assets/js/main.js` 会在运行时拼
+ * toast 的类名（`fixed top-4 right-4`、`ring-2 ring-blue-500`、`bg-green-500` 等），
+ * 漏掉它那些提示就会变成没有样式的裸块。
+ *
+ * 改了前台模板/JS 里的类名之后，需要重新构建：
+ *   MSYS_NO_PATHCONV=1 ./node_modules/.bin/vite build
+ */
+@import 'tailwindcss' source(none);
+
+/* 前台模板 */
+@source '../../resources/views/site';
+@source '../../resources/views/theme';
+@source '../../resources/views/errors';
+
+/* 运行时拼类名的脚本（漏一个就会掉样式） */
+@source '../../public/assets/js/main.js';
+@source '../../public/themes';

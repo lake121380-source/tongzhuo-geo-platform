@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     @include('site.partials.seo-head')
     @stack('head')
-    <script src="{{ asset('js/tailwindcss.play-cdn.js') }}"></script>
+    {{-- Tailwind 改为构建期产出（原先加载 407KB 的 Play CDN，官方明确不得用于生产；
+         详见 resources/css/site.css 的说明）。改动前台类名后需重新 vite build。 --}}
+    @vite('resources/css/site.css')
     <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
     <link rel="stylesheet" href="{{ asset('themes/geoflow-template-15-reading-medium/theme.css') }}">

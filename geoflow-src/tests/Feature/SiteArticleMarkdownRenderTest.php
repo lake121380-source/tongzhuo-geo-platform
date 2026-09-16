@@ -244,7 +244,10 @@ MD);
     {
         $this->get(route('site.home'))
             ->assertOk()
-            ->assertSee('js/tailwindcss.play-cdn.js', false)
+            // 2026-09-16：前台 Tailwind 从 Play CDN 改为构建期产物（见 resources/css/site.css），
+            // 文件名带哈希，所以按入口名前缀断言。这条判据的本意不变：样式是**外部资源**，
+            // 不是内联 <style>，也不是远端 CDN。
+            ->assertSee('build/assets/site-', false)
             ->assertSee('js/lucide.min.js', false)
             ->assertSee('themes/toutiao-news-20260426/theme.css', false)
             ->assertSee('themes/toutiao-news-20260426/theme.js', false)
