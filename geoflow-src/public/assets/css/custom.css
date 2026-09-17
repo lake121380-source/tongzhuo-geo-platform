@@ -24,95 +24,10 @@ body {
     margin-right: auto;
 }
 
-.geo-summary-card {
-    background: rgba(255, 255, 255, 0.92);
-    border: 1px solid #eceff3;
-    border-radius: 1rem;
-    padding: 1.25rem 1.25rem 1rem;
-    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.04);
-}
-
-.geo-summary-head {
-    margin-bottom: 1rem;
-}
-
-.geo-summary-eyebrow {
-    display: inline-block;
-    font-size: 0.75rem;
-    line-height: 1;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #64748b;
-    margin-bottom: 0.5rem;
-}
-
-.geo-summary-title {
-    font-size: 1.125rem;
-    line-height: 1.4;
-    font-weight: 700;
-    color: #111827;
-    margin: 0;
-}
-
-.geo-kv-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-    margin: 0;
-}
-
-.geo-kv-item {
-    background: #f8fafc;
-    border: 1px solid #edf2f7;
-    border-radius: 0.875rem;
-    padding: 0.85rem 0.95rem;
-}
-
-.geo-kv-item dt {
-    font-size: 0.75rem;
-    line-height: 1.2;
-    color: #64748b;
-    margin: 0 0 0.35rem;
-}
-
-.geo-kv-item dd {
-    margin: 0;
-    font-size: 0.95rem;
-    line-height: 1.5;
-    color: #0f172a;
-    font-weight: 500;
-}
-
-.geo-point-list {
-    margin: 1rem 0 0;
-    padding-left: 1.1rem;
-    color: #334155;
-}
-
-.geo-point-list li {
-    margin-top: 0.45rem;
-    line-height: 1.65;
-}
-
 @media (max-width: 1280px) {
     .site-container {
         width: min(100% - 2.5rem, 92vw);
     }
-}
-
-/* 简洁的基础样式 */
-.divider-subtle {
-    height: 1px;
-    background: #f3f4f6;
-}
-
-/* 渐变文字效果 */
-.gradient-text {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
 }
 
 /* 卡片悬停效果 */
@@ -123,26 +38,6 @@ body {
 .card-hover:hover {
     transform: translateY(-4px);
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-}
-
-/* 技能标签动画 */
-.skill-tag {
-    transition: all 0.3s ease;
-}
-
-.skill-tag:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* 统计卡片样式 */
-.stat-card {
-    transition: all 0.3s ease;
-}
-
-.stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
 }
 
 /* 阅读全文按钮样式 */
@@ -249,16 +144,6 @@ html body div.prose-lg blockquote,
     }
 }
 
-/* ========== 文章详情页样式 ========== */
-
-/* 渐变文字效果 */
-.gradient-text {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
 /* 卡片悬停效果 */
 .card-hover {
     transition: all 0.3s ease;
@@ -323,13 +208,6 @@ html body div.prose-lg blockquote,
     margin-bottom: 0;
 }
 
-/* 文章详情页标题样式统一 */
-.article-title {
-    font-size: 1.125rem !important;
-    font-weight: 600 !important;
-    line-height: 1.4 !important;
-}
-
 /* 新版前台统一细节 */
 .section-label {
     display: inline-flex;
@@ -341,32 +219,10 @@ html body div.prose-lg blockquote,
     letter-spacing: 0.01em;
 }
 
-.page-intro-card {
-    padding: 2.9rem 2.4rem !important;
-    border-radius: 1.25rem;
-    border: 1px solid #eceff3;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 251, 252, 0.96)),
-        radial-gradient(circle at top left, rgba(241, 245, 249, 0.95), rgba(255, 255, 255, 0) 45%);
-}
-
-.page-intro-title {
-    font-size: 2.15rem;
-    line-height: 1.08;
-    letter-spacing: -0.04em;
-}
-
 .home-hero {
     background:
         radial-gradient(circle at top left, rgba(241, 245, 249, 0.95), rgba(255, 255, 255, 0) 38%),
         linear-gradient(180deg, #ffffff 0%, #fcfcfd 100%);
-}
-
-.home-hero-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(240px, 0.9fr);
-    gap: 1.5rem;
-    align-items: end;
 }
 
 .home-hero-title {
@@ -380,35 +236,6 @@ html body div.prose-lg blockquote,
     font-size: 0.98rem;
     line-height: 1.8;
     max-width: 48ch;
-}
-
-.home-hero-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.75rem;
-}
-
-.home-stat {
-    padding: 1rem 0.95rem;
-    border-radius: 1rem;
-    background: rgba(248, 250, 252, 0.9);
-    border: 1px solid #eef2f7;
-}
-
-.home-stat-value {
-    display: block;
-    color: #111827;
-    font-size: 1.15rem;
-    font-weight: 600;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-}
-
-.home-stat-label {
-    display: block;
-    margin-top: 0.3rem;
-    color: #6b7280;
-    font-size: 0.76rem;
 }
 
 .entry-card {
@@ -462,10 +289,6 @@ html body div.prose-lg blockquote,
     color: #6b7280;
     font-size: 0.82rem;
     letter-spacing: 0.01em;
-}
-
-.entry-meta-item {
-    opacity: 0.92;
 }
 
 .pill-tag {
@@ -541,10 +364,6 @@ html body div.prose-lg blockquote,
     max-width: none;
 }
 
-.channel-page {
-    max-width: none;
-}
-
 .article-detail-shell {
     border-radius: 1.25rem;
     border: 1px solid #eceff3;
@@ -598,33 +417,6 @@ html body div.prose-lg blockquote,
     overflow-wrap: anywhere;
 }
 
-.related-article-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.65rem 1rem;
-    align-items: center;
-    margin-top: 0.5rem;
-}
-
-.related-article-meta__item {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    line-height: 1;
-}
-
-.category-article-shell {
-    max-width: 100%;
-    margin: 0 auto;
-}
-
-.entry-read-more {
-    padding: 0.58rem 0.92rem !important;
-    border-radius: 9999px !important;
-    border: 1px solid #e6ebf1 !important;
-    background: #f8fafc !important;
-}
-
 .site-header {
     backdrop-filter: saturate(180%) blur(14px);
 }
@@ -648,14 +440,6 @@ html body div.prose-lg blockquote,
 
 .mobile-subnav-link:hover {
     background: #f3f4f6;
-}
-
-.archive-row {
-    border: 1px solid transparent;
-}
-
-.archive-row:hover {
-    border-color: #e5e7eb;
 }
 
 @media (max-width: 768px) {
@@ -1013,57 +797,6 @@ blockquote {
     background-color: #f7fafc;
 }
 
-/* 相关文章推荐样式 */
-.related-articles {
-    background: #f9fafb;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.75rem;
-    padding: 2rem;
-    margin-top: 2.5rem;
-}
-
-.related-articles h3 {
-    color: #374151;
-    font-size: 1rem;
-    font-weight: 500;
-    margin-bottom: 1.25rem;
-}
-
-.related-articles ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.related-articles li {
-    padding: 1rem 0;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    align-items: flex-start;
-}
-
-.related-articles li:last-child {
-    border-bottom: none;
-    padding-bottom: 0;
-}
-
-.related-articles li:first-child {
-    padding-top: 0;
-}
-
-.related-articles a {
-    color: #1f2937;
-    text-decoration: none;
-    font-weight: 500;
-    line-height: 1.6;
-    transition: color 0.2s ease;
-    display: block;
-}
-
-.related-articles a:hover {
-    color: #3b82f6;
-}
-
 .related-articles .meta {
     margin-top: 0.5rem;
     font-size: 0.875rem;
@@ -1087,117 +820,6 @@ blockquote {
     flex-shrink: 0;
     margin-right: 1rem;
     margin-top: 0.125rem;
-}
-
-.article-sticky-ad-spacer {
-    height: 6.5rem;
-}
-
-.article-sticky-ad {
-    position: fixed;
-    left: 50%;
-    bottom: 1rem;
-    z-index: 60;
-    width: min(calc(100vw - 5rem), var(--article-shell-max-width));
-    transform: translateX(-50%);
-}
-
-.article-sticky-ad__inner {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1.25rem;
-    padding: 1.1rem 1.35rem;
-    border: 1px solid rgba(221, 224, 230, 0.9);
-    border-radius: 1.5rem;
-    background: linear-gradient(180deg, rgba(247, 247, 248, 0.98) 0%, rgba(241, 243, 246, 0.98) 100%);
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-    backdrop-filter: saturate(180%) blur(20px);
-}
-
-.article-sticky-ad__content {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.45rem;
-}
-
-.article-sticky-ad__badge {
-    display: inline-flex;
-    align-items: center;
-    align-self: flex-start;
-    padding: 0.3rem 0.72rem;
-    border-radius: 9999px;
-    background: #e8eefc;
-    color: #2558d9;
-    font-size: 0.77rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-}
-
-.article-sticky-ad__title {
-    margin: 0;
-    color: #111827;
-    font-size: 1.02rem;
-    line-height: 1.35;
-    font-weight: 700;
-}
-
-.article-sticky-ad__copy {
-    margin: 0;
-    color: #6b7280;
-    font-size: 0.92rem;
-    line-height: 1.55;
-    max-width: 46rem;
-}
-
-.article-sticky-ad__button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    gap: 0.45rem;
-    padding: 0.84rem 1.18rem;
-    border-radius: 9999px;
-    border: 1px solid rgba(37, 99, 235, 0.16);
-    background: rgba(255, 255, 255, 0.88);
-    color: #2563eb;
-    font-size: 0.9rem;
-    font-weight: 700;
-    text-decoration: none;
-    white-space: nowrap;
-    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04);
-}
-
-.article-sticky-ad__button i {
-    opacity: 0.72;
-}
-
-.article-sticky-ad__button:hover {
-    background: rgba(255, 255, 255, 1);
-    color: #1d4ed8;
-}
-
-.article-sticky-ad__close {
-    position: absolute;
-    top: 0.95rem;
-    right: 1.1rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.25rem;
-    height: 1.25rem;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    color: #9aa2af;
-}
-
-.article-sticky-ad__close:hover {
-    background: transparent;
-    color: #5f6b7a;
 }
 
 @media (max-width: 768px) {
@@ -1742,26 +1364,6 @@ blockquote {
 .site-btn-primary:focus-visible {
     color: #fff;
     filter: brightness(1.07);
-}
-
-/*
- * ════════════════════════════════════════════════════════════════════════════
- *  前台标题阶梯（2026-09-16）
- *
- *  独立审计实测：同一个站的 6 个页面，H1 有 **5 种字号、3 种字重**——
- *    首页 56/800、文章 40/800、分类 40/800、归档 30/700、关于 42.4/600、服务 30/700。
- *  其中 42.4px、30.052px、32.256px 都是 `clamp(...vw...)` 算出来的，**没有设计含义**。
- *  访客从首页点进文章，标题一下缩 16px、字重从 800 掉到 600，观感是"这站没做完"。
- *
- *  这里把标题收敛成一套：**内页主标题统一一个尺寸**；首页 hero 作为落地页头图
- *  保留更大一档（这是有意的层级，不是不一致），但从 vw 计算值改成明确 token。
- *  移动端同步降一档。
- * ════════════════════════════════════════════════════════════════════════════
- */
-:root {
-    --site-h1: 2.5rem;          /* 内页主标题 40px */
-    --site-display: 3.5rem;     /* 首页 hero 56px */
-    --site-h2: 1.5rem;          /* 区块标题 24px */
 }
 
 @media (max-width: 820px) {

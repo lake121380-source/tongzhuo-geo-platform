@@ -71,28 +71,6 @@
         border-bottom: 3px solid transparent;
     }
 
-    
-
-    .tt-search {
-        margin-left: auto;
-        align-items: center;
-        border: 1px solid var(--tt-line);
-        overflow: hidden;
-    }
-
-    .tt-search input {
-        min-width: 0;
-        flex: 1;
-        background: transparent;
-        padding: 10px 4px 10px 16px;
-        color: var(--tt-ink);
-        outline: none;
-    }
-
-    .tt-search button {
-        padding: 10px 14px;
-    }
-
     .tt-mobile-menu {
         display: none;
         color: var(--tt-ink);
@@ -400,15 +378,6 @@
         font-weight: 600;
     }
 
-    .tt-search {
-        height: 40px;
-    }
-
-    .tt-search input {
-        padding-left: 14px;
-        font-size: 14px;
-    }
-
     
 
     
@@ -695,14 +664,6 @@
         letter-spacing: -0.035em;
     }
 
-    .tt-brand-mark {
-        width: 6px;
-        height: 28px;
-        border-radius: 999px;
-        background: var(--tt-red);
-        box-shadow: none;
-    }
-
     .tt-topnav {
         color: #4d4c48;
     }
@@ -711,18 +672,6 @@
     .tt-topnav a.is-active {
         color: var(--tt-red);
         border-bottom-color: var(--tt-red);
-    }
-
-    .tt-search {
-        border-color: var(--tt-line);
-        background: #faf9f5;
-        border-radius: 10px;
-    }
-
-    .tt-search button {
-        min-width: 44px;
-        background: var(--tt-red);
-        color: #faf9f5;
     }
 
     .tt-layout {
@@ -1117,10 +1066,6 @@
         margin-right: auto;
     }
 
-    .tt-search {
-        width: min(360px, 30vw);
-    }
-
     @media (max-width: 1080px) {
         .tt-shell,
         .tt-layout,
@@ -1151,10 +1096,6 @@
     .tt-layout {
         grid-template-columns: minmax(0, 1fr) 300px;
         gap: 22px;
-    }
-
-    .tt-search {
-        display: none;
     }
 
     .tt-header-row {
@@ -1708,7 +1649,6 @@
     text-decoration: underline;
 }
 
-
 /*
  * 首页模块区跟随主题底色（2026-09-16）
  *
@@ -1746,7 +1686,6 @@
 .tt-title-more:focus-visible {
     color: var(--tt-red);
 }
-
 
 /* 卡片统一带一层轻阴影（2026-09-16）：与白卡、加深的边框一起把卡片从页底上"抬"起来。 */
 .tt-feed-card,
