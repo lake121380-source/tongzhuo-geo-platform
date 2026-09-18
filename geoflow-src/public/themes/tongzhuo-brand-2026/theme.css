@@ -2,12 +2,11 @@
  * ════════════════════════════════════════════════════════════════════════════
  *  桐灼GEO 前台主题 · tongzhuo-brand-2026
  *
- *  设计方向「看得见」：纯白底、大字、大量留白、极少装饰。
- *  这门生意卖的是「让企业被 AI 看见」，那站点本身就该是清楚、精确、
- *  一眼看得懂的——设计不靠装饰建立信任，靠尺度与留白。
+ *  视觉语言：技术文档 / 精密克制。
+ *  纸色底 + 墨色字 + 钛灰辅色，等宽字做标签，发丝细线做分隔，32px 微网格做底纹。
+ *  面向工厂老板与采购决策人——他们要的不是"好看"，是"这家公司像做技术的"。
  *
- *  层次全部来自字号与空间：没有卡片、没有阴影、没有圆角。
- *  细线只出现在列表行之间这类真实的分组处，不做装饰性横线。
+ *  零图片：整站不依赖任何配图、插画或产品截图，全部由排版、细线与留白承担。
  *
  *  ⚠️ 命名空间约定（改动前必读）
  *    本文件会被【回退页】加载 —— about / services / archive / forms / 404
@@ -15,46 +14,80 @@
  *    所以这里只允许出现两种东西：
  *      · `:root` 里的 `--tz-*` 变量
  *      · 类选择器（全部挂在 .tz-body 或 .theme-shell 之下）
- *    禁止裸元素选择器（html / body / `*`）、禁止全局 !important——
- *    那会漏到别的页面上去。
+ *    禁止裸元素选择器（html / body / `*`）、禁止全局 !important。
  *
  *  ⚠️ 文件里有一个例外：`.tt-skip-link` 是 tt- 前缀而不是 tz-。
  *    因为类名被 resources/views/site/layout.blade.php:50 写死了，
  *    而回退页只能拿到本文件——不在这里定义它，5 个回退页的页首
  *    会冒出一行可见的「跳到主要内容」裸链接。**这条不能删。**
+ *
+ *  ⚠️ 不引任何外部字体/CDN。参考稿用了 Google Fonts 的 Inter + JetBrains Mono，
+ *    而 Google 在中国大陆访问不了，用中国客户的站不能依赖它。
+ *    等宽字用系统栈（Latin 部分就是等宽，中文自然回落到系统黑体，观感一致）。
  * ════════════════════════════════════════════════════════════════════════════
  */
 
 :root {
-    /* ── 色彩：7 个值，一个不多 ──────────────────────────────────────────── */
-    --tz-paper: #ffffff;
-    --tz-display-ink: #000000;   /* 大标题用纯黑：白底上最锐利，接近印刷 */
-    --tz-ink: #3a4046;           /* 正文（10.4:1） */
-    --tz-muted: #5c646c;         /* 元信息、次要文字（6.3:1） */
-    --tz-rule: #e6e8ea;          /* 细线 */
-    --tz-mark: #e8541a;          /* 灼橙：主 CTA 填充、大字号强调（3.6:1，仅大字号/UI） */
-    --tz-mark-ink: #bf3f0c;      /* 灼橙的文本安全变体（5.4:1），小字号链接用 */
+    /* ── 纸：四档，从最亮到最沉 ─────────────────────────────────────────── */
+    --tz-paper: #fbfbfa;        /* 页面底 */
+    --tz-paper-2: #f4f4f0;      /* 次级面（区块底） */
+    --tz-paper-3: #ecece7;      /* 三级面（标签底、输入框底） */
+    --tz-paper-4: #dfdfd8;      /* 重一点的边框/底色 */
+    --tz-card: #ffffff;         /* 卡片面 */
 
-    /* ── 字体：不引 Web 字体，声音来自尺度、字重、行高 ───────────────────── */
-    --tz-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    /* ── 墨：文字与深色块 ───────────────────────────────────────────────── */
+    --tz-ink-950: #0f1012;      /* 最深：大标题、主按钮底 */
+    --tz-ink-900: #141619;      /* 正文主色 */
+    --tz-ink-850: #1c1f24;
+    --tz-ink-700: #343840;      /* 次级正文 */
+    --tz-ink-500: #5a606c;      /* 辅助文字 */
+    --tz-ink-400: #7e8594;      /* 最弱：元信息、标签 */
+    --tz-ink-300: #a4abb8;
+
+    /* ── 钛灰：中性金属感，用在数字单位等细节 ──────────────────────────── */
+    --tz-titanium: #79746d;
+    --tz-titanium-light: #a59f96;
+
+    /* ── 强调：靛蓝，克制使用（只用于链接悬停、少量标记） ───────────────── */
+    --tz-accent: #1b2a4a;
+    --tz-accent-blue: #2563eb;
+    --tz-accent-subtle: #eef4ff;
+
+    /* ── 示意用语义色：只出现在「两类企业对照」那一块，不做装饰 ─────────── */
+    --tz-rose: #be123c;
+    --tz-rose-bg: #fff1f2;
+    --tz-emerald: #047857;
+    --tz-emerald-bg: #ecfdf5;
+
+    /* ── 线 ─────────────────────────────────────────────────────────────── */
+    --tz-hairline: rgba(20, 22, 25, 0.07);
+    --tz-hairline-2: rgba(20, 22, 25, 0.12);
+    --tz-grid-line: rgba(20, 22, 25, 0.028);
+
+    /* ── 字体：全部系统栈，零外部依赖 ──────────────────────────────────── */
+    --tz-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
         "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", system-ui, sans-serif;
+    --tz-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+        "Liberation Mono", "Courier New", monospace;
 
-    /* ── 字号阶梯 ───────────────────────────────────────────────────────── */
-    --tz-display: clamp(2.5rem, 6vw, 4.5rem);
-    --tz-h1: clamp(2rem, 4vw, 3rem);
-    --tz-h2: clamp(1.5rem, 2.5vw, 1.75rem);
-    --tz-h3: 1.25rem;
-    --tz-body: 1.0625rem;
-    --tz-meta: 0.875rem;
+    /* ── 字号 ───────────────────────────────────────────────────────────── */
+    --tz-display: clamp(1.875rem, 4.2vw, 3.5rem);   /* 30 → 56 */
+    --tz-h1: clamp(1.5rem, 3vw, 2.25rem);           /* 24 → 36 */
+    --tz-h2: clamp(1.375rem, 2.6vw, 2.25rem);       /* 22 → 36 */
+    --tz-h3: 1.125rem;                              /* 18 */
+    --tz-body: 0.9375rem;                           /* 15 —— 参考稿偏小，这里上调一档保可读性 */
+    --tz-sm: 0.875rem;                              /* 14 */
+    --tz-xs: 0.75rem;                               /* 12 */
+    --tz-2xs: 0.6875rem;                            /* 11 —— 等宽标签 */
 
-    /* ── 节奏与容器 ─────────────────────────────────────────────────────── */
-    --tz-gutter: clamp(4rem, 10vw, 8rem);   /* 区块间距，比常规大一倍 */
-    --tz-container: 1120px;
+    /* ── 节奏 ───────────────────────────────────────────────────────────── */
+    --tz-container: 1280px;
+    --tz-pad: clamp(1rem, 3vw, 2rem);
+    --tz-block: clamp(3rem, 7vw, 6rem);             /* 区块上下留白 */
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   基础 —— .tz-body 是主题页的 body，.theme-shell 是回退页的 body
-   （site/layout.blade.php:49 按主题 CSS 是否存在动态挂载）
+   基础
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-body,
 .theme-shell {
@@ -62,11 +95,11 @@
     min-height: 100vh;
     display: flex;
     flex-direction: column;
-    background: var(--tz-paper);
-    color: var(--tz-ink);
-    font-family: var(--tz-font);
+    background-color: var(--tz-paper);
+    color: var(--tz-ink-900);
+    font-family: var(--tz-sans);
     font-size: var(--tz-body);
-    line-height: 1.85;
+    line-height: 1.75;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -76,8 +109,16 @@
     flex: 1 0 auto;
 }
 
+/* 32px 微网格：整页底纹，给"图纸"的观感 */
+.tz-body {
+    background-image:
+        linear-gradient(to right, var(--tz-grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--tz-grid-line) 1px, transparent 1px);
+    background-size: 32px 32px;
+}
+
 .tz-container {
-    width: min(100% - 2.5rem, var(--tz-container));
+    width: min(100% - (var(--tz-pad) * 2), var(--tz-container));
     margin-inline: auto;
 }
 
@@ -92,9 +133,9 @@
     top: 0;
     z-index: 100;
     padding: 0.7rem 1.1rem;
-    background: var(--tz-display-ink);
+    background: var(--tz-ink-950);
     color: var(--tz-paper);
-    font-size: var(--tz-meta);
+    font-size: var(--tz-xs);
     text-decoration: none;
 }
 
@@ -102,7 +143,7 @@
     left: 0;
 }
 
-/* 焦点环：全局统一，键盘用户必须看得见 */
+/* 焦点环：键盘用户必须看得见 */
 .tz-body a:focus-visible,
 .tz-body button:focus-visible,
 .tz-body input:focus-visible,
@@ -113,258 +154,892 @@
 .theme-shell input:focus-visible,
 .theme-shell textarea:focus-visible,
 .theme-shell select:focus-visible {
-    outline: 2px solid var(--tz-mark);
-    outline-offset: 3px;
+    outline: 2px solid var(--tz-ink-950);
+    outline-offset: 2px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   页头 —— 纯文字，无底色、无阴影、无边框
+   等宽标签（参考稿的签名元素）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-mono {
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--tz-ink-400);
+}
+
+.tz-eyebrow {
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tz-ink-400);
+    margin: 0 0 0.75rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   顶栏（公司实体 + 机器可读标本）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-topbar {
+    border-bottom: 1px solid var(--tz-hairline);
+    background: rgba(244, 244, 240, 0.7);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-500);
+    padding-block: 0.5rem;
+}
+
+.tz-topbar-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1.5rem;
+}
+
+.tz-topbar-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tz-topbar-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--tz-emerald);
+}
+
+.tz-topbar code {
+    background: var(--tz-paper-3);
+    color: var(--tz-ink-900);
+    padding: 0.1rem 0.35rem;
+    font-size: var(--tz-2xs);
+}
+
+.tz-topbar a {
+    color: var(--tz-ink-900);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   页头与导航
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-header {
-    padding-block: 1.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(251, 251, 250, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--tz-hairline);
 }
 
 .tz-header-row {
     display: flex;
-    align-items: baseline;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 4rem;
     flex-wrap: wrap;
-    gap: 1rem 2.5rem;
 }
 
 .tz-brand {
-    font-size: 1.375rem;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    color: var(--tz-display-ink);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
     text-decoration: none;
+    color: var(--tz-ink-950);
 }
 
-.tz-brand:hover {
-    color: var(--tz-mark-ink);
+.tz-brand-mark {
+    width: 2.25rem;
+    height: 2.25rem;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--tz-ink-950);
+    color: var(--tz-paper);
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.tz-brand-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.tz-brand-name {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.tz-brand-sub {
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-400);
+    letter-spacing: 0.02em;
 }
 
 /*
  * 导航在窄屏折行而不是收进汉堡菜单：站点常年只有 4–6 个短项，
- * 折行的可用性和健壮性都优于一个需要 JS 的抽屉（少一个会坏的部件）。
+ * 折行的可用性和健壮性都优于一个需要 JS 的抽屉。
  * white-space: nowrap 是必须的——否则宽度不够时浏览器会把「首页」拆成
  * 「首/页」两行，而不是把整个菜单项换到下一行。
  */
 .tz-nav {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1.75rem;
-    margin-left: auto;
-    align-items: baseline;
+    align-items: center;
+    gap: 0.25rem 1.5rem;
+    font-size: var(--tz-xs);
+    font-weight: 500;
+    color: var(--tz-ink-700);
 }
 
 .tz-nav a {
     white-space: nowrap;
-    font-size: 0.9375rem;
-    color: var(--tz-muted);
+    color: var(--tz-ink-700);
     text-decoration: none;
 }
 
 .tz-nav a:hover {
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
 }
 
 .tz-nav a.is-active {
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
     font-weight: 600;
+}
+
+.tz-header-cta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   首页模块（复用 site/partials/homepage-modules.blade.php，只改版式不改结构）
-   该分部承载了 h1 唯一性、空态跳过、lead_form 解析等正确性语义，
-   所以这里一律只做「视觉覆盖」，不重写 DOM。
+   按钮
    ══════════════════════════════════════════════════════════════════════════ */
-:is(.tz-body, .theme-shell) .geo-home-modules {
-    padding-block: 0 var(--tz-gutter);
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module {
-    margin-bottom: var(--tz-gutter);
-}
-
-/*
- * 所有模块一律落在纯白底上。
- * custom.css 给 hero 铺了一条 9% 不透明度的蓝色渐变（:1275-1280），
- * 给 cta_band / image_band 铺了浅色面（:1331、:929）——那是「卡片语言」的残留：
- * 用色块把内容框起来，正是这套设计要去掉的东西。层次交给留白。
- *
- * 代价：后台的「模块面色」配置（surface_color）在这套主题下不再有视觉效果。
- * 这是刻意的——「白底」是这套设计的地基，不是可选项。
- */
-:is(.tz-body, .theme-shell) .geo-home-module {
-    background: none;
+.tz-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.4rem;
+    background: var(--tz-ink-950);
+    color: var(--tz-paper);
     border: 0;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module:last-child {
-    margin-bottom: 0;
-}
-
-/* 标题一律纯黑、加粗、紧行距 */
-:is(.tz-body, .theme-shell) .geo-home-module__title {
-    font-size: var(--tz-h2);
-    line-height: 1.35;
-    font-weight: 600;
-    color: var(--tz-display-ink);
-    letter-spacing: -0.01em;
-    margin: 0 0 1.25rem;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module__body {
-    color: var(--tz-ink);
-    max-width: 46rem;
-}
-
-/* eyebrow 标签：只降级成普通小字，不做大写字距铺陈 */
-:is(.tz-body, .theme-shell) .geo-home-module__eyebrow {
-    font-size: var(--tz-meta);
-    font-weight: 400;
-    letter-spacing: 0;
-    text-transform: none;
-    color: var(--tz-muted);
-    margin: 0 0 0.75rem;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module__link {
-    display: inline-block;
-    margin-top: 1.5rem;
-    padding: 0 0 1px;
-    border: 0;
-    border-bottom: 2px solid var(--tz-mark);
-    border-radius: 0;
-    background: none;
-    box-shadow: none;
-    color: var(--tz-mark-ink);
-    font-size: inherit;
+    font-family: var(--tz-sans);
+    font-size: var(--tz-xs);
     font-weight: 600;
     text-decoration: none;
+    cursor: pointer;
+    transition: background-color 160ms ease;
 }
 
-/*
- * 去掉 custom.css:989 给链接加的「→」尾巴。
- * 箭头是模板化的装饰——它不传达任何信息，而站点里所有链接都加一个，
- * 加到最后就等于没加。真实的层级靠字号和留白表达。
- */
-:is(.tz-body, .theme-shell) .geo-home-module__link::after {
-    content: none;
+.tz-btn:hover {
+    background: var(--tz-ink-850);
+    color: var(--tz-paper);
 }
 
-/* ── Hero：全页唯一的居中区块，也是最主要的「大字」所在 ────────────────── */
-:is(.tz-body, .theme-shell) .geo-home-module--hero {
-    text-align: center;
-    padding-block: clamp(2.5rem, 7vw, 5rem) 0;
+.tz-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.25rem;
+    background: var(--tz-paper-card);
+    color: var(--tz-ink-850);
+    border: 1px solid var(--tz-hairline);
+    font-size: var(--tz-xs);
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 160ms ease;
 }
 
-:is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__title {
-    font-size: var(--tz-display);
-    line-height: 1.2;
+.tz-btn-ghost:hover {
+    background: var(--tz-paper-2);
+    color: var(--tz-ink-950);
+}
+
+.tz-btn-sm {
+    padding: 0.55rem 1rem;
+}
+
+.tz-btn-block {
+    width: 100%;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   区块骨架
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-block {
+    padding-block: var(--tz-block);
+    border-top: 1px solid var(--tz-hairline);
+}
+
+.tz-block-plain {
+    padding-block: var(--tz-block);
+}
+
+.tz-block-head {
+    max-width: 48rem;
+    margin-bottom: clamp(2rem, 4vw, 3.5rem);
+}
+
+.tz-h2 {
+    margin: 0;
+    font-size: var(--tz-h2);
+    line-height: 1.25;
     font-weight: 700;
     letter-spacing: -0.02em;
-    margin-bottom: 1.5rem;
-    /* 让浏览器把长标题的断行均分，避免最后一行只剩一两个字（孤儿行） */
+    color: var(--tz-ink-950);
     text-wrap: balance;
 }
 
-/*
- * 首屏不显示 eyebrow。
- * homepage_modules 的 enterprise_brand 预设把 hero 的 subtitle 自动填成站点名，
- * 于是页头刚写过「桐灼GEO」，首屏正上方又出现一次——这是纯冗余，
- * 而「标题上方的装饰性小标签」也正是模板化设计最典型的痕迹之一。
- * 其余模块的 eyebrow 保留：那里可能写着真信息。
- */
-:is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__eyebrow {
-    display: none;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__body {
-    margin-inline: auto;
-    color: var(--tz-muted);
-    max-width: 34rem;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__eyebrow {
-    margin-bottom: 1.25rem;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__link {
-    margin-top: 2rem;
-}
-
-/* 其余模块：内容区左对齐（居中正文没有锚点，读起来飘） */
-:is(.tz-body, .theme-shell) .geo-home-module--align-center {
-    text-align: center;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module--align-center .geo-home-module__body {
-    margin-inline: auto;
-}
-
-/* feature_grid：去掉卡片，改成留白分隔的行 */
-:is(.tz-body, .theme-shell) .geo-home-module__grid {
-    display: grid;
-    gap: 2.5rem 3rem;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module__feature {
-    border: 0;
-    background: none;
-    padding: 0;
-    box-shadow: none;
-    border-radius: 0;
-}
-
-/* article_collection：纯文字索引行 */
-:is(.tz-body, .theme-shell) .geo-home-module__articles {
-    display: grid;
-    gap: 0;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module__article {
-    border: 0;
-    border-top: 1px solid var(--tz-rule);
-    background: none;
-    padding: 1.5rem 0;
-    border-radius: 0;
-    box-shadow: none;
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module__article:first-child {
-    border-top: 0;
-}
-
-/* metric_band：数字大、标签小 */
-:is(.tz-body, .theme-shell) .geo-home-module__metrics {
-    display: grid;
-    gap: 2rem;
-    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-}
-
-:is(.tz-body, .theme-shell) .geo-home-module__metric {
-    border: 0;
-    background: none;
-    padding: 0;
-    box-shadow: none;
-    border-radius: 0;
-    font-variant-numeric: tabular-nums;
+.tz-block-lede {
+    margin: 0.75rem 0 0;
+    font-size: var(--tz-sm);
+    line-height: 1.8;
+    color: var(--tz-ink-500);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   文章索引行（partials/article-card.blade.php）
+   首屏
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-hero {
+    padding-block: clamp(2.5rem, 6vw, 5rem) clamp(2rem, 4vw, 3rem);
+}
+
+.tz-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    background: var(--tz-paper-2);
+    border: 1px solid var(--tz-hairline);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-700);
+    margin-bottom: 2rem;
+}
+
+.tz-pill-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--tz-ink-950);
+    flex-shrink: 0;
+}
+
+.tz-display {
+    margin: 0;
+    max-width: 56rem;
+    font-size: var(--tz-display);
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--tz-ink-950);
+    text-wrap: balance;
+}
+
+.tz-hero-lede {
+    margin: 1.75rem 0 0;
+    max-width: 34rem;
+    font-size: var(--tz-body);
+    line-height: 1.85;
+    color: var(--tz-ink-500);
+}
+
+.tz-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    margin-top: 2.5rem;
+}
+
+/* 数据条 */
+.tz-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+    gap: 2rem;
+    border-top: 1px solid var(--tz-hairline);
+    padding-top: 2.5rem;
+    margin-top: clamp(2.5rem, 5vw, 4rem);
+}
+
+.tz-stat-num {
+    font-family: var(--tz-mono);
+    font-size: clamp(1.5rem, 2.4vw, 2rem);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--tz-ink-950);
+    letter-spacing: -0.02em;
+}
+
+.tz-stat-unit {
+    font-size: 0.75em;
+    font-weight: 400;
+    color: var(--tz-titanium);
+    margin-left: 0.15em;
+}
+
+.tz-stat-label {
+    margin-top: 0.35rem;
+    font-size: var(--tz-xs);
+    font-weight: 500;
+    color: var(--tz-ink-700);
+}
+
+.tz-stat-note {
+    margin-top: 0.2rem;
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-400);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   两类企业对照（原理示意，不是实测数据）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-compare {
+    border: 1px solid var(--tz-hairline);
+    background: var(--tz-paper-card);
+    overflow: hidden;
+}
+
+.tz-compare-query {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1.5rem;
+    background: var(--tz-paper-2);
+    border-bottom: 1px solid var(--tz-hairline);
+    font-size: var(--tz-xs);
+    color: var(--tz-ink-700);
+}
+
+.tz-compare-query .tz-mono {
+    flex-shrink: 0;
+}
+
+.tz-compare-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+}
+
+.tz-compare-col {
+    padding: 1.75rem;
+}
+
+.tz-compare-col + .tz-compare-col {
+    border-top: 1px solid var(--tz-hairline);
+}
+
+.tz-compare-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--tz-hairline);
+    margin-bottom: 1.1rem;
+}
+
+.tz-compare-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: var(--tz-xs);
+    font-weight: 600;
+    color: var(--tz-ink-900);
+}
+
+.tz-compare-mark {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+}
+
+.tz-compare-mark-bad {
+    background: var(--tz-rose);
+}
+
+.tz-compare-mark-good {
+    background: var(--tz-emerald);
+}
+
+.tz-tag {
+    flex-shrink: 0;
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    padding: 0.15rem 0.45rem;
+    border: 1px solid;
+}
+
+.tz-tag-bad {
+    color: var(--tz-rose);
+    background: var(--tz-rose-bg);
+    border-color: rgba(190, 18, 60, 0.2);
+}
+
+.tz-tag-good {
+    color: var(--tz-emerald);
+    background: var(--tz-emerald-bg);
+    border-color: rgba(4, 120, 87, 0.2);
+}
+
+.tz-compare-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.6rem;
+    font-size: var(--tz-xs);
+    line-height: 1.75;
+    color: var(--tz-ink-500);
+}
+
+.tz-compare-list strong {
+    color: var(--tz-ink-900);
+    font-weight: 600;
+}
+
+.tz-compare-note {
+    margin-top: 1.1rem;
+    padding: 0.9rem 1rem;
+    background: var(--tz-paper-2);
+    border: 1px solid var(--tz-hairline);
+    font-size: var(--tz-xs);
+    line-height: 1.7;
+    color: var(--tz-ink-500);
+}
+
+.tz-compare-note strong {
+    display: block;
+    color: var(--tz-ink-900);
+    margin-bottom: 0.25rem;
+    font-size: var(--tz-2xs);
+    font-family: var(--tz-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.tz-compare-foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    justify-content: space-between;
+    padding: 0.75rem 1.5rem;
+    border-top: 1px solid var(--tz-hairline);
+    background: rgba(244, 244, 240, 0.5);
+    font-size: var(--tz-2xs);
+    font-family: var(--tz-mono);
+    color: var(--tz-ink-500);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   卡片网格（服务 / 市场）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-grid {
+    display: grid;
+    gap: 1.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+}
+
+.tz-grid-2 {
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+}
+
+.tz-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 1.75rem;
+    background: var(--tz-card);
+    border: 1px solid var(--tz-hairline);
+    transition: border-color 200ms ease;
+}
+
+.tz-card:hover {
+    border-color: var(--tz-hairline-2);
+}
+
+.tz-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.tz-card-index {
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tz-ink-400);
+}
+
+.tz-card-badge {
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    padding: 0.15rem 0.45rem;
+    background: var(--tz-paper-3);
+    color: var(--tz-ink-850);
+}
+
+.tz-card-title {
+    margin: 0 0 0.65rem;
+    font-size: var(--tz-h3);
+    line-height: 1.4;
+    font-weight: 700;
+    color: var(--tz-ink-950);
+}
+
+.tz-card-desc {
+    margin: 0 0 1.25rem;
+    font-size: var(--tz-xs);
+    line-height: 1.8;
+    color: var(--tz-ink-500);
+}
+
+.tz-checklist {
+    margin: 0;
+    padding: 1.25rem 0 0;
+    list-style: none;
+    display: grid;
+    gap: 0.7rem;
+    border-top: 1px solid var(--tz-hairline);
+    font-size: var(--tz-xs);
+    line-height: 1.7;
+    color: var(--tz-ink-700);
+}
+
+.tz-checklist li {
+    display: flex;
+    gap: 0.6rem;
+}
+
+.tz-checklist li::before {
+    content: "✓";
+    flex-shrink: 0;
+    color: var(--tz-ink-950);
+    font-weight: 700;
+}
+
+.tz-checklist strong {
+    font-weight: 600;
+    color: var(--tz-ink-950);
+}
+
+.tz-card-foot {
+    padding-top: 1.5rem;
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--tz-hairline);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   飞轮步骤 + 三类信号
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-split {
+    display: grid;
+    gap: 3rem;
+    grid-template-columns: 1fr;
+}
+
+.tz-step-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+.tz-step {
+    padding: 1.5rem;
+    background: var(--tz-card);
+    border: 1px solid var(--tz-hairline);
+}
+
+.tz-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    margin-bottom: 0.85rem;
+    background: var(--tz-paper-3);
+    border: 1px solid var(--tz-hairline);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    font-weight: 700;
+    color: var(--tz-ink-900);
+}
+
+.tz-step-title {
+    margin: 0 0 0.4rem;
+    font-size: var(--tz-sm);
+    font-weight: 700;
+    color: var(--tz-ink-950);
+}
+
+.tz-step-desc {
+    margin: 0;
+    font-size: var(--tz-xs);
+    line-height: 1.75;
+    color: var(--tz-ink-500);
+}
+
+.tz-callout {
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    background: var(--tz-card);
+    border: 1px solid var(--tz-hairline);
+}
+
+.tz-callout-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.5rem;
+    font-size: var(--tz-xs);
+    font-weight: 700;
+    color: var(--tz-ink-950);
+}
+
+.tz-callout p {
+    margin: 0;
+    font-size: var(--tz-xs);
+    line-height: 1.8;
+    color: var(--tz-ink-500);
+}
+
+.tz-signal-grid {
+    display: grid;
+    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    margin-top: 2rem;
+}
+
+.tz-signal {
+    padding: 1.5rem;
+    background: var(--tz-card);
+    border: 1px solid var(--tz-hairline);
+}
+
+.tz-signal-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0 0 0.7rem;
+    font-size: var(--tz-sm);
+    font-weight: 700;
+    color: var(--tz-ink-950);
+}
+
+.tz-signal-mark {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    background: var(--tz-ink-950);
+    flex-shrink: 0;
+}
+
+.tz-signal p {
+    margin: 0;
+    font-size: var(--tz-xs);
+    line-height: 1.8;
+    color: var(--tz-ink-500);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   市场卡片
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-market-rows {
+    display: grid;
+    gap: 0.85rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--tz-hairline);
+    font-size: var(--tz-xs);
+    line-height: 1.75;
+}
+
+.tz-market-row {
+    display: grid;
+    gap: 0.15rem;
+}
+
+.tz-market-label {
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.tz-market-label-bad {
+    color: var(--tz-rose);
+}
+
+.tz-market-label-good {
+    color: var(--tz-emerald);
+}
+
+.tz-market-value {
+    color: var(--tz-ink-500);
+}
+
+.tz-market-scope {
+    margin: 0 0 1rem;
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-400);
+    line-height: 1.7;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   自测清单（原「诊断计算器」——去掉假分数，改成访客自己勾）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-selfcheck {
+    max-width: 46rem;
+    margin-inline: auto;
+    padding: clamp(1.5rem, 4vw, 2.5rem);
+    background: var(--tz-card);
+    border: 1px solid var(--tz-hairline);
+}
+
+.tz-selfcheck-list {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tz-selfcheck-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    background: var(--tz-paper-2);
+    border: 1px solid var(--tz-hairline);
+    font-size: var(--tz-xs);
+    line-height: 1.7;
+    color: var(--tz-ink-700);
+}
+
+.tz-selfcheck-item::before {
+    content: "";
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    margin-top: 0.15rem;
+    border: 1px solid var(--tz-hairline-2);
+    background: var(--tz-card);
+}
+
+.tz-selfcheck-cta {
+    margin-top: 2rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--tz-hairline);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.tz-selfcheck-cta p {
+    margin: 0;
+    font-size: var(--tz-xs);
+    color: var(--tz-ink-500);
+    max-width: 22rem;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   关键词（GEO 语义资产）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tz-keyword {
+    padding: 0.35rem 0.7rem;
+    background: var(--tz-card);
+    border: 1px solid var(--tz-hairline);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-500);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   通用页面元素（内页沿用）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-page-head {
+    padding-block: clamp(2.5rem, 5vw, 4rem) 1.5rem;
+}
+
+.tz-page-title {
+    margin: 0;
+    font-size: var(--tz-h1);
+    line-height: 1.25;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--tz-ink-950);
+    text-wrap: balance;
+}
+
+.tz-page-lede {
+    margin: 1rem 0 0;
+    max-width: 44rem;
+    font-size: var(--tz-sm);
+    line-height: 1.85;
+    color: var(--tz-ink-500);
+}
+
+.tz-page-lede a {
+    color: var(--tz-ink-900);
+}
+
+.tz-section {
+    padding-block: 0 var(--tz-block);
+}
+
+.tz-section--top {
+    margin-top: var(--tz-block);
+}
+
+.tz-section-title {
+    margin: 0 0 1.75rem;
+    font-size: var(--tz-h2);
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--tz-ink-950);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   文章索引行
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-list {
     display: grid;
 }
 
 .tz-item {
-    border-top: 1px solid var(--tz-rule);
-    padding-block: 2rem;
+    border-top: 1px solid var(--tz-hairline);
+    padding-block: 1.75rem;
 }
 
 .tz-item:first-child {
@@ -375,69 +1050,70 @@
 .tz-item-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1.25rem;
-    font-size: var(--tz-meta);
-    color: var(--tz-muted);
-    font-variant-numeric: tabular-nums;
+    gap: 0.4rem 1.1rem;
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-400);
+}
+
+.tz-item-meta a {
+    color: var(--tz-ink-500);
+    text-decoration: none;
+}
+
+.tz-item-meta a:hover {
+    color: var(--tz-ink-950);
 }
 
 .tz-item-title {
-    margin: 0.65rem 0 0;
+    margin: 0.6rem 0 0;
     font-size: var(--tz-h3);
     line-height: 1.5;
     font-weight: 600;
 }
 
 .tz-item-title a {
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
     text-decoration: none;
 }
 
 .tz-item-title a:hover {
-    color: var(--tz-mark-ink);
+    color: var(--tz-accent-blue);
 }
 
 .tz-item-summary {
-    margin: 0.7rem 0 0;
-    color: var(--tz-ink);
+    margin: 0.6rem 0 0;
     max-width: 46rem;
+    font-size: var(--tz-sm);
+    line-height: 1.8;
+    color: var(--tz-ink-500);
 }
 
-.tz-item-meta a,
-.tz-article-meta a {
-    color: var(--tz-muted);
-    text-decoration: none;
-}
-
-.tz-item-meta a:hover,
-.tz-article-meta a:hover {
-    color: var(--tz-mark-ink);
-}
-
-/* 分页：不用 Laravel 默认的圆角按钮视图，与本主题的无圆角语言冲突 */
+/* 分页 */
 .tz-pager {
     display: flex;
     align-items: baseline;
     gap: 1.5rem;
-    margin-top: 3rem;
+    margin-top: 2.5rem;
     padding-top: 1.5rem;
-    border-top: 1px solid var(--tz-rule);
-    font-size: var(--tz-meta);
+    border-top: 1px solid var(--tz-hairline);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
 }
 
 .tz-pager a {
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
     text-decoration: none;
     font-weight: 600;
 }
 
 .tz-pager a:hover {
-    color: var(--tz-mark-ink);
+    color: var(--tz-accent-blue);
 }
 
 .tz-pager-pos,
 .tz-pager-off {
-    color: var(--tz-muted);
+    color: var(--tz-ink-400);
 }
 
 .tz-pager-pos {
@@ -445,140 +1121,89 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   页面标题与通用区块
-   ══════════════════════════════════════════════════════════════════════════ */
-.tz-page-head {
-    padding-block: clamp(2.5rem, 6vw, 4.5rem) clamp(2rem, 5vw, 3.5rem);
-}
-
-.tz-page-title {
-    margin: 0;
-    font-size: var(--tz-h1);
-    line-height: 1.25;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--tz-display-ink);
-    text-wrap: balance;
-}
-
-.tz-page-lede {
-    margin: 1.25rem 0 0;
-    color: var(--tz-muted);
-    max-width: 46rem;
-}
-
-.tz-section {
-    padding-block: 0 var(--tz-gutter);
-}
-
-.tz-section--top {
-    margin-top: var(--tz-gutter);
-}
-
-.tz-section-title {
-    margin: 0 0 2rem;
-    font-size: var(--tz-h2);
-    line-height: 1.35;
-    font-weight: 600;
-    color: var(--tz-display-ink);
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
-   服务清单 —— 竖排，每项靠留白分隔，不用卡片
-   ══════════════════════════════════════════════════════════════════════════ */
-.tz-services {
-    display: grid;
-    gap: 3.5rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.tz-service-title {
-    margin: 0 0 0.6rem;
-    font-size: var(--tz-h3);
-    line-height: 1.5;
-    font-weight: 600;
-    color: var(--tz-display-ink);
-}
-
-.tz-service-desc {
-    margin: 0;
-    color: var(--tz-ink);
-    max-width: 46rem;
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
    文章正文
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-article-head {
-    padding-block: clamp(2rem, 5vw, 3.5rem) 2rem;
+    padding-block: clamp(2rem, 4vw, 3rem) 1.5rem;
 }
 
 .tz-article-title {
     margin: 0.75rem 0 0;
     font-size: var(--tz-h1);
-    line-height: 1.25;
+    line-height: 1.3;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
     text-wrap: balance;
 }
 
 .tz-article-meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1.25rem;
-    font-size: var(--tz-meta);
-    color: var(--tz-muted);
-    font-variant-numeric: tabular-nums;
+    gap: 0.4rem 1.1rem;
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-400);
+}
+
+.tz-article-meta a {
+    color: var(--tz-ink-500);
+    text-decoration: none;
+}
+
+.tz-article-meta a:hover {
+    color: var(--tz-ink-950);
 }
 
 .tz-article-lede {
     margin: 1.5rem 0 0;
-    padding-left: 1.25rem;
-    border-left: 3px solid var(--tz-mark);
-    color: var(--tz-muted);
-    max-width: 46rem;
+    padding-left: 1.1rem;
+    border-left: 2px solid var(--tz-ink-950);
+    max-width: 44rem;
+    font-size: var(--tz-sm);
+    line-height: 1.85;
+    color: var(--tz-ink-500);
 }
 
 .tz-prose {
     max-width: 44rem;
-    padding-bottom: var(--tz-gutter);
+    padding-bottom: var(--tz-block);
+    font-size: var(--tz-body);
+    line-height: 1.9;
 }
 
 .tz-prose h2 {
-    margin: 3rem 0 1.25rem;
-    font-size: var(--tz-h2);
-    line-height: 1.35;
-    font-weight: 600;
-    color: var(--tz-display-ink);
+    margin: 2.75rem 0 1.1rem;
+    font-size: var(--tz-h3);
+    line-height: 1.4;
+    font-weight: 700;
+    color: var(--tz-ink-950);
 }
 
 .tz-prose h3 {
-    margin: 2.25rem 0 1rem;
-    font-size: var(--tz-h3);
+    margin: 2rem 0 0.85rem;
+    font-size: var(--tz-body);
     line-height: 1.5;
-    font-weight: 600;
-    color: var(--tz-display-ink);
+    font-weight: 700;
+    color: var(--tz-ink-950);
 }
 
 .tz-prose p {
-    margin: 0 0 1.5rem;
+    margin: 0 0 1.4rem;
 }
 
 .tz-prose ul,
 .tz-prose ol {
-    margin: 0 0 1.5rem;
-    padding-left: 1.4rem;
+    margin: 0 0 1.4rem;
+    padding-left: 1.3rem;
 }
 
 .tz-prose li {
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.5rem;
 }
 
 .tz-prose a {
-    color: var(--tz-mark-ink);
+    color: var(--tz-accent-blue);
     text-decoration: underline;
     text-underline-offset: 3px;
 }
@@ -589,23 +1214,26 @@
 }
 
 .tz-prose blockquote {
-    margin: 2rem 0;
-    padding-left: 1.25rem;
-    border-left: 3px solid var(--tz-rule);
-    color: var(--tz-muted);
+    margin: 1.75rem 0;
+    padding-left: 1.1rem;
+    border-left: 2px solid var(--tz-hairline-2);
+    color: var(--tz-ink-500);
 }
 
 .tz-prose code {
-    font-size: 0.925em;
-    background: #f4f5f6;
-    padding: 0.15em 0.4em;
+    font-family: var(--tz-mono);
+    font-size: 0.9em;
+    background: var(--tz-paper-2);
+    padding: 0.12em 0.35em;
 }
 
 .tz-prose pre {
-    margin: 0 0 1.5rem;
-    padding: 1.25rem;
-    background: #f7f8f9;
+    margin: 0 0 1.4rem;
+    padding: 1.1rem;
+    background: var(--tz-paper-2);
+    border: 1px solid var(--tz-hairline);
     overflow-x: auto;
+    font-size: var(--tz-xs);
 }
 
 .tz-prose pre code {
@@ -615,42 +1243,39 @@
 
 .tz-prose table {
     width: 100%;
-    margin: 0 0 1.5rem;
+    margin: 0 0 1.4rem;
     border-collapse: collapse;
-    font-size: 0.9375rem;
+    font-size: var(--tz-xs);
 }
 
 .tz-prose th,
 .tz-prose td {
-    border-bottom: 1px solid var(--tz-rule);
-    padding: 0.7rem 0.85rem;
+    border-bottom: 1px solid var(--tz-hairline);
+    padding: 0.6rem 0.75rem;
     text-align: left;
 }
 
 .tz-prose th {
     font-weight: 600;
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
 }
 
-/* 标签 */
 .tz-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.5rem 1rem;
+    gap: 0.5rem;
     margin: 0;
     padding: 0;
     list-style: none;
-    font-size: var(--tz-meta);
-    color: var(--tz-muted);
 }
 
-.tz-tags a {
-    color: var(--tz-muted);
-    text-decoration: none;
-}
-
-.tz-tags a:hover {
-    color: var(--tz-mark-ink);
+.tz-tags li {
+    padding: 0.3rem 0.65rem;
+    background: var(--tz-paper-2);
+    border: 1px solid var(--tz-hairline);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-500);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -658,7 +1283,6 @@
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-months {
     display: grid;
-    gap: 0;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -669,9 +1293,8 @@
     align-items: baseline;
     justify-content: space-between;
     gap: 1.5rem;
-    border-top: 1px solid var(--tz-rule);
-    padding-block: 1.1rem;
-    font-variant-numeric: tabular-nums;
+    border-top: 1px solid var(--tz-hairline);
+    padding-block: 1rem;
 }
 
 .tz-month:first-child {
@@ -679,90 +1302,75 @@
 }
 
 .tz-month a {
-    color: var(--tz-display-ink);
-    text-decoration: none;
     font-size: var(--tz-h3);
     font-weight: 600;
+    color: var(--tz-ink-950);
+    text-decoration: none;
 }
 
 .tz-month a:hover {
-    color: var(--tz-mark-ink);
+    color: var(--tz-accent-blue);
 }
 
 .tz-month-count {
-    font-size: var(--tz-meta);
-    color: var(--tz-muted);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-400);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   页脚 —— 全页最「大胆」的地方：电话以 display 尺寸呈现
-   这门生意的转化就是通电话，而多数站点把联系方式以 14px 藏在页脚。
-   它不装饰、只服务转化。
+   服务清单（服务页）
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-services {
+    display: grid;
+    gap: 2.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tz-service-title {
+    margin: 0 0 0.5rem;
+    font-size: var(--tz-h3);
+    line-height: 1.4;
+    font-weight: 700;
+    color: var(--tz-ink-950);
+}
+
+.tz-service-desc {
+    margin: 0;
+    max-width: 44rem;
+    font-size: var(--tz-sm);
+    line-height: 1.85;
+    color: var(--tz-ink-500);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   页脚
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-footer {
-    margin-top: var(--tz-gutter);
-    border-top: 1px solid var(--tz-rule);
-    padding-block: 3.5rem 2.5rem;
-    font-size: var(--tz-meta);
-    color: var(--tz-muted);
-}
-
-.tz-contact-call {
-    display: block;
-    margin: 0 0 0.75rem;
-    font-size: var(--tz-display);
-    line-height: 1.15;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--tz-display-ink);
-    text-decoration: none;
-    font-variant-numeric: tabular-nums;
-}
-
-.tz-contact-call:hover {
-    color: var(--tz-mark-ink);
-}
-
-.tz-contact-lede {
-    margin: 0 0 1.25rem;
-    color: var(--tz-muted);
-}
-
-.tz-contact-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem 1.5rem;
-    align-items: center;
-    margin-bottom: 3.5rem;
-}
-
-.tz-btn {
-    display: inline-block;
-    padding: 0.7rem 1.35rem;
-    background: var(--tz-mark);
-    color: #ffffff;
-    font-size: 0.9375rem;
-    font-weight: 600;
-    text-decoration: none;
-}
-
-.tz-btn:hover {
-    background: var(--tz-mark-ink);
-    color: #ffffff;
+    margin-top: var(--tz-block);
+    border-top: 1px solid var(--tz-hairline);
+    background: var(--tz-paper-2);
+    padding-block: 3rem 2rem;
+    font-size: var(--tz-xs);
+    color: var(--tz-ink-500);
 }
 
 .tz-footer-grid {
     display: grid;
-    gap: 2.5rem 3rem;
+    gap: 2.5rem;
     grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    margin-bottom: 3rem;
+    margin-bottom: 2.5rem;
 }
 
 .tz-footer-label {
     margin: 0 0 0.85rem;
-    font-size: var(--tz-meta);
-    font-weight: 600;
-    color: var(--tz-display-ink);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--tz-ink-950);
 }
 
 .tz-footer-list {
@@ -770,38 +1378,48 @@
     padding: 0;
     list-style: none;
     display: grid;
-    gap: 0.5rem;
+    gap: 0.45rem;
+    font-size: var(--tz-xs);
 }
 
 .tz-footer-list a {
-    color: var(--tz-muted);
+    color: var(--tz-ink-500);
     text-decoration: none;
 }
 
 .tz-footer-list a:hover {
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
+}
+
+.tz-footer-note {
+    margin: 0 0 0.75rem;
+    line-height: 1.8;
 }
 
 .tz-footer-base {
-    border-top: 1px solid var(--tz-rule);
-    padding-top: 1.5rem;
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem 1.5rem;
+    justify-content: space-between;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--tz-hairline);
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    color: var(--tz-ink-400);
 }
 
 .tz-footer-base a {
-    color: var(--tz-muted);
+    color: var(--tz-ink-400);
     text-decoration: none;
 }
 
-/* 归因（AGPL）：克制，但不能删 */
 .tz-attribution {
-    color: var(--tz-muted);
+    color: var(--tz-ink-400);
+    font-size: var(--tz-xs);
 }
 
 .tz-attribution a {
-    color: var(--tz-muted);
+    color: var(--tz-ink-500);
     text-decoration: underline;
     text-underline-offset: 3px;
 }
@@ -810,12 +1428,12 @@
    回退页里主题接管不到的残留结构
    /forms/{slug}（LeadFormController:33 写死 view('site.lead-forms.show')）
    与 404（errors/404.blade.php）的主体不经过主题解析，
-   只能靠本文件把它们的卡片外观压平，好与主题页观感一致。
+   只能靠本文件把它们压平到同一套语言里。
    ══════════════════════════════════════════════════════════════════════════ */
 .theme-shell .geo-lead-form {
-    border: 1px solid var(--tz-rule);
+    border: 1px solid var(--tz-hairline);
     border-radius: 0;
-    background: var(--tz-paper);
+    background: var(--tz-card);
     padding: 2rem;
     box-shadow: none;
 }
@@ -826,16 +1444,16 @@
 .theme-shell .geo-lead-form textarea,
 .theme-shell .geo-lead-form select {
     border-radius: 0;
-    border-color: #c9ced3;
+    border-color: var(--tz-hairline-2);
     box-shadow: none;
+    background: var(--tz-paper-2);
 }
 
-/* 表单页的 H1 此前用 Tailwind 的 text-2xl（24px），是全站唯一没进标题阶梯的页面 */
 .theme-shell .geo-lead-form h1 {
     font-size: var(--tz-h2);
-    line-height: 1.35;
-    font-weight: 600;
-    color: var(--tz-display-ink);
+    line-height: 1.3;
+    font-weight: 700;
+    color: var(--tz-ink-950);
 }
 
 .theme-shell .site-page-title {
@@ -843,59 +1461,159 @@
     line-height: 1.25;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: var(--tz-display-ink);
+    color: var(--tz-ink-950);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   首页模块（homepage_modules）—— 仅当后台配了模块时才渲染
+   ══════════════════════════════════════════════════════════════════════════ */
+:is(.tz-body, .theme-shell) .geo-home-module {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    margin-bottom: var(--tz-block);
+}
+
+:is(.tz-body, .theme-shell) .geo-home-module__title {
+    font-size: var(--tz-h2);
+    line-height: 1.3;
+    font-weight: 700;
+    color: var(--tz-ink-950);
+    letter-spacing: -0.02em;
+    margin: 0 0 1rem;
+}
+
+:is(.tz-body, .theme-shell) .geo-home-module__body {
+    max-width: 44rem;
+    font-size: var(--tz-sm);
+    color: var(--tz-ink-500);
+}
+
+:is(.tz-body, .theme-shell) .geo-home-module__eyebrow {
+    font-family: var(--tz-mono);
+    font-size: var(--tz-2xs);
+    font-weight: 400;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tz-ink-400);
+    margin: 0 0 0.6rem;
+}
+
+:is(.tz-body, .theme-shell) .geo-home-module__link {
+    display: inline-block;
+    margin-top: 1.25rem;
+    padding: 0 0 1px;
+    border: 0;
+    border-bottom: 1px solid var(--tz-ink-950);
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    color: var(--tz-ink-950);
+    font-size: var(--tz-xs);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+/* 去掉 custom.css:989 给链接加的「→」尾巴（装饰性箭头不传达信息） */
+:is(.tz-body, .theme-shell) .geo-home-module__link::after {
+    content: none;
+}
+
+:is(.tz-body, .theme-shell) .geo-home-module__grid,
+:is(.tz-body, .theme-shell) .geo-home-module__metrics {
+    display: grid;
+    gap: 1.75rem;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+
+:is(.tz-body, .theme-shell) .geo-home-module__feature,
+:is(.tz-body, .theme-shell) .geo-home-module__metric {
+    padding: 1.5rem;
+    background: var(--tz-card);
+    border: 1px solid var(--tz-hairline);
+    border-radius: 0;
+    box-shadow: none;
+}
+
+:is(.tz-body, .theme-shell) .geo-home-module__article {
+    border: 0;
+    border-top: 1px solid var(--tz-hairline);
+    background: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding: 1.25rem 0;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
    响应式
    ══════════════════════════════════════════════════════════════════════════ */
+@media (min-width: 900px) {
+    .tz-compare-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .tz-compare-col + .tz-compare-col {
+        border-top: 0;
+        border-left: 1px solid var(--tz-hairline);
+    }
+
+    .tz-split {
+        grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+        gap: 3.5rem;
+        align-items: start;
+    }
+}
+
 @media (max-width: 820px) {
-    .tz-header {
-        padding-block: 1.25rem;
+    .tz-header-row {
+        min-height: 3.5rem;
     }
 
     .tz-nav {
-        margin-left: 0;
         width: 100%;
-        gap: 0.4rem 1.25rem;
+        gap: 0.35rem 1.1rem;
+        padding-bottom: 0.75rem;
     }
 
-    .tz-item {
-        padding-block: 1.5rem;
+    .tz-header-cta {
+        margin-left: auto;
     }
 
-    .tz-prose {
-        max-width: none;
-    }
-
-    .theme-shell .geo-lead-form {
-        padding: 1.25rem;
+    .tz-topbar-inner {
+        flex-direction: column;
+        align-items: flex-start;
     }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   动效 —— 只有首屏一次安静的入场，没有滚动触发动画、没有卡片悬停特效
+   动效 —— 只保留一次首屏入场，不做滚动触发动画，尊重 prefers-reduced-motion
    ══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: no-preference) {
-    :is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__title,
-    :is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__body,
-    :is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__link {
-        animation: tz-rise 620ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    .tz-hero .tz-pill,
+    .tz-hero .tz-display,
+    .tz-hero .tz-hero-lede,
+    .tz-hero .tz-hero-actions {
+        animation: tz-rise 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
     }
 
-    :is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__body {
-        animation-delay: 90ms;
+    .tz-hero .tz-display {
+        animation-delay: 70ms;
     }
 
-    :is(.tz-body, .theme-shell) .geo-home-module--hero .geo-home-module__link {
-        animation-delay: 170ms;
+    .tz-hero .tz-hero-lede {
+        animation-delay: 140ms;
+    }
+
+    .tz-hero .tz-hero-actions {
+        animation-delay: 200ms;
     }
 }
 
 @keyframes tz-rise {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(8px);
     }
 
     to {
