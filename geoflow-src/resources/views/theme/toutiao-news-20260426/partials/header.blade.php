@@ -18,10 +18,11 @@
                 @if(!empty($servicesUrl))
                     <a href="{{ $servicesUrl }}" data-nav-item="services">服务</a>
                 @endif
-                <a href="{{ route('site.about') }}" data-nav-item="about">关于我们</a>
                 @foreach($navCategories->take(5) as $categoryItem)
                     <a href="{{ route('site.category', $categoryItem->slug) }}">{{ $categoryItem->name }}</a>
                 @endforeach
+                {{-- 「关于我们」压轴：分类是内容栏目、最多 5 个，排在末尾会把关于挤到很靠右。 --}}
+                <a href="{{ route('site.about') }}" data-nav-item="about">关于我们</a>
             </nav>
 
             {{-- aria-label 原来写的是「分类」，但它控制的是整个移动导航；补上 aria-expanded，
@@ -36,10 +37,10 @@
                 @if(!empty($servicesUrl))
                     <a href="{{ $servicesUrl }}" data-nav-item="services" class="tt-channel">服务</a>
                 @endif
-                <a href="{{ route('site.about') }}" data-nav-item="about" class="tt-channel">关于我们</a>
                 @foreach($navCategories as $categoryItem)
                     <a href="{{ route('site.category', $categoryItem->slug) }}" class="tt-channel">{{ $categoryItem->name }}</a>
                 @endforeach
+                <a href="{{ route('site.about') }}" data-nav-item="about" class="tt-channel">关于我们</a>
             </div>
         </div>
     </div>
