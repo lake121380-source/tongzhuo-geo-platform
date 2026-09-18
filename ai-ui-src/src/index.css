@@ -81,8 +81,8 @@
   --color-primary: #0f1012;
   --color-primary-hover: #1c1f24;
   --color-primary-active: #343840;
-  --color-primary-soft: #ecece7;   /* 选中底 / 极浅强调 */
-  --color-primary-soft-2: #f4f4f0;
+  --color-primary-soft: #ececea;   /* 选中底 / 极浅强调 */
+  --color-primary-soft-2: #f2f2f0;
 
   /* ── 状态色（4 个，只表达状态，不当装饰色） ───────────────────────── */
   /* 这四个保持不动：它们只表达状态、用量小，且对比度是上一轮审计过的。
