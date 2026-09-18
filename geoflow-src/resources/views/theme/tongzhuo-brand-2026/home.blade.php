@@ -70,7 +70,7 @@
         </div>
 
         <h1 class="tz-display">
-            打通短视频获客与全域 GEO，让工业品企业在 AI 问答里被准确引荐。
+            打通短视频获客与全域 GEO，<br class="tz-br">让工业品企业在 AI 问答里被准确引荐。
         </h1>
 
         <p class="tz-hero-lede">

@@ -441,15 +441,32 @@
     flex-shrink: 0;
 }
 
+/*
+ * 首屏标题不限行宽：容器本身已经是 1280px 的上限，而标题是刻意断行的，
+ * 再加 max-width 只会把第二行挤成第三行（实测过，56rem 会把「荐。」挤下去）。
+ */
 .tz-display {
     margin: 0;
-    max-width: 56rem;
     font-size: var(--tz-display);
     line-height: 1.15;
     font-weight: 700;
     letter-spacing: -0.025em;
     color: var(--tz-ink-950);
-    text-wrap: balance;
+}
+
+/*
+ * 首屏标题的刻意断行：只在宽屏生效，断在逗号处。
+ * 中文允许逐字断行，所以不加这个的话浏览器会把「工业品」拆成「让工／业品」——
+ * 不算错，但读起来会绊一下。窄屏靠 text-wrap: balance 自然断。
+ */
+.tz-br {
+    display: none;
+}
+
+@media (min-width: 900px) {
+    .tz-br {
+        display: inline;
+    }
 }
 
 .tz-hero-lede {
