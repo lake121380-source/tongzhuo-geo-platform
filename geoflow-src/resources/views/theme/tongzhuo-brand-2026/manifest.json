@@ -1,0 +1,22 @@
+{
+  "id": "tongzhuo-brand-2026",
+  "name": "桐灼品牌 2026",
+  "version": "1.0.0",
+  "description": "桐灼GEO 品牌主题：纯白底、大字、大量留白、无卡片无阴影。层次全部来自字号与空间，适配无图片的内容形态。",
+  "templates": [
+    "layout",
+    "home",
+    "category",
+    "article",
+    "about",
+    "services",
+    "archive-index",
+    "archive-month"
+  ],
+  "notes": [
+    "设计方向「看得见」：站点卖的是让企业被 AI 看见，站点本身就该清楚、精确、一眼看得懂。",
+    "首屏大字与页脚的电话号码是这套设计仅有的两处强调，其余一律安静。",
+    "样式完全自包含在 public/themes/tongzhuo-brand-2026/theme.css，不依赖 Tailwind 构建产物。",
+    "首页复用 site.partials.homepage-modules（它承载 h1 唯一性、空态跳过等正确性语义），主题只做视觉覆盖。"
+  ]
+}
