@@ -18,6 +18,7 @@
     "零图片：整站不依赖配图、插画或产品截图，全部由排版、细线与留白承担。",
     "零外部依赖：不引任何 CDN 或 Web 字体（参考稿用了 Google Fonts，中国大陆访问不了）。",
     "样式完全自包含在 public/themes/tongzhuo-brand-2026/theme.css，不依赖 Tailwind 构建产物。",
+    "动效分两套：首屏入场是纯 CSS 的 tz-rise keyframes（不依赖 JS），折叠线以下的滚动揭示由 theme.js 用 IntersectionObserver 驱动。两套都只动 transform / opacity，且都尊重 prefers-reduced-motion；theme.js 没加载时会有保险撤掉隐藏态，内容不会被扣住。",
     "首页为定制结构，文案全部来自公司资料；不含任何无数据支撑的数字、案例或参数。"
   ]
 }

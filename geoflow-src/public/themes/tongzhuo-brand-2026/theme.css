@@ -179,7 +179,7 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   顶栏（公司实体 + 机器可读标本）
+   顶栏（公司实体）
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-topbar {
     border-bottom: 1px solid var(--tz-hairline);
@@ -1604,13 +1604,16 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   动效 —— 只保留一次首屏入场，不做滚动触发动画，尊重 prefers-reduced-motion
+   动效 ①：首屏入场（纯 CSS，不依赖 JS）
+   —— 首屏那几件东西在折叠线以上，不需要滚动触发，所以走 keyframes：
+      脚本没加载、被拦、报错，首屏照样正常出现。
    ══════════════════════════════════════════════════════════════════════════ */
 @media (prefers-reduced-motion: no-preference) {
     .tz-hero .tz-pill,
     .tz-hero .tz-display,
     .tz-hero .tz-hero-lede,
-    .tz-hero .tz-hero-actions {
+    .tz-hero .tz-hero-actions,
+    .tz-stats > div {
         animation: tz-rise 560ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
     }
 
@@ -1625,6 +1628,12 @@
     .tz-hero .tz-hero-actions {
         animation-delay: 200ms;
     }
+
+    /* 统计条接在按钮之后，四项依次落位 */
+    .tz-stats > div:nth-child(1) { animation-delay: 260ms; }
+    .tz-stats > div:nth-child(2) { animation-delay: 320ms; }
+    .tz-stats > div:nth-child(3) { animation-delay: 380ms; }
+    .tz-stats > div:nth-child(4) { animation-delay: 440ms; }
 }
 
 @keyframes tz-rise {
@@ -1634,6 +1643,42 @@
     }
 
     to {
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   动效 ②：滚动揭示（2026-09-19 加）
+   —— 只动 `transform` 与 `opacity`：这两条属性由合成器插值，不触发重排重绘。
+      **不要在这里加 `will-change`**：几十个元素常驻提升图层比动画本身更费内存，
+      浏览器在 transition 期间会自行提升。
+   —— 初始隐藏态挂在 `<html class="tz-anim">` 下。那个类由首页内联的引导片段添加，
+      并且带一个保险定时器：动画模块没接管（脚本被拦/404/报错）就把类撤掉，
+      页面退回普通静态态，**内容不会被扣住**。
+   —— 外面套 `@media screen` 是因为这套隐藏态只该给屏幕看：打印时纸上不能缺内容。
+   ══════════════════════════════════════════════════════════════════════════ */
+@media screen and (prefers-reduced-motion: no-preference) {
+    .tz-anim :is(
+        .tz-block-head,
+        .tz-compare-query,
+        .tz-compare-col,
+        .tz-compare-foot,
+        .tz-card,
+        .tz-step,
+        .tz-signal,
+        .tz-selfcheck-item,
+        .tz-market-scope
+    ) {
+        opacity: 0;
+        transform: translate3d(0, 16px, 0);
+        transition:
+            opacity 560ms cubic-bezier(0.22, 0.61, 0.36, 1) var(--tz-d, 0ms),
+            transform 560ms cubic-bezier(0.22, 0.61, 0.36, 1) var(--tz-d, 0ms);
+    }
+
+    /* 揭示态放在隐藏态之后：同特异性、后者胜 */
+    .tz-anim .tz-rv-in {
         opacity: 1;
         transform: none;
     }

@@ -105,16 +105,21 @@
     @endif
 
     {{--
-        上游归属声明。config/geoflow.php:8-11 写明这条链接不随品牌改名移除
-        （GEOFlow 是 AGPL-3.0-only，归属声明是许可要求）。但它不该是这一页的主角，
-        所以降为页尾一行说明，而不是原来那个醒目的按钮。
+        上游归属声明：**2026-09-19 哥哥要求不在对外页面展示，已摘掉。**
+
+        这里原本是页尾一行：「本站内容系统基于开源项目 GEOFlow 构建，遵循其 AGPL-3.0 许可。
+        查看上游项目 →」。归属声明本身是 AGPL 的要求（GEOFlow 是 AGPL-3.0-only，
+        见 config/geoflow.php 与 NOTICE），config 里原本写明「不随品牌改名移除」——
+        这次不是改名，是哥哥**明确要求撤掉对外展示**，所以按他的决定执行。
+
+        撤掉的只是**这一页这一行**。归属并没有从产品里消失：
+          · 后台欢迎弹窗（AdminWelcomeModalService：GitHub + 更新日志链接）
+          · 后台顶栏的 GitHub 按钮（components/admin/v3/topbar.blade.php）
+          · 后台对话框（components/admin/v3/dialogs.blade.php）
+          · 源码级：LICENSE / NOTICE / CLA.md / composer.json / README 全部未动
+        **将来若要把后台那几处也去掉，先确认是否已取得上游的专有授权**，
+        不能只删页面——那才会真正动到许可义务。
+
+        恢复方法：把下面这段 @if 加回来即可，`AboutController` 仍在传 `repositoryUrl`。
     --}}
-    @if(!empty($repositoryUrl))
-        <div class="tz-container tz-section">
-            <p class="tz-attribution">
-                本站内容系统基于开源项目 GEOFlow 构建，遵循其 AGPL-3.0 许可。
-                <a href="{{ $repositoryUrl }}" rel="noopener noreferrer">查看上游项目</a>
-            </p>
-        </div>
-    @endif
 @endsection

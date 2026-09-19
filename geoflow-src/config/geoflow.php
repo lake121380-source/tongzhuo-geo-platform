@@ -8,7 +8,9 @@
 // 2026-09-13 哥哥确认：更新检查指向**自己的发布仓库**（不再是上游 yaojingang/GEOFlow）。
 // 2026-09-13 迁移到产品单仓后改指 `tongzhuo-geo-platform`（原为 `-AI`）。
 // 取的是「最新 release 里的 version.json 资产」——**仓库里必须先发布带该资产的 release**，否则只会得到 status=error。
-// 上游地址仍保留在 `AboutController` / `AdminWelcomeModalService` 的归属链接里（AGPL 归属声明，不随品牌改名移除）。
+// 上游地址保留在后台的归属链接里（AdminWelcomeModalService 欢迎弹窗、admin/v3 顶栏 GitHub 按钮与对话框）。
+// ⚠️ 2026-09-19 起**前台「关于我们」页那一行已按哥哥要求撤掉**（不是改名，是他明确要求不对外展示）；
+// 后台几处与源码级 LICENSE / NOTICE / CLA.md 均未动。**要把后台也去掉，先确认专有授权。**
 $defaultUpdateMetadataUrl = 'https://github.com/lake121380-source/tongzhuo-geo-platform/releases/latest/download/version.json';
 $updateMetadataUrl = trim((string) env('GEOFLOW_UPDATE_METADATA_URL', $defaultUpdateMetadataUrl));
 $updateMetadataUrl = $updateMetadataUrl !== '' ? $updateMetadataUrl : $defaultUpdateMetadataUrl;

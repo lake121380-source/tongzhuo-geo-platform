@@ -24,6 +24,31 @@
 @endphp
 
 @push('head')
+    {{--
+        进场 / 滚动揭示的引导片段（2026-09-19）。
+
+        为什么隐藏态要在这里**同步**挂到 <html> 上，而不是等 theme.js 起来再加：
+        等到那时首屏已经画过一帧，元素会「先露一下、再隐藏、再淡入」——看得见的闪烁。
+        这一段在 <head> 里同步执行，body 还没开始解析，所以不存在那一帧。
+
+        ⚠️ 同时挂一个**保险定时器**：theme.js（defer）没接管就把类撤掉。
+        脚本被拦、404、或抛异常时，页面退回普通静态态，内容不会被扣成空白。
+        保险时长要短——宁可没有动画，也不能让人对着空白页干等。
+    --}}
+    <script>
+        (function () {
+            var d = document.documentElement;
+            if (!window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                return;                     // 用户要求减少动效：连类都不加，页面就是静态的
+            }
+            d.classList.add('tz-anim');
+            window.__tzAnimFailsafe = setTimeout(function () {
+                d.classList.remove('tz-anim');
+            }, 2000);
+        })();
+    </script>
+    <script defer src="{{ asset('themes/tongzhuo-brand-2026/theme.js') }}"></script>
+
     @php
         $schemaAtContext = chr(64).'context';
         $schemaAtType = chr(64).'type';
