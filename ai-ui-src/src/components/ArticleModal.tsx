@@ -337,8 +337,13 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+      {/* 2026-09-19 版式对齐设计稿：**整屏左右分栏**（原来是居中弹窗 max-w-3xl）。
+          左栏正文可滚动、右栏质检面板常驻——审核时「看正文」和「看判定依据」
+          不用来回滚动、也不用记住刚才那个分数。
+          仍保留覆盖层形态：它能从文章列表和总览「最近内容」两处打开，
+          改成路由页会牵动两处调用方，收益不抵风险。 */}
+      <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col">
+        <div className="flex h-full w-full flex-col overflow-hidden bg-slate-900">
           {/* Modal Header */}
           <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/40">
             <div className="flex items-center gap-2">
@@ -378,8 +383,9 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
             </button>
           </div>
 
-          {/* Modal Body */}
-          <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-200">
+          {/* 2 栏：左正文 / 右质检面板 */}
+          <div className="flex flex-1 overflow-hidden">
+            <div className="flex-1 space-y-6 overflow-y-auto p-6 text-slate-200">
             <div>
               <div className="flex items-start justify-between gap-4">
                 {isEditing ? (
@@ -476,7 +482,11 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               )}
             </div>
 
+            </div>
+
+            {/* 右栏：质检面板常驻。`apiMode` 关掉时整栏不渲染（而不是留一条空白列）。 */}
             {apiMode && apiClient && (
+              <aside className="w-[360px] shrink-0 overflow-y-auto border-l border-slate-800 bg-slate-950/30 p-5">
               <div ref={qualitySectionRef}>
                 <ArticleQualityPanel
                   article={article}
@@ -485,6 +495,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                   lang={lang}
                 />
               </div>
+              </aside>
             )}
           </div>
 
