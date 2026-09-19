@@ -317,6 +317,27 @@ export default function App() {
     fetchData();
   }, [apiEnabled]);
 
+  /**
+   * 托管站点**按需拉取**：只有「分发渠道」页用它，而且是特性开关控制的能力
+   * （`GEOFLOW_HOSTED_SITES_ENABLED`，关掉的部署里后端按设计返回 404）。
+   *
+   * 为什么要从启动序列里挪出来：启动时拉的话，**每次进后台控制台都会留一条 404**
+   * （浏览器的请求失败是照样记账的，JS 里 catch 掉也没用）；而且拉的是当前不看的
+   * 页面的数据。挪到「进那个页面才拉」，两个问题一起没了。
+   *
+   * 404 在这里是**正常结果**——这个实例没开这个功能，静默留在空态即可，
+   * 不该把分发页打成故障（它上面还有渠道与任务两块真实数据）。
+   */
+  useEffect(() => {
+    if (currentTab !== 'distribution' || !apiSession) return;
+    if (!hasScope(apiSession, 'distribution:read') || apiSession.admin.role !== 'super_admin') return;
+    let cancelled = false;
+    void apiClient.listHostedSites({ page: 1, per_page: 100 })
+      .then((page) => { if (!cancelled) setHostedSites(page.items || []); })
+      .catch(() => { /* 开关关掉时是 404，属预期；其它失败也只在分发页表现为空列表。 */ });
+    return () => { cancelled = true; };
+  }, [apiClient, apiSession, currentTab]);
+
   useEffect(() => {
     if (!apiSession || !apiClient.authenticated) {
       setApiBooting(false);
@@ -370,15 +391,13 @@ export default function App() {
           canReadMaterials ? apiClient.listMaterials('knowledge-bases', { page: 1, per_page: 100 }) : Promise.resolve(emptyApiPage()),
           canReadDistribution ? apiClient.listDistributionChannels() : Promise.resolve(emptyApiPage()),
           canReadDistribution ? apiClient.listDistributionJobs({ page: 1, per_page: 100 }) : Promise.resolve(emptyApiPage()),
-          // 托管站点是**特性开关**控制的能力（GEOFLOW_HOSTED_SITES_ENABLED）：关掉的部署里
-          // 后端按设计返回 404 —— 那是「这个实例没开这个功能」，不是故障，不该把整页打成
-          // 「请求无法完成」（它在 Promise.all 里，会把上面十来个请求一起拖垮）。
-          canReadDistribution && apiSession?.admin.role === 'super_admin'
-            ? apiClient.listHostedSites({ page: 1, per_page: 100 }).catch((reason: unknown) => {
-              if (reason instanceof GeoFlowApiError && reason.status === 404) return emptyApiPage();
-              throw reason;
-            })
-            : Promise.resolve(emptyApiPage()),
+          // 托管站点**不在启动时拉**。它是特性开关控制的能力（GEOFLOW_HOSTED_SITES_ENABLED），
+          // 关掉的部署里后端按设计返回 404；而这份数据**只有「分发渠道」页用**——
+          // 启动时拉就等于「每次进后台，控制台都留一条 404」，而且拉的是当前不看的页面的数据。
+          // 改成进那个页面时才拉，见下方 `currentTab === 'distribution'` 的 effect。
+          // **这里刻意留了槽位**（而不是从数组里删掉）：Promise.all 是按下标解构的，
+          // 删掉会让后面十来个请求整体错位。
+          Promise.resolve(emptyApiPage()),
           canReadModels ? apiClient.listAiModels() : Promise.resolve(emptyApiPage()),
           canReadModels ? apiClient.listPrompts() : Promise.resolve(emptyApiPage()),
           // 「概览大盘」的真实数字来源；取不到就保持 null，界面显示「—」。
@@ -407,7 +426,7 @@ export default function App() {
         setTasks(mappedTasks);
         setKnowledgeBases(resolvedKnowledge);
         setChannels(mappedChannels);
-        setHostedSites(hostedSitesPage.items || []);
+        // 托管站点不在这里赋值了——改由「分发渠道」页的 effect 按需拉（见上方注释）。
         setDistributionJobs(distributionJobsPage.items || []);
         setAnalyticsOverview(analyticsOverviewData ? asRecord(analyticsOverviewData) : null);
         setChunkLoadErrors({});
