@@ -12,6 +12,7 @@ import {
   Search,
   Tag,
   Trash2,
+  Layers,
   UserRound,
   X,
 } from 'lucide-react';
@@ -727,7 +728,52 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
               </div>
             )}
 
-            {!activeRecord && !formOpen && <EmptyState icon={FolderKanban} title={lang === 'zh' ? '暂无可查看的素材库' : 'No library selected'} description={lang === 'zh' ? '先在左侧选一个素材库；还没有的话，点右上角新建。' : 'Pick a library on the left, or create one first.'} />}
+            {/* 空态（照设计稿）：大图标 + 标题 + 说明 + 一块**虚线动作区**。
+                ⚠️ 不写「拖拽文件到此处」——我们的上传没实现拖拽，写上去是假承诺。
+                虚线框给的是**真的下一步**（新建 / 批量导入），不是装饰。 */}
+            {!activeRecord && !formOpen && (
+              <div className="flex min-h-[380px] flex-col items-center justify-center px-6 py-14 text-center">
+                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-xl bg-slate-800/60 text-slate-400">
+                  <FolderKanban className="h-8 w-8" />
+                </div>
+                <h3 className="text-[15px] font-bold text-white">
+                  {lang === 'zh' ? '这一类还没有内容' : 'Nothing here yet'}
+                </h3>
+                <p className="mt-2 max-w-md text-[13px] leading-relaxed text-slate-400">
+                  {lang === 'zh'
+                    ? '写文章要用的「配料」都在这里：标题库（写什么题）、分类、作者、关键词、图片。先在左边的知识目录里挑一类，或直接新建。'
+                    : 'Titles, categories, authors, keywords and images all live here. Pick a type on the left, or create one.'}
+                </p>
+
+                {canWrite && (
+                  <div className="mt-7 w-full max-w-md rounded-xl border border-dashed border-slate-700 px-6 py-7">
+                    <Layers className="mx-auto h-6 w-6 text-slate-500" />
+                    <p className="mt-2.5 text-[13px] font-medium text-slate-300">
+                      {lang === 'zh' ? '先建一个库，再往里放内容' : 'Create a library first'}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
+                      {lang === 'zh'
+                        ? '标题库和关键词库建好后支持「批量导入」，一次贴一批；图片库支持直接上传图片。'
+                        : 'Title and keyword libraries support bulk import; image libraries accept uploads.'}
+                    </p>
+                  </div>
+                )}
+
+                {canWrite && activeItemsEnabled && (
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                    <span className="text-[12px] text-slate-500">{lang === 'zh' ? '快速开始：' : 'Quick start: '}</span>
+                    <button type="button" onClick={() => setFormOpen(true)} className="rounded-lg border border-slate-700 px-2.5 py-1 text-[12px] font-medium text-slate-300 transition hover:bg-slate-800">
+                      {lang === 'zh' ? '新建' : 'New'}
+                    </button>
+                    {(activeType === 'keyword-libraries' || activeType === 'title-libraries') && (
+                      <button type="button" onClick={() => setImportOpen(true)} className="rounded-lg border border-slate-700 px-2.5 py-1 text-[12px] font-medium text-slate-300 transition hover:bg-slate-800">
+                        {lang === 'zh' ? '批量导入' : 'Bulk import'}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
       </div>

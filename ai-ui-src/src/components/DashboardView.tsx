@@ -12,6 +12,7 @@ import { ApiRecord } from '../api/geoflowClient';
 import { Article, Task } from '../types';
 import { GettingStartedPanel, GettingStartedStep } from './GettingStartedPanel';
 import { Skeleton, SkeletonRows } from './Skeleton';
+import { Sparkline, BarList } from './ui';
 
 /**
  * 按点号路径从后端投影里取值（`kpis.articles`、`traffic.kpis.pv`）。
@@ -100,6 +101,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const distributionFailed = readNumber(analyticsOverview, 'kpis.distribution_failed') ?? 0;
   const generatingCount = tasks.filter((t) => t.status === 'running').length;
 
+  /**
+   * 图形层的数据源——**全部来自 `/analytics/overview` 的 `traffic` 段，不额外请求**：
+   *   `traffic.traffic_trend` 是按天的 { date, pv, unique_ip, ai_bot_pv }
+   *   `traffic.bot_breakdown` 是访客构成 { key, label, count }
+   * 取不到就返回空数组，由组件自己决定「不渲染」而不是画一条假的平线。
+   */
+  const trafficTrend = Array.isArray(readPath(analyticsOverview, 'traffic.traffic_trend'))
+    ? (readPath(analyticsOverview, 'traffic.traffic_trend') as Array<Record<string, unknown>>)
+    : [];
+  const pvSeries = trafficTrend.map((row) => Number(row.pv) || 0);
+  const aiBotSeries = trafficTrend.map((row) => Number(row.ai_bot_pv) || 0);
+  const botBreakdown = Array.isArray(readPath(analyticsOverview, 'traffic.bot_breakdown'))
+    ? (readPath(analyticsOverview, 'traffic.bot_breakdown') as Array<Record<string, unknown>>)
+    : [];
+  const botItems = botBreakdown
+    .map((row) => ({ label: String(row.label || row.key || ''), value: Number(row.count) || 0 }))
+    .filter((row) => row.label !== '');
+
   const todoItems = [
     { key: 'review', label: zh ? '篇文章待审核' : 'articles to review', hint: zh ? '审完就能发布' : 'review, then publish', count: reviewCount, tab: 'articles', tone: 'amber' },
     { key: 'paused', label: zh ? '个生成任务已暂停' : 'tasks paused', hint: zh ? '看看为什么停了' : 'check why they stopped', count: pausedTasks, tab: 'tasks', tone: 'amber' },
@@ -139,7 +158,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="app-dark-surface flex flex-wrap items-center justify-between gap-5 rounded-xl px-6 py-5">
         <div className="min-w-0">
           <div className="mb-2 flex items-center gap-2">
-            <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-indigo-300">
+            {/* ⚠️ 这里**不能用装饰性色阶**（如 `text-indigo-300`）：收敛层有一条
+                `:root:not(.dark) :where(.text-indigo-50 … .text-indigo-400) { color: var(--color-indigo-800) }`，
+                会把浅档强制压深——落在深色横幅上就是深字压深底，实测只有 1.21:1、肉眼几乎看不见。
+                深色面内的文字一律走 slate 刻度（作用域里已反相）。 */}
+            <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-slate-300">
               {zh ? '今日看板' : 'Today'}
             </span>
             <span className="text-[11px] tabular-nums text-slate-400">{todayLabel}</span>
@@ -184,11 +207,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <h2 className="text-section-title">{zh ? 'GEO 核心表现' : 'GEO performance'}</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
-            { label: zh ? 'AI 提及率' : 'AI mention rate', value: brandVisibility, suffix: '%' },
-            { label: zh ? 'Top3 引用率' : 'Top-3 citation rate', value: top3Rate, suffix: '%' },
+            /* 四张卡：两张带迷你趋势线（有真实按天序列的才画），两张只有数字。
+               **不给没有序列的指标硬画线**——那会是一条假的平线。 */
+            { label: zh ? '今日待审核' : 'To review', value: reviewCount, suffix: zh ? ' 篇' : '' },
+            { label: zh ? '网站访问（近 30 天）' : 'Site views (30d)', value: pv, series: pvSeries, tone: 'text-slate-200' },
+            {
+              label: zh ? 'AI 爬虫访问（近 30 天）' : 'AI bot visits (30d)',
+              value: aiBotSeries.length ? aiBotSeries.reduce((a, b) => a + b, 0) : null,
+              series: aiBotSeries,
+              /* 别用 indigo：主色刻度已改成中性灰，画出来是一条灰线 */
+              tone: 'text-emerald-500',
+            },
             { label: zh ? '内容资产（已发布/总数）' : 'Published / total', value: null, text: `${publishedCount} / ${totalArticles ?? articles.length}` },
-            { label: zh ? '网站访问（近 30 天）' : 'Site views (30d)', value: pv },
-          ].map((tile) => (
+          ].map((tile: { label: string; value: number | null; suffix?: string; text?: string; series?: number[]; tone?: string }) => (
             <div key={tile.label} className="rounded-xl border border-slate-800 bg-slate-900 p-5 transition hover:border-slate-700">
               <div className="text-caption">{tile.label}</div>
               {/* 加载中画骨架，不画 0 / 暂无数据：那会把「还没读到」说成「确认是零」。 */}
@@ -197,6 +228,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               ) : (
                 <div className={`mt-2 text-[30px] font-black leading-none tabular-nums ${tile.text ? 'text-white' : tile.value === null ? 'text-slate-500' : 'text-white'}`}>
                   {tile.text ?? formatMetric(tile.value, tile.suffix ?? '')}
+                </div>
+              )}
+              {!loading && tile.series && tile.series.length >= 2 && (
+                <div className={`mt-3 h-8 ${tile.tone ?? 'text-slate-500'}`}>
+                  <Sparkline
+                    values={tile.series}
+                    label={zh ? `${tile.label}趋势` : `${tile.label} trend`}
+                  />
                 </div>
               )}
             </div>
@@ -276,6 +315,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
 
+        <div className="space-y-4">
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-section-title flex items-center gap-2">
@@ -317,6 +357,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {zh ? `另外有 ${generatingCount} 条任务正在生成。` : `${generatingCount} task(s) generating.`}
             </p>
           )}
+        </div>
+
+        {/* 访问构成（横向条形）——数据来自 `traffic.bot_breakdown`，真访问日志。
+            空的时候**整块不渲染**：一张空面板比不显示更让人困惑。 */}
+        {!loading && botItems.length > 0 && (
+          <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-section-title flex items-center gap-2">
+                <Activity className="h-[18px] w-[18px] text-slate-400" />
+                {zh ? '访问构成' : 'Traffic mix'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => onNavigate('analytics')}
+                className="flex items-center gap-1 text-[13px] font-semibold text-indigo-600 hover:underline"
+              >
+                {zh ? '明细' : 'Detail'}
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <BarList items={botItems} tone="text-indigo-400" />
+          </div>
+        )}
         </div>
       </section>
 
@@ -368,6 +431,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             ))}
           </ul>
         )}
+      </section>
+
+      {/* 快捷入口（照设计稿）：把两条最常用的动线放到底部，省一次侧栏点击。 */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <button
+          type="button"
+          data-todo="quick-articles"
+          onClick={() => onNavigate('articles')}
+          className="group flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-slate-700"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-slate-300">
+            <FileText className="h-[20px] w-[20px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14px] font-semibold text-white">{zh ? '批量审核文章列表' : 'Batch review list'}</span>
+            <span className="mt-0.5 block text-caption">{zh ? '含多选、筛选与状态徽标' : 'Multi-select, filters, status badges'}</span>
+          </span>
+          <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:text-indigo-600" />
+        </button>
+
+        <button
+          type="button"
+          data-todo="quick-materials"
+          onClick={() => onNavigate('materials')}
+          className="group flex items-center gap-4 rounded-xl border border-slate-800 bg-slate-900 p-5 text-left transition hover:border-slate-700"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-slate-300">
+            <Sparkles className="h-[20px] w-[20px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[14px] font-semibold text-white">{zh ? '素材与知识库维护' : 'Materials & knowledge'}</span>
+            <span className="mt-0.5 block text-caption">{zh ? '标题库、知识库、关键词与图片' : 'Titles, knowledge, keywords, images'}</span>
+          </span>
+          <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:text-indigo-600" />
+        </button>
       </section>
     </div>
   );

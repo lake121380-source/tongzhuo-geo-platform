@@ -18,40 +18,34 @@ interface PageHeaderProps {
 }
 
 /**
- * 统一的页面头（2026-09-13 视觉重设计）。
+ * 统一的页面头。
  *
- * 为什么要有它：原先 24 个页面各写各的头部——有的 h1 带图标、有的没有、有的干脆
- * 没标题（总览）；字重/间距/描述行各不相同，观感「拼」出来的。这里固定一版：
- * 分组线索 + 标题 + 一句话说明 + 右侧操作，**所有被重设计的页面共用**。
+ * 2026-09-13 建：原先 24 个页面各写各的头部，字重/间距/描述行各不相同，观感「拼」出来的。
+ *
+ * 2026-09-19 改版（对齐外部设计稿）：**从「重页头」改成「紧凑页头」**。
+ * 原来是一行分组标签 + 44px 图标方块 + 大标题 + 正文尺寸的说明，还带一条下边框；
+ * 设计稿的页头只有两行——`text-xl` 标题 + `text-xs` 副标题，操作靠右，**没有分组建、没有图标方块**。
+ * 分组线索本来侧栏就在显示（导航分组），页头再写一遍是重复；图标方块则占掉半行高度。
+ *
+ * ⚠️ `icon` / `group` 两个 props **保留但不再渲染**——调用方有 20 多处，
+ * 删 prop 要同步改 20 多个文件，而它们的收益只是少传两个参数。留在这里是有意的。
  *
  * 页面标题回答「这是哪」，description 回答「这一页能做什么」——
  * 面向运营人员的大白话，不出现实现术语（同 `docs/ADMIN_UI_REDESIGN_PLAN.md` 原则 2）。
  */
-export const PageHeader: React.FC<PageHeaderProps> = ({ icon: Icon, group, title, description, actions, embedded = false }) => {
+export const PageHeader: React.FC<PageHeaderProps> = ({ title, description, actions, embedded = false }) => {
   if (embedded) {
     return actions ? <div className="flex flex-wrap items-center justify-end gap-2">{actions}</div> : null;
   }
   return (
-  /* 页面头：分组线索 → 标题 → 一句话说明 → 主操作，底部一条分隔线把「页头区」与
-     「内容区」分开——这是全站统一版式的第一步（原来标题、按钮、统计、表格混在一起）。 */
-  <div className="flex flex-col gap-5 border-b border-slate-800 pb-6 sm:flex-row sm:items-end sm:justify-between">
-    <div className="min-w-0">
-      {group && (
-        <div className="mb-2 text-[12px] font-medium text-slate-400">{group}</div>
-      )}
-      <h1 className="text-page-title flex items-center gap-3">
-        {Icon && (
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-500">
-            <Icon className="h-[22px] w-[22px]" />
-          </span>
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="text-xl font-bold tracking-tight text-white">{title}</h1>
+        {description && (
+          <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">{description}</p>
         )}
-        {title}
-      </h1>
-      {description && (
-        <p className="text-body mt-2 max-w-3xl">{description}</p>
-      )}
+      </div>
+      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">{actions}</div>}
     </div>
-    {actions && <div className="flex shrink-0 flex-wrap items-center gap-2 self-start sm:self-auto">{actions}</div>}
-  </div>
   );
 };

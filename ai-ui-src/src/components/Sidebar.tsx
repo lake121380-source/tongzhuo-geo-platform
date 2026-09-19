@@ -257,7 +257,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-extrabold text-sm tracking-tight text-white truncate">{zh ? '桐灼GEO' : 'TongZhuo GEO'}</span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 font-mono shrink-0">
+            <span className="px-1.5 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-400 font-mono shrink-0">
               {mode === 'geoflow' ? 'API v1' : 'v2.5'}
             </span>
           </div>

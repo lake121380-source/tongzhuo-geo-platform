@@ -481,8 +481,12 @@
     --color-slate-200: #dfe2e5;
     --color-slate-300: #c9ced4;
     --color-slate-400: #a6acb4;
-    --color-slate-500: #878e97;
-    --color-slate-600: #6b727b;
+    --color-slate-500: #9aa1a9;
+    /* ⚠️ 600 在本项目里是**文字**角色（浅色下 `--color-slate-600: var(--text-tertiary)`），
+       不是「更深的档」。第一版按亮度顺序设成了 #6b727b，深色侧栏的子项文字
+       （`text-slate-600`）只有 **3.86:1**，低于 AA——实测量出来的。
+       700 及以下才是边框/填充角色，可以继续按亮度排。 */
+    --color-slate-600: #8e959d;
     --color-slate-700: #3a4048;
     --color-slate-800: #262b31;
     --color-slate-900: #1a1e23;

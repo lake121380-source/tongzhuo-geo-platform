@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, RefreshCw, ShieldCheck, Radar, Bot, Link2,
 import { GeoFlowApiClient, GeoFlowApiError } from '../api/geoflowClient';
 import { LoadingState } from './LoadingState';
 import { PageHeader } from './PageHeader';
+import { TrendChart } from './ui';
 
 interface RealSeoDashboardViewProps {
   /** 合并入口的内层 Tab 渲染：隐藏自身页面标题（由外层 TabbedShell 统一画），只留操作区。 */
@@ -95,6 +96,26 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
   const ownShare = competitorSummary.own_citation_share_percent;
   const shareReady = ownShare !== null && ownShare !== undefined;
 
+  /**
+   * 趋势图数据。`/analytics/traffic` 的按天序列，两种位置都试一下
+   * （有的投影把 `traffic_trend` 放在根、有的放在 `summary` 里）——**取不到就空数组**，
+   * 由组件自己决定「不渲染」，不画假线。
+   */
+  const trendRows = (() => {
+    const direct = traffic?.traffic_trend;
+    if (Array.isArray(direct)) return direct as Array<Record<string, unknown>>;
+    const nested = record(traffic?.summary).traffic_trend;
+    return Array.isArray(nested) ? (nested as Array<Record<string, unknown>>) : [];
+  })();
+  const trendLabels = trendRows.map((row) => String(row.date ?? '').slice(5)); // 只留 MM-DD
+  const trendSeries = trendRows.length >= 2 ? [
+    /* ⚠️ 不能写 `text-indigo-400`：本项目的主色刻度已被改成中性灰
+       （主色是墨黑，indigo 槽位整条让给了中性档），画出来是一条浅灰线。
+       第一条用近黑的 slate-200 承担「主指标」的视觉重量，第二条用绿。 */
+    { name: zh ? '总访问量' : 'Total PV', values: trendRows.map((r) => num(r.pv)), tone: 'text-slate-200' },
+    { name: zh ? 'AI 爬虫访问' : 'AI bot PV', values: trendRows.map((r) => num(r.ai_bot_pv)), tone: 'text-emerald-500' },
+  ] : [];
+
   return (
     <div className="space-y-6" id="seo-dashboard-container">
       <div className={`flex flex-col gap-3 sm:flex-row sm:items-center ${embedded ? 'sm:justify-end' : 'sm:justify-between'}`}>
@@ -166,6 +187,31 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
           </div>
         </div>
       </div>
+
+      {/* ══ 抓取与访问趋势（设计稿那一屏的核心图形） ═══════════════════════
+          数据是 `/analytics/traffic` 的按天序列，**真访问日志**。
+          设计稿这里画的是「各搜索引擎引用曝光趋势」——那个数据我们没有，
+          所以画的是**我们真有的**：总访问量与 AI 爬虫访问。
+          序列不足两个点、或时间窗内没有日志时，整块不渲染。 */}
+      {trendSeries.length > 0 && (
+        <section className={card}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className={sectionTitle}>{zh ? '抓取与访问趋势' : 'Crawl & traffic trend'}</h2>
+              <p className="mt-1 text-[12px] text-slate-500">{zh ? '按天的访问与 AI 爬虫到达（近 30 天）' : 'Daily PV and AI bot reach (30d)'}</p>
+            </div>
+            <div className="flex items-center gap-3 text-[12px]">
+              {trendSeries.map((s) => (
+                <span key={s.name} className={`flex items-center gap-1.5 font-medium ${s.tone}`}>
+                  <span className="h-2.5 w-2.5 rounded-full bg-current" />
+                  {s.name}
+                </span>
+              ))}
+            </div>
+          </div>
+          <TrendChart labels={trendLabels} series={trendSeries} height={200} className="text-slate-400" />
+        </section>
+      )}
 
       {/* ══ 2/3 + 1/3 分栏（设计稿版式） ═════════════════════════════════ */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">

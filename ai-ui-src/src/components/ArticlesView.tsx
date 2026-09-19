@@ -26,6 +26,26 @@ import { Skeleton, SkeletonRows } from './Skeleton';
 import { PageHeader } from './PageHeader';
 import { Button, EmptyState } from './ui';
 
+/**
+ * 质检分的配色：**与通过线比**，不是拍脑袋定档。
+ * 分数 ≥ 通过线 → 绿；在「人工放行线」以上（还没到通过线）→ 琥珀；再低 → 红。
+ * 两个线都取不到时回落到中性色——不知道线在哪就不假装知道。
+ */
+const qualityScoreTone = (score: number, passScore?: number): 'ok' | 'warn' | 'bad' | 'plain' => {
+  if (typeof passScore !== 'number') return 'plain';
+  if (score >= passScore) return 'ok';
+  if (score >= passScore * 0.85) return 'warn';
+  return 'bad';
+};
+
+const qualityScoreDot = (score: number, passScore?: number): string => ({
+  ok: 'bg-emerald-500', warn: 'bg-amber-500', bad: 'bg-rose-500', plain: 'bg-slate-500',
+}[qualityScoreTone(score, passScore)]);
+
+const qualityScoreText = (score: number, passScore?: number): string => ({
+  ok: 'text-emerald-400', warn: 'text-amber-400', bad: 'text-rose-400', plain: 'text-white',
+}[qualityScoreTone(score, passScore)]);
+
 interface ArticlesViewProps {
   articles: Article[];
   trashedArticles?: Article[];
@@ -467,12 +487,10 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400">
               <tr>
-                <th className="px-4 py-3.5"><label className="flex items-center gap-2"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={lang === 'zh' ? '选择当前列表' : 'Select visible'} className="accent-indigo-500" />{lang === 'zh' ? '文章标题' : 'Title'}</label></th>
-                <th className="px-3 py-3.5">{lang === 'zh' ? '分类' : 'Category'}</th>
+                <th className="px-4 py-3.5"><label className="flex items-center gap-2"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} aria-label={lang === 'zh' ? '选择当前列表' : 'Select visible'} className="accent-indigo-500" />{lang === 'zh' ? '文章标题 / 核心主题' : 'Title / topic'}</label></th>
                 <th className="px-3 py-3.5">{lang === 'zh' ? '状态' : 'Status'}</th>
-                <th className="px-3 py-3.5">{lang === 'zh' ? 'AI 质检' : 'AI Check'}</th>
+                <th className="px-3 py-3.5">{lang === 'zh' ? 'AI 质检分' : 'Quality score'}</th>
                 <th className="px-3 py-3.5">{lang === 'zh' ? '分发渠道' : 'Distributed'}</th>
-                <th className="px-3 py-3.5">{lang === 'zh' ? '浏览' : 'Views'}</th>
                 <th className="px-3 py-3.5">{lang === 'zh' ? '更新日期' : 'Date'}</th>
                 <th className="px-4 py-3.5 text-right">{lang === 'zh' ? '操作' : 'Actions'}</th>
               </tr>
@@ -482,13 +500,13 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                 /* 首轮数据还没到：骨架行。画「没有找到符合条件的内容」会把
                    「还在读」说成「确认没有」——这正是 P1 修的那类假空态。 */
                 <tr>
-                  <td colSpan={8} className="py-8 px-6">
+                  <td colSpan={6} className="py-8 px-6">
                     <SkeletonRows rows={4} />
                   </td>
                 </tr>
               ) : filteredArticles.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={6}>
                     {/* 空态给「下一步」：没有内容时直接给生成入口，筛不出来时告诉用户换个条件 */}
                     <EmptyState
                       compact
@@ -514,24 +532,30 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                       key={art.id}
                       className={`group transition ${selectedIds.has(art.id) ? 'bg-indigo-500/[0.06]' : 'hover:bg-slate-800/40'}`}
                     >
-                      <td className="max-w-sm px-4 py-4 font-medium text-slate-100">
-                        <div className="flex items-start gap-2">
-                          <input type="checkbox" checked={selectedIds.has(art.id)} onChange={() => toggleSelected(art.id)} aria-label={`${lang === 'zh' ? '选择' : 'Select'} ${art.title}`} className="mt-1 accent-indigo-500" />
-                          <div
-                          onClick={() => onSelectArticle(art)}
-                          className="cursor-pointer truncate text-[14px] font-semibold text-white transition group-hover:text-indigo-600"
-                        >
-                          {art.title}
+                      {/* 首列两行式（照设计稿）：**标题 + 一行元信息**（分类徽标 · 作者 · 阅读）。
+                          原来摘要占一行、分类另占一列，既耗宽度又要横向扫；并进一行后
+                          一屏能多看几篇——列表页的信息密度就是效率。 */}
+                      <td className="max-w-md px-4 py-4">
+                        <div className="flex items-start gap-3">
+                          <input type="checkbox" checked={selectedIds.has(art.id)} onChange={() => toggleSelected(art.id)} aria-label={`${lang === 'zh' ? '选择' : 'Select'} ${art.title}`} className="mt-0.5 accent-indigo-500" />
+                          <div className="min-w-0">
+                            <div
+                              onClick={() => onSelectArticle(art)}
+                              className="cursor-pointer truncate text-[14.5px] font-semibold text-white transition group-hover:text-indigo-600"
+                            >
+                              {art.title}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[12.5px] text-slate-400">
+                              {art.category && (
+                                <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[11.5px] text-slate-300">{art.category}</span>
+                              )}
+                              {art.author && <span className="truncate">{art.author}</span>}
+                              {typeof art.views === 'number' && art.views > 0 && (
+                                <span className="tabular-nums">{lang === 'zh' ? `阅读 ${art.views}` : `${art.views} views`}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="mt-1 line-clamp-1 pl-6 text-[12.5px] text-slate-400">
-                          {art.summary}
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4">
-                        <span className="rounded-md bg-slate-800 px-2 py-1 text-[12px] text-slate-300">
-                          {art.category}
-                        </span>
                       </td>
                       <td className="whitespace-nowrap px-3 py-4">
                         <StatusBadge
@@ -542,14 +566,26 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                             : art.status === 'review' ? <Clock className="w-3 h-3" /> : undefined}
                         />
                       </td>
+                      {/* 质检分：**大号彩色数字**（照设计稿）。有分数就显示分数，颜色与通过线比；
+                          没跑过质检（无分数）才回落到判定徽标——**不用 0 分或估算值冒充**。 */}
                       <td className="whitespace-nowrap px-3 py-4">
                         <button
                           type="button"
                           onClick={() => onSelectArticle(art)}
-                          className="transition hover:opacity-75"
+                          className="flex items-center gap-2 transition hover:opacity-75"
                           title={lang === 'zh' ? '查看服务端质检、复检与优化操作' : 'View server quality, recheck and optimization actions'}
                         >
-                          <StatusBadge spec={qualityStatusSpec(art.aiQualityStatus, art.aiQualityDecision)} lang={lang} icon={<ShieldCheck className="w-3 h-3" />} />
+                          {typeof art.aiQualityScore === 'number' ? (
+                            <>
+                              <span className={`h-2 w-2 shrink-0 rounded-full ${qualityScoreDot(art.aiQualityScore, art.aiQualityPassScore)}`} />
+                              <span className={`text-[17px] font-black leading-none tabular-nums ${qualityScoreText(art.aiQualityScore, art.aiQualityPassScore)}`}>
+                                {art.aiQualityScore}
+                                <span className="ml-0.5 text-[11px] font-normal text-slate-500">{lang === 'zh' ? '分' : ''}</span>
+                              </span>
+                            </>
+                          ) : (
+                            <StatusBadge spec={qualityStatusSpec(art.aiQualityStatus, art.aiQualityDecision)} lang={lang} icon={<ShieldCheck className="w-3 h-3" />} />
+                          )}
                         </button>
                       </td>
                       <td className="whitespace-nowrap px-3 py-4">
@@ -561,9 +597,6 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                         ) : (
                           <span className="text-slate-400">{lang === 'zh' ? '未分发' : 'None'}</span>
                         )}
-                      </td>
-                      <td className="whitespace-nowrap px-3 py-4 text-slate-400">
-                        {art.views || 0}
                       </td>
                       <td className="whitespace-nowrap px-3 py-4 text-slate-400">
                         {art.createdAt}

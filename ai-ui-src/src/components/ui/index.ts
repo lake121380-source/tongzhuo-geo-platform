@@ -17,5 +17,6 @@ export { Modal, Drawer } from './Modal';
 export { ToastProvider, useToast } from './Toast';
 export { ConfirmProvider, useConfirm } from './ConfirmDialog';
 export { Field, Input, Select, Textarea } from './Field';
+export { Sparkline, BarList, TrendChart } from './Chart';
 export { TabbedShell } from './TabbedShell';
 export type { ShellTab } from './TabbedShell';
