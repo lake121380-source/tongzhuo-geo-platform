@@ -47,6 +47,13 @@ class AiConfigurationController extends BaseApiController
                 'version',
                 'model_id',
                 'model_type',
+                /*
+                 * ⚠️ `access_scope` 必须查出来。少了它，下面 `$model->access_scope ?? ACCESS_SCOPE_USER_CONTENT`
+                 * 会**永远命中的兜底值**——数据库里存 `system_only` 的模型也被报成 `user_content`，
+                 * 前端「编辑 → 保存」就把整个表单发回去，**静默把系统模型降级**，
+                 * 知识库索引随即失去嵌入模型（2026-09-19 实际发生过）。
+                 */
+                'access_scope',
                 'api_url',
                 'status',
                 'failover_priority',
