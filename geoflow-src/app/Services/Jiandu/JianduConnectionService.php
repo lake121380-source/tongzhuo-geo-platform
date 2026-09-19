@@ -252,6 +252,16 @@ final class JianduConnectionService
             // 拿到这个说明两边的接口契约漂移了——不是用户的问题，如实报 502 类错误。
             throw new ApiException('jiandu_contract_mismatch', '见度系统拒绝了该数据接口的调用（契约不匹配），请联系管理员', 502);
         }
+        if ($status === 403 && $upstreamCode === 'feature_not_in_plan') {
+            // 见度侧**特性级**套餐门禁（报告/导出/证据包等）。见度返回的 error 文案
+            // 已经说人话（「检测报告不在当前套餐里，升级后可用」），优先原样用它。
+            $upstreamMessage = is_string($exception->payload['error'] ?? null) && $exception->payload['error'] !== ''
+                ? (string) $exception->payload['error']
+                : '见度账号的当前套餐不包含这个功能';
+            throw new ApiException('jiandu_feature_not_in_plan', $upstreamMessage, 403, [
+                'feature' => is_string($exception->payload['feature'] ?? null) ? $exception->payload['feature'] : null,
+            ]);
+        }
 
         if ($status === 404) {
             // 404 在两种语境下含义完全不同，分开说——否则用户会照着错的方向去排查。

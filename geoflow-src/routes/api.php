@@ -579,9 +579,11 @@ Route::prefix('v1')
             Route::prefix('jiandu')->group(function (): void {
                 Route::middleware('api.scope:jiandu:read')->group(function (): void {
                     Route::get('status', [JianduController::class, 'status']);
+                    Route::get('me', [JianduController::class, 'me']);
                     Route::get('projects', [JianduController::class, 'projects']);
                     Route::get('overview', [JianduController::class, 'overview']);
                     Route::get('detections', [JianduController::class, 'detections']);
+                    Route::get('reports', [JianduController::class, 'reports']);
                 });
                 Route::middleware(['api.scope:jiandu:write', 'throttle:30,1'])->group(function (): void {
                     Route::post('session', [JianduController::class, 'storeSession']);

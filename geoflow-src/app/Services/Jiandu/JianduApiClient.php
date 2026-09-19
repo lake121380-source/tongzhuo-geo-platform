@@ -146,6 +146,27 @@ final class JianduApiClient
         );
     }
 
+    /**
+     * 检测报告列表（见度 `/api/v1/reports`，projectId 必填、分页）。
+     *
+     * 注意：见度侧「报告」有**套餐特性门禁**（`reportsEnabled`）——套餐不含时
+     * 该接口回 403 `feature_not_in_plan`。这是正常的能力边界：调用方要把它
+     * 呈现为「该套餐不含报告」，而不是把页面打成故障。
+     *
+     * @return array<string, mixed> `{items, total, page, pageSize}`
+     */
+    public function fetchReports(string $accessToken, string $projectId, int $page = 1, int $pageSize = 10): array
+    {
+        return $this->result(
+            $this->authorized($accessToken)->get($this->url('/api/v1/reports'), [
+                'projectId' => $projectId,
+                'page' => $page,
+                'pageSize' => $pageSize,
+            ]),
+            '读取见度报告列表',
+        );
+    }
+
     private function url(string $path): string
     {
         return (string) config('jiandu.base_url').$path;

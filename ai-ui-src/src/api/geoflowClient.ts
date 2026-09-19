@@ -156,6 +156,17 @@ export interface JianduDetectionsResponse {
   detections: ApiRecord;
 }
 
+export interface JianduReportsResponse {
+  source: JianduSourceMeta;
+  project_id: string;
+  reports: ApiRecord;
+}
+
+export interface JianduMeResponse {
+  source: JianduSourceMeta;
+  account: ApiRecord;
+}
+
 export type SystemUpdateOperationKind = 'update' | 'backup' | 'rollback' | 'verify';
 
 export interface KnowledgeSearchResponse {
@@ -992,6 +1003,15 @@ export class GeoFlowApiClient {
 
   async getJianduDetections(params: { project_id: string; page?: number; page_size?: number }): Promise<JianduDetectionsResponse> {
     return this.request<JianduDetectionsResponse>(`jiandu/detections${this.query(params)}`);
+  }
+
+  async getJianduReports(params: { project_id: string; page?: number; page_size?: number }): Promise<JianduReportsResponse> {
+    return this.request<JianduReportsResponse>(`jiandu/reports${this.query(params)}`);
+  }
+
+  /** 见度侧账号/套餐/额度（连接信息条用；失败可降级隐藏，不参与整屏成败）。 */
+  async getJianduMe(): Promise<JianduMeResponse> {
+    return this.request<JianduMeResponse>('jiandu/me');
   }
 
   /** Manage the real 桐灼GEO public forms and persisted lead inbox. */

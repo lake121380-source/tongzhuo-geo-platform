@@ -187,6 +187,58 @@ final class JianduController extends BaseApiController
     }
 
     /**
+     * 检测报告列表。
+     *
+     * 见度侧报告有**套餐特性门禁**：套餐不含时回 403 `feature_not_in_plan`，
+     * 由 `JianduConnectionService::translate()` 翻成明确文案（「XX 不在当前套餐里」），
+     * 前端把这一条呈现为该卡片的提示，而不是整页故障。
+     */
+    public function reports(Request $request): JsonResponse
+    {
+        $this->executionAdmin($request);
+        $payload = $request->validate([
+            'project_id' => ['required', 'string', 'max:120'],
+            'page' => ['nullable', 'integer', 'min:1', 'max:1000'],
+            'page_size' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $result = $this->connections->withFreshToken(
+            fn (string $token): array => $this->client->fetchReports(
+                $token,
+                (string) $payload['project_id'],
+                (int) ($payload['page'] ?? 1),
+                (int) ($payload['page_size'] ?? 10),
+            ),
+        );
+
+        return $this->success($request, [
+            'source' => $this->sourceMeta(),
+            'project_id' => (string) $payload['project_id'],
+            'reports' => $result,
+        ]);
+    }
+
+    /**
+     * 见度侧账号/套餐/额度（连接信息条用它显示「专业版 · 本月 3/300 次 · 积分 1200」）。
+     *
+     * `key` 字段是给 API Key 语境准备的（会话调用时恒为 null），不透传——本页面
+     * 永远不接触凭据，包括这种「本来就是空」的字段也一并不给，省得将来误用。
+     */
+    public function me(Request $request): JsonResponse
+    {
+        $this->executionAdmin($request);
+        $account = $this->connections->withFreshToken(
+            fn (string $token): array => $this->client->fetchMe($token),
+        );
+        unset($account['key']);
+
+        return $this->success($request, [
+            'source' => $this->sourceMeta(),
+            'account' => $account,
+        ]);
+    }
+
+    /**
      * 数据来源标注：这批数字来自见度系统（实时拉取），不是本库自有数据。
      * 前端据此在页面上如实注明来源——两套系统的口径不同，混在一起说会误导。
      *

@@ -152,6 +152,74 @@ final class JianduApiTest extends TestCase
             && $request->hasHeader('Authorization', 'Bearer api_usr_test-token'));
     }
 
+    public function test_reports_and_me_proxy_through_the_connection(): void
+    {
+        $this->fakeSessionToken();
+        $this->connect('jd-reports-connect');
+
+        Http::fake([
+            self::BASE.'/api/v1/reports*' => Http::response([
+                'items' => [[
+                    'id' => 'report_task_1',
+                    'title' => '示例品牌 · GEO 检测报告',
+                    'geoScore' => 72.5,
+                    'geoScoreStatus' => 'final',
+                    'metrics' => ['total' => 40, 'mentionRate' => 55, 'recommendRate' => 30],
+                ]],
+                'total' => 1,
+                'page' => 1,
+                'pageSize' => 10,
+            ]),
+            self::BASE.'/api/v1/me' => Http::response([
+                'organizationId' => 'org_1',
+                'organizationName' => '验收组织',
+                'projectCount' => 2,
+                'key' => null,
+                'plan' => ['code' => 'pro', 'name' => '专业版', 'apiEnabled' => true],
+                'quota' => ['monthlyDetectionsUsed' => 3, 'monthlyDetectionsTotal' => 300, 'pointsBalance' => 1200],
+            ]),
+        ]);
+
+        $headers = $this->readHeaders();
+
+        $this->withHeaders($headers)->getJson('/api/v1/jiandu/reports?project_id=proj_1&page=1&page_size=10')
+            ->assertOk()
+            ->assertJsonPath('data.reports.items.0.id', 'report_task_1')
+            ->assertJsonPath('data.reports.items.0.geoScore', 72.5)
+            ->assertJsonPath('data.reports.items.0.metrics.mentionRate', 55);
+
+        // me：透传套餐与额度，但 `key` 必须被剥掉——本页面永远不接触任何凭据字段，
+        // 包括「本来就是空」的也不给。
+        $this->withHeaders($headers)->getJson('/api/v1/jiandu/me')
+            ->assertOk()
+            ->assertJsonPath('data.account.plan.name', '专业版')
+            ->assertJsonPath('data.account.quota.monthlyDetectionsTotal', 300)
+            ->assertJsonMissingPath('data.account.key');
+    }
+
+    public function test_reports_feature_gate_keeps_upstream_wording(): void
+    {
+        $this->fakeSessionToken();
+        $this->connect('jd-reports-gated-connect');
+
+        // 见度侧特性级套餐门禁（reportsEnabled）：这不是故障，是能力边界——
+        // 翻译后的文案要原样保留见度的人话提示，前端会把它放在报告卡片里。
+        Http::fake([
+            self::BASE.'/api/v1/reports*' => Http::response([
+                'error' => '检测报告不在当前套餐里，升级后可用',
+                'code' => 'feature_not_in_plan',
+                'feature' => 'reports',
+            ], 403),
+        ]);
+
+        $this->withHeaders($this->readHeaders())
+            ->getJson('/api/v1/jiandu/reports?project_id=proj_1')
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'jiandu_feature_not_in_plan')
+            ->assertJsonPath('error.message', '检测报告不在当前套餐里，升级后可用')
+            ->assertJsonPath('error.details.feature', 'reports');
+    }
+
     public function test_expiring_access_token_is_refreshed_before_use(): void
     {
         // access 60 秒后过期，早于 refresh_skew（默认 300 秒）→ 用之前必须先刷新。
