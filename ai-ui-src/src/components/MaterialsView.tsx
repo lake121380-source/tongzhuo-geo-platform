@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen,
   ChevronDown,
@@ -69,7 +69,9 @@ const MATERIAL_TYPES: MaterialType[] = [
 
 const ITEM_TYPES = new Set<ItemType>(['keyword-libraries', 'title-libraries']);
 
-const labels: Record<MaterialType, { zh: string; en: string; icon: React.ElementType }> = {
+/** 图标收窄成「组件」而不是 `React.ElementType`：后者含字符串标签，
+ *  传给 `EmptyState` 的 `icon`（要求 ComponentType）会被 tsc 挡下来。 */
+const labels: Record<MaterialType, { zh: string; en: string; icon: React.ComponentType<{ className?: string }> }> = {
   categories: { zh: '分类', en: 'Categories', icon: FolderKanban },
   authors: { zh: '作者', en: 'Authors', icon: UserRound },
   'keyword-libraries': { zh: '关键词库', en: 'Keyword libraries', icon: Tag },
@@ -175,6 +177,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [form, setForm] = useState<Record<string, string>>(emptyForm);
   const [itemDraft, setItemDraft] = useState({ keyword: '', title: '', relatedKeyword: '' });
   const [importOpen, setImportOpen] = useState(false);
+  /** 列表型（分类 / 作者）里「哪一行展开着」。与 `selectedId` 分开：
+   *  `selectedId` 是容器型选中哪个库，会被自动填成第一项；
+   *  列表型如果复用它，进页面就会自动展开第一行——那是噪音，不是信息。 */
+  const [expandedId, setExpandedId] = useState('');
 
   const activeRecords = records[activeType] || [];
   const activeRecord = activeRecords.find((row) => materialId(row) === selectedId) || null;
@@ -252,12 +258,36 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setEditing(null);
     setFormOpen(false);
     setForm({ ...emptyForm });
+    setExpandedId('');
     const first = records[activeType]?.[0];
     setSelectedId(first ? materialId(first) : '');
   }, [activeType]);
 
+  /**
+   * 切换类型时**必须把选中项一起换掉**，不能只 `setActiveType` 让下面那个 effect 去补。
+   * 两个 effect 的声明顺序是「先重置选中项、后拉条目」，同一次提交里后者仍拿着**上一类的 id**
+   * 先发一次必然 404 的请求——界面上就是条目区冒一条红色的「素材不存在」。
+   * 在事件处理器里一起设，React 会合成一次渲染，条目请求拿到的就是新 id。
+   */
+  const selectType = (type: MaterialType) => {
+    setActiveType(type);
+    const first = records[type]?.[0];
+    setSelectedId(first ? materialId(first) : '');
+  };
+
+  /**
+   * 竞态守卫：给每次条目请求打一个 `类型:id` 的 key，回来时对不上就整个丢弃。
+   *
+   * 不这么做会看到**上一个库的条目出现在这个库里**——切库时旧请求后到，
+   * `setItems` 就把新库的结果覆盖掉了（`itemsLoading` 也被它提前置回 false，
+   * 于是界面显示的是「加载完成」的旧数据，最容易被当成真数据读）。
+   */
+  const itemsRequestKey = useRef('');
+
   /** 重新拉一次库内条目。导入 / 生成完成后要能立刻看到新内容。 */
   const refreshItems = useCallback(async () => {
+    const key = `${activeType}:${selectedId}`;
+    itemsRequestKey.current = key;
     if (!activeItemsEnabled || !selectedId || !canRead) {
       setItems([]);
       setItemsLoading(false);
@@ -267,11 +297,13 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     setItemError('');
     try {
       const result = await apiClient.listMaterialItems(activeType, selectedId, { page: 1, per_page: 100 });
+      if (itemsRequestKey.current !== key) return;
       setItems(pageItems(result));
     } catch (loadError) {
+      if (itemsRequestKey.current !== key) return;
       setItemError(errorText(loadError, lang === 'zh' ? '加载库内条目失败' : 'Unable to load library items', lang));
     } finally {
-      setItemsLoading(false);
+      if (itemsRequestKey.current === key) setItemsLoading(false);
     }
   }, [activeItemsEnabled, activeType, apiClient, canRead, lang, selectedId]);
 
@@ -507,28 +539,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
     <div className="space-y-8 pb-8">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <PageHeading lang={lang} />
-        <div className="flex flex-wrap items-center gap-2">
-          {!canWrite && <PermissionNotice lang={lang} requiredScope="materials:write" />}
-          <button
-            type="button"
-            onClick={() => void loadMaterials(true)}
-            disabled={loading}
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            {lang === 'zh' ? '刷新' : 'Refresh'}
-          </button>
-          {canWrite && (
-            <button
-              type="button"
-              onClick={beginCreate}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white hover:bg-indigo-500"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              {lang === 'zh' ? `新建${label}` : `New ${label}`}
-            </button>
-          )}
-        </div>
+        {!canWrite && <PermissionNotice lang={lang} requiredScope="materials:write" />}
       </div>
 
       {error && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-[13px] text-rose-200">{error}</div>}
@@ -552,11 +563,17 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         </div>
       </details>
 
-      {/* 2026-09-19 版式对齐设计稿：**横排的类型格改成卡片内的左栏「知识目录」树**，
-          目录树与右侧内容区共处一张卡（原来是「横排 6 格 + 两张独立卡」三块并列）。
-          窄屏下目录树退化成横向可滑的一排，不占掉首屏。 */}
+      {/* 2026-09-19 版式重做（哥哥：「你重新设计一个行不行」）——
+          原来是「左目录 | 库列表 | 库详情」三栏并列。三栏的真问题在中间那栏：
+          「分类」「作者」这两类**下面并没有库**，却被硬塞进「库列表 → 库详情」的模子里；
+          库少时那栏几乎是空的，空态还写着「先建一个库，再往里放内容」——分类没有"往里放"这回事。
+          改成两栏：左目录不动，右侧按**这一类的形状**渲染两种主体——
+          ① 列表型（分类 / 作者）：一张表，选中行就地展开，统计与相关面板挂在那一行下面；
+          ② 容器型（关键词库 / 标题库 / 图片库 / 知识库）：一条库切换条 + 当前库的工作区。
+          两者共用同一个页头行（图标 + 名称 + 计数 + 搜索 + 刷新 + 新建）。 */}
       <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
         <div className="flex flex-col xl:flex-row">
+          {/* 左：知识目录（六类，带计数） */}
           <div className="shrink-0 border-b border-slate-800 p-3 xl:w-56 xl:border-b-0 xl:border-r">
             <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               {lang === 'zh' ? '知识目录' : 'Catalog'}
@@ -569,7 +586,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                   <button
                     type="button"
                     key={type}
-                    onClick={() => setActiveType(type)}
+                    onClick={() => selectType(type)}
                     className={`flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:w-full ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'}`}
                   >
                     <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-400' : 'text-slate-500'}`} />
@@ -581,202 +598,229 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             </div>
           </div>
 
+          {/* 右：内容区 */}
           <div className="min-w-0 flex-1 p-5">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <section className="min-h-[420px] rounded-xl bg-slate-800/40 p-5 xl:col-span-5">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <ActiveIcon className="h-4 w-4 shrink-0 text-indigo-400" />
-              <h2 className="truncate text-section-title">{label}</h2>
-              <span className="text-caption">{counts[activeType]}</span>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <ActiveIcon className="h-4 w-4 shrink-0 text-indigo-400" />
+                <h2 className="truncate text-section-title">{label}</h2>
+                <span className="shrink-0 rounded-md bg-slate-800 px-2 py-0.5 text-[12px] tabular-nums text-slate-400">{summaryCount(activeType)}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-44">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+                  <input
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder={lang === 'zh' ? '搜索' : 'Search'}
+                    className="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 py-0 pl-8 pr-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void loadMaterials(true)}
+                  disabled={loading}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  {lang === 'zh' ? '刷新' : 'Refresh'}
+                </button>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={beginCreate}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white hover:bg-indigo-500"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {lang === 'zh' ? `新建${label}` : `New ${label}`}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="relative w-44 max-w-[48%]">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder={lang === 'zh' ? '搜索' : 'Search'}
-                className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 py-0 pl-8 pr-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
-              />
-            </div>
-          </div>
 
-          {loading && activeRecords.length === 0 ? (
-            <div className="flex min-h-64 items-center justify-center text-[13px] text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" />{lang === 'zh' ? '加载中…' : 'Loading…'}</div>
-          ) : visibleRecords.length === 0 ? (
-            <div className="flex min-h-64 items-center justify-center">
+            {(formOpen && canWrite) && (
+              <form onSubmit={saveMaterial} className="mb-4 rounded-2xl bg-slate-950/40 p-5">
+                <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
+                  <h3 className="text-section-title">{editing ? (lang === 'zh' ? `编辑${label}` : `Edit ${label}`) : (lang === 'zh' ? `新建${label}` : `New ${label}`)}</h3>
+                  <button type="button" onClick={() => { setEditing(null); setFormOpen(false); setForm({ ...emptyForm }); }} className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-white"><X className="h-4 w-4" /></button>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label={lang === 'zh' ? '名称' : 'Name'} required value={form.name} onChange={(value) => setField('name', value)} />
+                  {activeType === 'categories' && <Field label="Slug" value={form.slug} onChange={(value) => setField('slug', value)} />}
+                  {activeType === 'categories' && <Field label={lang === 'zh' ? '排序' : 'Sort order'} value={form.sort_order} onChange={(value) => setField('sort_order', value)} type="number" />}
+                  {activeType === 'authors' && <Field label="Email" value={form.email} onChange={(value) => setField('email', value)} type="email" />}
+                  {activeType === 'authors' && <Field label={lang === 'zh' ? '网站' : 'Website'} value={form.website} onChange={(value) => setField('website', value)} />}
+                  {activeType === 'authors' && <Field label={lang === 'zh' ? '头像 URL' : 'Avatar URL'} value={form.avatar} onChange={(value) => setField('avatar', value)} />}
+                  {activeType === 'knowledge-bases' && <label className="text-[13px] text-slate-400">{lang === 'zh' ? '文件类型' : 'File type'}<select value={form.file_type} onChange={(event) => setField('file_type', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="markdown">Markdown</option><option value="text">Text</option><option value="word">Word</option></select></label>}
+                  <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '描述' : 'Description'}<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} rows={3} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>
+                  {activeType === 'authors' && <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '简介' : 'Bio'}<textarea value={form.bio} onChange={(event) => setField('bio', event.target.value)} rows={3} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>}
+                  {activeType === 'authors' && <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '社交链接（JSON 或文本）' : 'Social links (JSON or text)'}<textarea value={form.social_links} onChange={(event) => setField('social_links', event.target.value)} rows={2} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>}
+                  {activeType === 'knowledge-bases' && (!editing || form.content !== '') && <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '正文' : 'Content'}<textarea required={!editing} value={form.content} onChange={(event) => setField('content', event.target.value)} rows={8} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>}
+                </div>
+                <div className="mt-4 flex justify-end gap-2 border-t border-slate-800 pt-3">
+                  <button type="button" onClick={() => { setEditing(null); setFormOpen(false); setForm({ ...emptyForm }); }} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800">{lang === 'zh' ? '取消' : 'Cancel'}</button>
+                  <button type="submit" disabled={busy === 'material'} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white hover:bg-indigo-500 disabled:opacity-50"><Plus className="h-3.5 w-3.5" />{busy === 'material' ? (lang === 'zh' ? '保存中…' : 'Saving…') : (lang === 'zh' ? '保存' : 'Save')}</button>
+                </div>
+              </form>
+            )}
+
+            {loading && activeRecords.length === 0 ? (
+              <div className="flex min-h-64 items-center justify-center text-[13px] text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" />{lang === 'zh' ? '加载中…' : 'Loading…'}</div>
+            ) : visibleRecords.length === 0 ? (
               <EmptyState
                 compact
-                icon={FolderKanban}
-                title={search
-                  ? (lang === 'zh' ? '没有匹配结果' : 'No matching results')
-                  : (lang === 'zh' ? `还没有${label}` : `No ${label} yet`)}
-                description={search
-                  ? (lang === 'zh' ? '换个关键词，或清空搜索框看全部。' : 'Try another keyword, or clear the search.')
-                  : (lang === 'zh' ? `点右上角「新建${label}」创建第一条。` : `Create one to get started.`)}
+                icon={search ? Search : labels[activeType].icon}
+                title={search ? (lang === 'zh' ? '没有匹配结果' : 'No matching results') : emptyCopy(activeType, lang).title}
+                description={search ? (lang === 'zh' ? '换个关键词，或清空搜索框看全部。' : 'Try another keyword, or clear the search.') : emptyCopy(activeType, lang).hint}
                 action={!search && canWrite ? (
                   <Button variant="secondary" icon={Plus} onClick={beginCreate}>
                     {lang === 'zh' ? `新建${label}` : `New ${label}`}
                   </Button>
                 ) : undefined}
               />
-            </div>
-          ) : (
-            <div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">
-              {visibleRecords.map((record) => {
-                const id = materialId(record);
-                const selected = id === selectedId;
-                return (
-                  <div key={id} className={`group flex items-start gap-2 rounded-xl px-4 py-3 transition ${selected ? 'bg-indigo-500/10 ring-1 ring-indigo-500/50' : 'bg-slate-950/40 hover:bg-slate-800/40'}`}>
-                    <button type="button" onClick={() => setSelectedId(id)} className="min-w-0 flex-1 text-left">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-[13px] font-semibold text-white">{text(record, 'name') || text(record, 'title') || `#${id}`}</span>
-                        {activeType === 'categories' && <span className="shrink-0 text-[12.5px] text-slate-500">{number(record, 'article_count')} 篇</span>}
-                        {activeType === 'authors' && <span className="shrink-0 text-[12.5px] text-slate-500">{number(record, 'article_count')} 篇</span>}
-                        {activeType === 'keyword-libraries' && <span className="shrink-0 text-[12.5px] text-indigo-300">{number(record, 'item_count') || number(record, 'keyword_count')} 词</span>}
-                        {activeType === 'title-libraries' && <span className="shrink-0 text-[12.5px] text-indigo-300">{number(record, 'item_count') || number(record, 'title_count')} 条</span>}
-                        {activeType === 'knowledge-bases' && <span className="shrink-0 text-[12.5px] text-emerald-300">{number(record, 'chunk_count')} 切片</span>}
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-[12.5px] leading-relaxed text-slate-500">{text(record, 'description') || text(record, 'email') || (lang === 'zh' ? '暂无描述' : 'No description')}</p>
-                      <div className="mt-2 text-[12.5px] text-slate-500">{formatDate(record.updated_at || record.created_at)}</div>
-                    </button>
-                    {canWrite && (
-                      <div className="flex shrink-0 items-center gap-1 opacity-70 transition group-hover:opacity-100">
-                        <button type="button" title={lang === 'zh' ? '编辑' : 'Edit'} onClick={() => beginEdit(record)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white">✎</button>
-                        <button type="button" title={lang === 'zh' ? '删除' : 'Delete'} onClick={() => void deleteMaterial(record)} disabled={busy === `delete-${id}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-400 transition hover:bg-rose-950/50 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /></button>
-                      </div>
-                    )}
-                    {selected && <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-indigo-400" />}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <section className="space-y-5 xl:col-span-7">
-          {(formOpen && canWrite) && (
-            <form onSubmit={saveMaterial} className="rounded-2xl bg-slate-900/80 p-6">
-              <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
-                <h3 className="text-section-title">{editing ? (lang === 'zh' ? `编辑${label}` : `Edit ${label}`) : (lang === 'zh' ? `新建${label}` : `New ${label}`)}</h3>
-                <button type="button" onClick={() => { setEditing(null); setFormOpen(false); setForm({ ...emptyForm }); }} className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-white"><X className="h-4 w-4" /></button>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label={lang === 'zh' ? '名称' : 'Name'} required value={form.name} onChange={(value) => setField('name', value)} />
-                {activeType === 'categories' && <Field label="Slug" value={form.slug} onChange={(value) => setField('slug', value)} />}
-                {activeType === 'categories' && <Field label={lang === 'zh' ? '排序' : 'Sort order'} value={form.sort_order} onChange={(value) => setField('sort_order', value)} type="number" />}
-                {activeType === 'authors' && <Field label="Email" value={form.email} onChange={(value) => setField('email', value)} type="email" />}
-                {activeType === 'authors' && <Field label={lang === 'zh' ? '网站' : 'Website'} value={form.website} onChange={(value) => setField('website', value)} />}
-                {activeType === 'authors' && <Field label={lang === 'zh' ? '头像 URL' : 'Avatar URL'} value={form.avatar} onChange={(value) => setField('avatar', value)} />}
-                {activeType === 'knowledge-bases' && <label className="text-[13px] text-slate-400">{lang === 'zh' ? '文件类型' : 'File type'}<select value={form.file_type} onChange={(event) => setField('file_type', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="markdown">Markdown</option><option value="text">Text</option><option value="word">Word</option></select></label>}
-                <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '描述' : 'Description'}<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} rows={3} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>
-                {activeType === 'authors' && <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '简介' : 'Bio'}<textarea value={form.bio} onChange={(event) => setField('bio', event.target.value)} rows={3} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>}
-                {activeType === 'authors' && <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '社交链接（JSON 或文本）' : 'Social links (JSON or text)'}<textarea value={form.social_links} onChange={(event) => setField('social_links', event.target.value)} rows={2} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>}
-                {activeType === 'knowledge-bases' && (!editing || form.content !== '') && <label className="text-[13px] text-slate-400 sm:col-span-2">{lang === 'zh' ? '正文' : 'Content'}<textarea required={!editing} value={form.content} onChange={(event) => setField('content', event.target.value)} rows={8} className="mt-1 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-[13px] text-white outline-none transition focus:border-indigo-500" /></label>}
-              </div>
-              <div className="mt-4 flex justify-end gap-2 border-t border-slate-800 pt-3">
-                <button type="button" onClick={() => { setEditing(null); setFormOpen(false); setForm({ ...emptyForm }); }} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800">{lang === 'zh' ? '取消' : 'Cancel'}</button>
-                <button type="submit" disabled={busy === 'material'} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white hover:bg-indigo-500 disabled:opacity-50"><Plus className="h-3.5 w-3.5" />{busy === 'material' ? (lang === 'zh' ? '保存中…' : 'Saving…') : (lang === 'zh' ? '保存' : 'Save')}</button>
-              </div>
-            </form>
-          )}
-
-          <div className="rounded-2xl bg-slate-900/80 p-6">
-            <div className="mb-4 flex items-start justify-between gap-3 border-b border-slate-800 pb-3">
-              <div className="min-w-0">
-                <h3 className="truncate text-section-title">{activeRecord ? text(activeRecord, 'name') : label}</h3>
-                <p className="mt-1 text-caption">{activeRecord ? (text(activeRecord, 'description') || (lang === 'zh' ? '暂无描述' : 'No description')) : (lang === 'zh' ? '选择左侧素材库查看详情' : 'Select a library to inspect its details')}</p>
-              </div>
-              {activeRecord && <span className="shrink-0 rounded-lg bg-slate-800 px-2 py-1 text-[12.5px] text-slate-400">ID {materialId(activeRecord)}</span>}
-            </div>
-
-            {activeRecord && !activeItemsEnabled && (
-              <div className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-3">
-                <Stat label={lang === 'zh' ? '关联文章' : 'Articles'} value={number(activeRecord, 'article_count')} />
-                {activeType === 'knowledge-bases' && <Stat label={lang === 'zh' ? '字符数' : 'Characters'} value={number(activeRecord, 'character_count')} />}
-                {activeType === 'knowledge-bases' && <Stat label={lang === 'zh' ? '切片数' : 'Chunks'} value={number(activeRecord, 'chunk_count')} />}
-                {activeType === 'authors' && <Stat label={lang === 'zh' ? '已删除文章' : 'Trashed articles'} value={number(activeRecord, 'trashed_count')} />}
-                {activeType === 'categories' && <Stat label={lang === 'zh' ? '排序' : 'Sort'} value={number(activeRecord, 'sort_order')} />}
-              </div>
-            )}
-
-            {activeRecord && activeType === 'image-libraries' && (
-              <ImageLibraryPanel apiClient={apiClient} lang={lang} libraryId={materialId(activeRecord)} canWrite={canWrite} />
-            )}
-
-            {activeRecord && activeType === 'authors' && (
-              <AuthorRecentArticles apiClient={apiClient} lang={lang} authorId={materialId(activeRecord)} />
-            )}
-
-            {activeRecord && activeType === 'knowledge-bases' && (
-              <KnowledgeOfficialAdoptPanel apiClient={apiClient} lang={lang} knowledgeBaseId={materialId(activeRecord)} canWrite={canWrite} />
-            )}
-
-            {activeRecord && activeItemsEnabled && (
-              <div className="space-y-4">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-[13px] font-semibold text-slate-200">{activeType === 'keyword-libraries' ? (lang === 'zh' ? '关键词条目' : 'Keywords') : (lang === 'zh' ? '标题条目' : 'Titles')} <span className="text-caption">({items.length})</span></div>
-                  <div className="flex items-center gap-2">
-                  {canWrite && <button type="button" onClick={() => setImportOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-indigo-500/40 px-3 text-[13px] font-semibold text-indigo-300 transition hover:bg-indigo-500/10"><Upload className="h-3.5 w-3.5" />{lang === 'zh' ? '批量导入' : 'Bulk import'}</button>}
-                  {canWrite && selectedItemIds.size > 0 && <button type="button" onClick={() => void deleteItems()} disabled={busy === 'item-delete'} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-rose-500/40 px-3 text-[13px] font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" />{lang === 'zh' ? `删除所选 (${selectedItemIds.size})` : `Delete selected (${selectedItemIds.size})`}</button>}
+            ) : LIST_TYPES.has(activeType) ? (
+              /* ① 列表型：分类 / 作者 —— 这一类的下一层就是文章，没有「库」，所以给一张表；
+                    统计与相关面板挂在选中行下面（行内展开），不再单独占一栏。 */
+              <div className="overflow-hidden rounded-xl border border-slate-800">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-950/50 text-[12px] text-slate-500">
+                      <tr>
+                        <th className="px-4 py-2.5 font-medium">{lang === 'zh' ? '名称' : 'Name'}</th>
+                        <th className="w-24 px-4 py-2.5 font-medium">{lang === 'zh' ? '关联文章' : 'Articles'}</th>
+                        <th className="w-24 px-4 py-2.5 font-medium">{activeType === 'categories' ? (lang === 'zh' ? '排序' : 'Sort') : (lang === 'zh' ? '已删除' : 'Trashed')}</th>
+                        <th className="w-32 px-4 py-2.5 font-medium">{lang === 'zh' ? '更新时间' : 'Updated'}</th>
+                        <th className="w-20 px-4 py-2.5" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleRecords.map((record) => {
+                        const id = materialId(record);
+                        const open = id === expandedId;
+                        return (
+                          <Fragment key={id}>
+                            <tr className={`border-t border-slate-800 transition ${open ? 'bg-slate-800/40' : 'hover:bg-slate-800/20'}`}>
+                              <td className="px-4 py-3">
+                                <button type="button" onClick={() => setExpandedId(open ? '' : id)} className="flex w-full min-w-0 items-center gap-2 text-left">
+                                  <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform ${open ? 'rotate-90' : ''}`} />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[13px] font-semibold text-white">{text(record, 'name') || `#${id}`}</span>
+                                    <span className="mt-0.5 block truncate text-[12px] text-slate-500">{text(record, 'description') || text(record, 'email') || (lang === 'zh' ? '暂无描述' : 'No description')}</span>
+                                  </span>
+                                </button>
+                              </td>
+                              <td className="px-4 py-3 text-[13px] tabular-nums text-slate-300">{number(record, 'article_count')}</td>
+                              <td className="px-4 py-3 text-[13px] tabular-nums text-slate-300">{activeType === 'categories' ? number(record, 'sort_order') : number(record, 'trashed_count')}</td>
+                              <td className="px-4 py-3 text-[12.5px] text-slate-500">{formatDate(record.updated_at || record.created_at)}</td>
+                              <td className="px-4 py-3">
+                                {canWrite && (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button type="button" title={lang === 'zh' ? '编辑' : 'Edit'} onClick={() => void beginEdit(record)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white">✎</button>
+                                    <button type="button" title={lang === 'zh' ? '删除' : 'Delete'} onClick={() => void deleteMaterial(record)} disabled={busy === `delete-${id}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-400 transition hover:bg-rose-950/50 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /></button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                            {open && (
+                              <tr className="border-t border-slate-800 bg-slate-950/40">
+                                <td colSpan={5} className="px-4 py-4">
+                                  <div className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
+                                    <Stat label={lang === 'zh' ? '关联文章' : 'Articles'} value={number(record, 'article_count')} />
+                                    {activeType === 'categories' && <Stat label={lang === 'zh' ? '排序' : 'Sort'} value={number(record, 'sort_order')} />}
+                                    {activeType === 'authors' && <Stat label={lang === 'zh' ? '已删除文章' : 'Trashed articles'} value={number(record, 'trashed_count')} />}
+                                  </div>
+                                  {activeType === 'categories' && text(record, 'slug') && (
+                                    <p className="mt-3 text-[12.5px] text-slate-500">Slug <span className="font-mono text-slate-400">{text(record, 'slug')}</span></p>
+                                  )}
+                                  {activeType === 'authors' && (
+                                    <div className="mt-4"><AuthorRecentArticles apiClient={apiClient} lang={lang} authorId={id} /></div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-                {canWrite && <form onSubmit={createItem} className="rounded-xl bg-slate-950/40 px-4 py-3"><div className="flex flex-col gap-2 sm:flex-row"><input value={activeType === 'keyword-libraries' ? itemDraft.keyword : itemDraft.title} onChange={(event) => setItemDraft((previous) => activeType === 'keyword-libraries' ? { ...previous, keyword: event.target.value } : { ...previous, title: event.target.value })} placeholder={activeType === 'keyword-libraries' ? (lang === 'zh' ? '输入关键词' : 'Keyword') : (lang === 'zh' ? '输入标题' : 'Title')} className="h-10 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />{activeType === 'title-libraries' && <input value={itemDraft.relatedKeyword} onChange={(event) => setItemDraft((previous) => ({ ...previous, relatedKeyword: event.target.value }))} placeholder={lang === 'zh' ? '关联关键词（可选）' : 'Related keyword (optional)'} className="h-10 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />}<button type="submit" disabled={busy === 'item-create'} className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white hover:bg-indigo-500 disabled:opacity-50"><Plus className="h-3.5 w-3.5" />{lang === 'zh' ? '添加' : 'Add'}</button></div></form>}
-                  </div>
-                  {activeType === 'title-libraries' && <TitleGenerationPanel apiClient={apiClient} lang={lang} libraryId={materialId(activeRecord)} libraryName={text(activeRecord, 'name')} canWrite={canWrite} onGenerated={() => { void refreshItems(); }} />}
-                {itemError && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-[13px] text-rose-200">{itemError}</div>}
-                {itemsLoading ? <div className="flex min-h-32 items-center justify-center text-[13px] text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" />{lang === 'zh' ? '读取条目…' : 'Loading items…'}</div> : items.length === 0 ? <EmptyState compact icon={Tag} title={lang === 'zh' ? '此库暂无条目' : 'This library has no items yet'} description={lang === 'zh' ? '用上面的输入框添加，或点「批量导入」一次贴一批。' : 'Add one above, or use bulk import.'} /> : <div className="max-h-[390px] space-y-2 overflow-y-auto pr-1">{items.map((item) => { const id = materialId(item); const itemText = activeType === 'keyword-libraries' ? text(item, 'keyword') : text(item, 'title'); return <label key={id} className="flex cursor-pointer items-start gap-2 rounded-xl bg-slate-950/40 px-4 py-3 transition hover:bg-slate-800/40"><input type="checkbox" checked={selectedItemIds.has(id)} onChange={() => toggleItem(id)} className="mt-0.5 accent-indigo-500" /><span className="min-w-0 flex-1"><span className="block break-words text-[13px] text-slate-200">{itemText || `#${id}`}</span>{activeType === 'title-libraries' && text(item, 'keyword') && <span className="mt-1 block text-[12.5px] text-slate-500">{lang === 'zh' ? '关键词：' : 'Keyword: '}{text(item, 'keyword')}</span>}<span className="mt-1 block text-[12.5px] text-slate-500">{formatDate(item.created_at)}</span></span></label>; })}</div>}
               </div>
-            )}
-
-            {/* 空态（照设计稿）：大图标 + 标题 + 说明 + 一块**虚线动作区**。
-                ⚠️ 不写「拖拽文件到此处」——我们的上传没实现拖拽，写上去是假承诺。
-                虚线框给的是**真的下一步**（新建 / 批量导入），不是装饰。 */}
-            {!activeRecord && !formOpen && (
-              <div className="flex min-h-[380px] flex-col items-center justify-center px-6 py-14 text-center">
-                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-xl bg-slate-800/60 text-slate-400">
-                  <FolderKanban className="h-8 w-8" />
-                </div>
-                <h3 className="text-[15px] font-bold text-white">
-                  {lang === 'zh' ? '这一类还没有内容' : 'Nothing here yet'}
-                </h3>
-                <p className="mt-2 max-w-md text-[13px] leading-relaxed text-slate-400">
-                  {lang === 'zh'
-                    ? '写文章要用的「配料」都在这里：标题库（写什么题）、分类、作者、关键词、图片。先在左边的知识目录里挑一类，或直接新建。'
-                    : 'Titles, categories, authors, keywords and images all live here. Pick a type on the left, or create one.'}
-                </p>
-
-                {canWrite && (
-                  <div className="mt-7 w-full max-w-md rounded-xl border border-dashed border-slate-700 px-6 py-7">
-                    <Layers className="mx-auto h-6 w-6 text-slate-500" />
-                    <p className="mt-2.5 text-[13px] font-medium text-slate-300">
-                      {lang === 'zh' ? '先建一个库，再往里放内容' : 'Create a library first'}
-                    </p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
-                      {lang === 'zh'
-                        ? '标题库和关键词库建好后支持「批量导入」，一次贴一批；图片库支持直接上传图片。'
-                        : 'Title and keyword libraries support bulk import; image libraries accept uploads.'}
-                    </p>
-                  </div>
-                )}
-
-                {canWrite && activeItemsEnabled && (
-                  <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-                    <span className="text-[12px] text-slate-500">{lang === 'zh' ? '快速开始：' : 'Quick start: '}</span>
-                    <button type="button" onClick={() => setFormOpen(true)} className="rounded-lg border border-slate-700 px-2.5 py-1 text-[12px] font-medium text-slate-300 transition hover:bg-slate-800">
-                      {lang === 'zh' ? '新建' : 'New'}
-                    </button>
-                    {(activeType === 'keyword-libraries' || activeType === 'title-libraries') && (
-                      <button type="button" onClick={() => setImportOpen(true)} className="rounded-lg border border-slate-700 px-2.5 py-1 text-[12px] font-medium text-slate-300 transition hover:bg-slate-800">
-                        {lang === 'zh' ? '批量导入' : 'Bulk import'}
+            ) : (
+              /* ② 容器型：关键词库 / 标题库 / 图片库 / 知识库 —— 库确实存在，所以给一条切换条；
+                    选中库的工作区在下面（条目列表 / 图片面板 / 官方知识采纳 / AI 生成标题）。 */
+              <>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  {visibleRecords.map((record) => {
+                    const id = materialId(record);
+                    const selected = id === selectedId;
+                    const badge = recordBadge(activeType, record, lang);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setSelectedId(id)}
+                        title={text(record, 'description')}
+                        className={`inline-flex max-w-[15rem] items-center gap-2 rounded-xl border px-3 py-2 text-[13px] font-medium transition ${selected ? 'border-indigo-500/60 bg-indigo-500/10 text-white' : 'border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60'}`}
+                      >
+                        <span className="truncate">{text(record, 'name') || `#${id}`}</span>
+                        {badge && <span className="shrink-0 text-[11px] tabular-nums text-slate-500">{badge}</span>}
                       </button>
+                    );
+                  })}
+                </div>
+
+                {activeRecord && (
+                  <div className="rounded-2xl bg-slate-950/40 p-5">
+                    <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-800 pb-4">
+                      <div className="min-w-0">
+                        <h3 className="truncate text-section-title">{text(activeRecord, 'name')}</h3>
+                        <p className="mt-1 text-caption">
+                          {text(activeRecord, 'description') || (lang === 'zh' ? '暂无描述' : 'No description')}
+                          <span className="ml-2 text-slate-500">{formatDate(activeRecord.updated_at || activeRecord.created_at)}</span>
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <span className="rounded-lg bg-slate-800 px-2 py-1 text-[12.5px] text-slate-400">ID {materialId(activeRecord)}</span>
+                        {canWrite && <button type="button" title={lang === 'zh' ? '编辑' : 'Edit'} onClick={() => void beginEdit(activeRecord)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white">✎</button>}
+                        {canWrite && <button type="button" title={lang === 'zh' ? '删除' : 'Delete'} onClick={() => void deleteMaterial(activeRecord)} disabled={busy === `delete-${materialId(activeRecord)}`} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-400 transition hover:bg-rose-950/50 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" /></button>}
+                      </div>
+                    </div>
+
+                    <div className="mb-4 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
+                      <Stat label={lang === 'zh' ? '关联文章' : 'Articles'} value={number(activeRecord, 'article_count')} />
+                      {activeType === 'knowledge-bases' && <Stat label={lang === 'zh' ? '字符数' : 'Characters'} value={number(activeRecord, 'character_count')} />}
+                      {activeType === 'knowledge-bases' && <Stat label={lang === 'zh' ? '切片数' : 'Chunks'} value={number(activeRecord, 'chunk_count')} />}
+                    </div>
+
+                    {activeType === 'image-libraries' && (
+                      <ImageLibraryPanel apiClient={apiClient} lang={lang} libraryId={materialId(activeRecord)} canWrite={canWrite} />
+                    )}
+
+                    {activeType === 'knowledge-bases' && (
+                      <KnowledgeOfficialAdoptPanel apiClient={apiClient} lang={lang} knowledgeBaseId={materialId(activeRecord)} canWrite={canWrite} />
+                    )}
+
+                    {activeItemsEnabled && (
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="whitespace-nowrap text-[13px] font-semibold text-slate-200">{activeType === 'keyword-libraries' ? (lang === 'zh' ? '关键词条目' : 'Keywords') : (lang === 'zh' ? '标题条目' : 'Titles')} <span className="text-caption">({items.length})</span></div>
+                          <div className="flex items-center gap-2">
+                          {canWrite && <button type="button" onClick={() => setImportOpen(true)} className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-xl border border-indigo-500/40 px-3 text-[13px] font-semibold text-indigo-300 transition hover:bg-indigo-500/10"><Upload className="h-3.5 w-3.5" />{lang === 'zh' ? '批量导入' : 'Bulk import'}</button>}
+                          {canWrite && selectedItemIds.size > 0 && <button type="button" onClick={() => void deleteItems()} disabled={busy === 'item-delete'} className="inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-xl border border-rose-500/40 px-3 text-[13px] font-semibold text-rose-300 transition hover:bg-rose-500/10 disabled:opacity-50"><Trash2 className="h-3.5 w-3.5" />{lang === 'zh' ? `删除所选 (${selectedItemIds.size})` : `Delete selected (${selectedItemIds.size})`}</button>}
+                          </div>
+                        </div>
+                        {/* 新增条目的表单**单独成行**，不挤在标题行里——挤在一起时 1024px 下
+                            「标题条目 (26)」和「批量导入」都会断成两行（实测）。 */}
+                        {canWrite && <form onSubmit={createItem} className="rounded-xl bg-slate-900/60 px-4 py-3"><div className="flex flex-col gap-2 sm:flex-row"><input value={activeType === 'keyword-libraries' ? itemDraft.keyword : itemDraft.title} onChange={(event) => setItemDraft((previous) => activeType === 'keyword-libraries' ? { ...previous, keyword: event.target.value } : { ...previous, title: event.target.value })} placeholder={activeType === 'keyword-libraries' ? (lang === 'zh' ? '输入关键词' : 'Keyword') : (lang === 'zh' ? '输入标题' : 'Title')} className="h-10 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />{activeType === 'title-libraries' && <input value={itemDraft.relatedKeyword} onChange={(event) => setItemDraft((previous) => ({ ...previous, relatedKeyword: event.target.value }))} placeholder={lang === 'zh' ? '关联关键词（可选）' : 'Related keyword (optional)'} className="h-10 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />}<button type="submit" disabled={busy === 'item-create'} className="inline-flex h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white hover:bg-indigo-500 disabled:opacity-50"><Plus className="h-3.5 w-3.5" />{lang === 'zh' ? '添加' : 'Add'}</button></div></form>}
+                          {activeType === 'title-libraries' && <TitleGenerationPanel apiClient={apiClient} lang={lang} libraryId={materialId(activeRecord)} libraryName={text(activeRecord, 'name')} canWrite={canWrite} onGenerated={() => { void refreshItems(); }} />}
+                        {itemError && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-[13px] text-rose-200">{itemError}</div>}
+                        {itemsLoading ? <div className="flex min-h-32 items-center justify-center text-[13px] text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" />{lang === 'zh' ? '读取条目…' : 'Loading items…'}</div> : items.length === 0 ? <EmptyState compact icon={Tag} title={lang === 'zh' ? '此库暂无条目' : 'This library has no items yet'} description={lang === 'zh' ? '用上面的输入框添加，或点「批量导入」一次贴一批。' : 'Add one above, or use bulk import.'} /> : <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">{items.map((item) => { const id = materialId(item); const itemText = activeType === 'keyword-libraries' ? text(item, 'keyword') : text(item, 'title'); return <label key={id} className="flex cursor-pointer items-start gap-2 rounded-xl bg-slate-900/60 px-4 py-3 transition hover:bg-slate-800/40"><input type="checkbox" checked={selectedItemIds.has(id)} onChange={() => toggleItem(id)} className="mt-0.5 accent-indigo-500" /><span className="min-w-0 flex-1"><span className="block break-words text-[13px] text-slate-200">{itemText || `#${id}`}</span>{activeType === 'title-libraries' && text(item, 'keyword') && <span className="mt-1 block text-[12.5px] text-slate-500">{lang === 'zh' ? '关键词：' : 'Keyword: '}{text(item, 'keyword')}</span>}<span className="mt-1 block text-[12.5px] text-slate-500">{formatDate(item.created_at)}</span></span></label>; })}</div>}
+                      </div>
                     )}
                   </div>
                 )}
-              </div>
+              </>
             )}
-          </div>
-        </section>
-      </div>
           </div>
         </div>
       </div>
@@ -814,5 +858,45 @@ const Field: React.FC<{ label: string; value: string; onChange: (value: string) 
 const Stat: React.FC<{ label: string; value: number }> = ({ label, value }) => (
   <div className="rounded-xl bg-slate-950/40 px-4 py-3"><div className="text-caption">{label}</div><div className="mt-1 text-lg font-bold tabular-nums text-white">{value}</div></div>
 );
+
+/** 「分类」「作者」这两类的下一层直接是文章——它们自己没有「库」这一层，
+ *  所以渲染成一张表（选中行就地展开），而不是「库切换条 + 工作区」。
+ *  其余四类（关键词库 / 标题库 / 图片库 / 知识库）下面确实有库，走容器型。 */
+const LIST_TYPES = new Set<MaterialType>(['categories', 'authors']);
+
+/** 空态文案按类型给。改用这条之前，六类共用同一句「先建一个库，再往里放内容」——
+ *  对分类和作者是错的：它们没有「往里放」这回事。 */
+function emptyCopy(type: MaterialType, lang: 'zh' | 'en'): { title: string; hint: string } {
+  const zh = lang === 'zh';
+  switch (type) {
+    case 'categories':
+      return { title: zh ? '还没有分类' : 'No categories yet', hint: zh ? '分类用来给文章归档，每篇文章都要归到一个分类下。' : 'Categories file your articles.' };
+    case 'authors':
+      return { title: zh ? '还没有作者' : 'No authors yet', hint: zh ? '作者关联文章——展开一行可以看到该作者最近的文章。' : 'Authors are linked to articles.' };
+    case 'keyword-libraries':
+      return { title: zh ? '还没有关键词库' : 'No keyword libraries yet', hint: zh ? '建好之后可以用「批量导入」一次贴一批关键词。' : 'Bulk import is available once created.' };
+    case 'title-libraries':
+      return { title: zh ? '还没有标题库' : 'No title libraries yet', hint: zh ? '生成任务按标题库选题——没有它，生成任务不知道每篇文章该写什么。' : 'Generation tasks pick titles from a library.' };
+    case 'image-libraries':
+      return { title: zh ? '还没有图片库' : 'No image libraries yet', hint: zh ? '建好之后可以直接往里面传图片。' : 'Image libraries accept uploads.' };
+    default:
+      return { title: zh ? '还没有知识库' : 'No knowledge bases yet', hint: zh ? '知识库可供正文引用，内容会切成片段入库。' : 'Knowledge bases are chunked and referenced when writing.' };
+  }
+}
+
+/** 库切换条上那个小计数。图片库没有可显示的计数，返回空串（不画假的 0）。 */
+function recordBadge(type: MaterialType, record: ApiRecord, lang: 'zh' | 'en'): string {
+  const zh = lang === 'zh';
+  switch (type) {
+    case 'keyword-libraries':
+      return `${number(record, 'item_count') || number(record, 'keyword_count')} ${zh ? '词' : 'kw'}`;
+    case 'title-libraries':
+      return `${number(record, 'item_count') || number(record, 'title_count')} ${zh ? '条' : 'items'}`;
+    case 'knowledge-bases':
+      return `${number(record, 'chunk_count')} ${zh ? '切片' : 'chunks'}`;
+    default:
+      return '';
+  }
+}
 
 export default MaterialsView;
