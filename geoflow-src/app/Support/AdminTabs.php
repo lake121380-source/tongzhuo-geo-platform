@@ -38,6 +38,7 @@ final class AdminTabs
         'competitor',
         'sandbox',
         'analytics',
+        'jiandu',
         'leads',
         'ai-models',
         'admin-settings',

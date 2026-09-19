@@ -29,6 +29,7 @@ export const ADMIN_TABS = [
   'competitor',
   'sandbox',
   'analytics',
+  'jiandu',
   'leads',
   'ai-models',
   'admin-settings',

@@ -33,6 +33,7 @@ use App\Http\Controllers\Api\V1\DistributionJobApiController;
 use App\Http\Controllers\Api\V1\DistributionSettingsSyncController;
 use App\Http\Controllers\Api\V1\EnterpriseKnowledgeApiController;
 use App\Http\Controllers\Api\V1\HostedSiteController;
+use App\Http\Controllers\Api\V1\JianduController;
 use App\Http\Controllers\Api\V1\JobController;
 use App\Http\Controllers\Api\V1\KnowledgeAssetApiController;
 use App\Http\Controllers\Api\V1\KnowledgeFactApiController;
@@ -570,6 +571,24 @@ Route::prefix('v1')
             Route::delete('distribution/jobs/{distribution}', [DistributionJobApiController::class, 'destroy'])
                 ->whereNumber('distribution')
                 ->middleware(['api.scope:distribution:write', 'throttle:30,1']);
+
+            // jiandu — 「见度GEO」检测系统的接入（外部系统，见 JianduController 注释）。
+            // 凭据与出站请求全在服务端；前端只与本组端点交互，永远不接触见度 token。
+            // 写接口一律要求 X-Idempotency-Key（控制器内校验），发码另有 30/分钟 粗闸
+            // （见度侧真实防线是它自己的 60 秒冷却与账号限流）。
+            Route::prefix('jiandu')->group(function (): void {
+                Route::middleware('api.scope:jiandu:read')->group(function (): void {
+                    Route::get('status', [JianduController::class, 'status']);
+                    Route::get('projects', [JianduController::class, 'projects']);
+                    Route::get('overview', [JianduController::class, 'overview']);
+                    Route::get('detections', [JianduController::class, 'detections']);
+                });
+                Route::middleware(['api.scope:jiandu:write', 'throttle:30,1'])->group(function (): void {
+                    Route::post('session', [JianduController::class, 'storeSession']);
+                    Route::post('session/send-code', [JianduController::class, 'sendCode']);
+                    Route::delete('session', [JianduController::class, 'destroySession']);
+                });
+            });
 
             // manual-publications — management projection of 桐灼GEO's existing
             // governed workflow. Browser execution remains under the dedicated

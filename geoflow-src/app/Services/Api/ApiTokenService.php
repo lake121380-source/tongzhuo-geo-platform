@@ -277,6 +277,8 @@ class ApiTokenService
             'distribution:write',
             'analytics:read',
             'analytics:collect',
+            'jiandu:read',
+            'jiandu:write',
             'leads:read',
             'leads:write',
             'workspace:read',

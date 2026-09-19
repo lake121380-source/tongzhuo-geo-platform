@@ -110,6 +110,52 @@ export interface AiWorkspaceStreamEvent {
   data: ApiRecord;
 }
 
+/** 「见度检测」接入：连接投影（后端从不回传 token，连密文都不给）。 */
+export interface JianduConnectionProjection {
+  id: number;
+  account: string;
+  organization_name: string;
+  user_name: string;
+  status: string;
+  access_expires_at: string | null;
+  refresh_expires_at: string | null;
+  last_refreshed_at: string | null;
+  connected_at: string | null;
+}
+
+/** `POST jiandu/session` 的结果：成功直连，或需要新设备验证码的中间态。 */
+export interface JianduSessionResult {
+  requires_verification: boolean;
+  channel: 'sms' | 'email' | null;
+  message: string;
+  connection: JianduConnectionProjection | null;
+}
+
+/** 见度数据响应的来源标注（页面上必须如实说明这批数字来自外部检测系统）。 */
+export interface JianduSourceMeta {
+  kind: string;
+  system?: string;
+  fetched_at?: string;
+  [key: string]: unknown;
+}
+
+export interface JianduProjectsResponse {
+  source: JianduSourceMeta;
+  projects: Array<{ id: string; name: string; brand_name: string; industry: string }>;
+}
+
+export interface JianduOverviewResponse {
+  source: JianduSourceMeta;
+  project_id: string;
+  overview: ApiRecord;
+}
+
+export interface JianduDetectionsResponse {
+  source: JianduSourceMeta;
+  project_id: string;
+  detections: ApiRecord;
+}
+
 export type SystemUpdateOperationKind = 'update' | 'backup' | 'rollback' | 'verify';
 
 export interface KnowledgeSearchResponse {
@@ -906,6 +952,46 @@ export class GeoFlowApiClient {
 
   async getLeadAnalytics(params: Record<string, string | number | undefined> = {}): Promise<ApiRecord> {
     return this.request<ApiRecord>(`analytics/leads${this.query(params)}`);
+  }
+
+  // ---------------------------------------------------------------- 见度检测接入
+
+  /** 当前见度连接（未连接时 connection 为 null）。 */
+  async getJianduStatus(): Promise<{ connection: JianduConnectionProjection | null }> {
+    return this.request<{ connection: JianduConnectionProjection | null }>('jiandu/status');
+  }
+
+  /** 输入见度账号密码建立连接。可能需要 verify_code（先用 sendJianduCode 发码）。 */
+  async connectJianduSession(
+    payload: { account: string; password: string; verify_code?: string },
+    options: MutationOptions = {},
+  ): Promise<JianduSessionResult> {
+    return this.request<JianduSessionResult>('jiandu/session', { method: 'POST', body: payload, idempotencyKey: options.idempotencyKey });
+  }
+
+  /** 触发新设备验证码（channel 由连接尝试的返回告知：sms / email）。 */
+  async sendJianduCode(
+    payload: { channel: 'sms' | 'email'; account: string },
+    options: MutationOptions = {},
+  ): Promise<{ sent: boolean; message: string }> {
+    return this.request<{ sent: boolean; message: string }>('jiandu/session/send-code', { method: 'POST', body: payload, idempotencyKey: options.idempotencyKey });
+  }
+
+  /** 断开见度连接（见度侧尽力吊销会话；重复调用幂等）。 */
+  async disconnectJianduSession(options: MutationOptions = {}): Promise<{ connection: null }> {
+    return this.request<{ connection: null }>('jiandu/session', { method: 'DELETE', idempotencyKey: options.idempotencyKey });
+  }
+
+  async getJianduProjects(): Promise<JianduProjectsResponse> {
+    return this.request<JianduProjectsResponse>('jiandu/projects');
+  }
+
+  async getJianduOverview(params: { project_id: string; range?: string }): Promise<JianduOverviewResponse> {
+    return this.request<JianduOverviewResponse>(`jiandu/overview${this.query(params)}`);
+  }
+
+  async getJianduDetections(params: { project_id: string; page?: number; page_size?: number }): Promise<JianduDetectionsResponse> {
+    return this.request<JianduDetectionsResponse>(`jiandu/detections${this.query(params)}`);
   }
 
   /** Manage the real 桐灼GEO public forms and persisted lead inbox. */

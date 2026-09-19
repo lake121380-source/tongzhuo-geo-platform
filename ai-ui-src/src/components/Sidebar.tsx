@@ -19,6 +19,7 @@ import {
   Bot,
   RefreshCw,
   Sparkles,
+  ScanSearch,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -146,6 +147,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         // 被并入的 competitor / sandbox 仍是有效深链（见 tabs.ts 的 MERGED_VIEWS）。
         { id: 'query_radar', label: zh ? 'AI 引用监测' : 'AI Citations', icon: Search, alsoMatches: ['competitor', 'sandbox'] },
         { id: 'analytics', label: zh ? '数据分析' : 'Analytics', icon: BarChart3 },
+        // 见度检测：外部「见度GEO」检测系统的接入（连接后拉取提及率/批次）。
+        { id: 'jiandu', label: zh ? '见度检测' : 'Jiandu Detection', icon: ScanSearch },
         // 归因与线索说的是同一件事（AI 带来的访问有没有变成客户）。
         { id: 'attribution_funnel', label: zh ? '转化与线索' : 'Conversion & Leads', icon: ContactRound, alsoMatches: ['leads'] },
       ],
