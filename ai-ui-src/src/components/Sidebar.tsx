@@ -83,11 +83,10 @@ interface NavItem {
  * 同时挂 `data-active`：冒烟测试靠它定位当前高亮项（比扫 className 稳定）。
  */
 const ACTIVE_NAV_CLASS =
-  'relative bg-indigo-100 text-indigo-700 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-indigo-600 '
-  + 'dark:bg-indigo-600 dark:text-white dark:before:bg-indigo-300 dark:before:opacity-70';
+  'relative bg-slate-800 text-white before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-slate-300';
 
 /** 选中项图标的配色，与上面配套。 */
-const ACTIVE_ICON_CLASS = 'text-indigo-700 dark:text-white';
+const ACTIVE_ICON_CLASS = 'text-white';
 
 interface NavGroup {
   groupKey: string;
@@ -247,8 +246,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
       : aiWorkspaceEnabled ? 'true' : 'false';
 
   return (
-    <aside data-ai-ws={aiWorkspaceFlagAttr} className="app-sidebar w-64 border-r border-slate-800 p-3 flex flex-col justify-between shrink-0 self-stretch overflow-hidden select-none">
-      <div className="space-y-1.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+    <aside data-ai-ws={aiWorkspaceFlagAttr} className="app-sidebar w-64 border-r border-slate-800 flex flex-col justify-between shrink-0 self-stretch overflow-hidden select-none">
+      {/* 品牌区。2026-09-18：**从顶栏挪进侧栏**——设计稿是「侧栏通高、品牌嵌在侧栏顶部」，
+          顶栏横跨整宽的老结构对不上。侧栏现在是深色（见 index.css 的 .app-sidebar），
+          标识块用浅底深字，在深色面上才立得住。 */}
+      <div className="h-16 px-5 flex items-center gap-3 border-b border-slate-800 shrink-0">
+        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-900 font-black text-base shrink-0">
+          桐
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-sm tracking-tight text-white truncate">{zh ? '桐灼GEO' : 'TongZhuo GEO'}</span>
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 font-mono shrink-0">
+              {mode === 'geoflow' ? 'API v1' : 'v2.5'}
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 truncate">
+            {zh ? '生成式引擎优化工作台' : 'GEO Workspace'}
+          </p>
+        </div>
+      </div>
+
+      <div className="p-3 space-y-1.5 overflow-y-auto pr-1 flex-1 custom-scrollbar">
         {/* ① 总览 —— 单页，直接进入 */}
         <button
           type="button"
@@ -300,11 +319,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => toggle(group)}
                 aria-expanded={open}
                 className={`w-full flex items-center justify-between rounded-lg px-3 pb-1.5 pt-2.5 text-[12px] font-semibold tracking-[0.06em] transition-colors ${
-                  active ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-300'
+                  active ? 'text-slate-200' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <GroupIcon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-500' : 'text-slate-400'}`} />
+                  <GroupIcon className={`h-4 w-4 shrink-0 ${active ? 'text-slate-300' : 'text-slate-500'}`} />
                   <span className="truncate">{group.label}</span>
                 </div>
                 <ChevronDown

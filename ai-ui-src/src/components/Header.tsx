@@ -45,26 +45,9 @@ export const Header: React.FC<HeaderProps> = ({
     persistTheme(following);
   };
   return (
-    <header className="h-16 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
-      {/* Brand */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-base shadow-sm">
-            桐
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight text-white">桐灼GEO</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 font-mono">
-                {isApiMode ? 'API v1' : 'v2.5 Pro'}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 hidden sm:block">
-              {lang === 'zh' ? '生成式引擎优化工作台' : 'Generative Engine Optimization Workspace'}
-            </p>
-          </div>
-        </div>
-      </div>
+    <header className="h-16 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-end sticky top-0 z-30">
+      {/* 品牌区 2026-09-18 已挪进侧栏（设计稿是「侧栏通高、品牌在侧栏顶部」）。
+          这里只留动作，不再重复标识。 */}
 
       {/* Center Actions / Status */}
       <div className="flex items-center gap-2 sm:gap-3">

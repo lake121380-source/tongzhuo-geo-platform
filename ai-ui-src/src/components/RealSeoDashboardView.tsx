@@ -24,6 +24,12 @@ const text = (value: unknown, fallback = '—'): string => (value === null || va
  * 只回答一条因果链：**能不能被抓到 → 有没有被抓 → 有没有被引用 → 带来了什么**。
  * 不做传统 SEO 指标（关键词排名、搜索量、外链）——这些没有可核验的数据源。
  * 每一段都直接读真实接口，失败时保留错误原文，不留演示数据。
+ *
+ * 2026-09-19 版式对齐设计稿：**顶部四张 KPI 大卡 + 下方 2/3 与 1/3 分栏**。
+ * ⚠️ 只有版式照搬——设计稿那四张卡的数（累计引用 28,450 / 首推占比 41.2% /
+ * 权威置信度 94.8 / 召回率 99.1%）**全是编的**，真实系统里没有这些指标。
+ * 这里换成四个**真有的**：品牌提及率、自有引用份额、我方缺席的问题、AI 爬虫访问。
+ * 取不到就显示「不可计算」（例如没声明品牌实体时），**不用 0 或估算值冒充**。
  */
 export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang, apiClient, onNavigate, embedded = false }) => {
   const zh = lang === 'zh';
@@ -81,11 +87,16 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
   // 首屏取数期间（五个接口都还没回来）才整块占位；已有任一数据后刷新不再替换。
   const firstLoad = loading && !audit && !traffic && !radar && !competitor && !funnel;
 
-  const card = 'rounded-2xl bg-slate-900/80 p-5';
+  const card = 'rounded-xl border border-slate-800 bg-slate-900 p-5';
   const sectionTitle = 'flex items-center gap-2 text-section-title';
+  const subCard = 'rounded-lg bg-slate-800/40 px-4 py-3';
+
+  const mentionReady = mentionAvailability === 'available';
+  const ownShare = competitorSummary.own_citation_share_percent;
+  const shareReady = ownShare !== null && ownShare !== undefined;
 
   return (
-    <div className="space-y-8" id="seo-dashboard-container">
+    <div className="space-y-6" id="seo-dashboard-container">
       <div className={`flex flex-col gap-3 sm:flex-row sm:items-center ${embedded ? 'sm:justify-end' : 'sm:justify-between'}`}>
         <PageHeader
           embedded={embedded}
@@ -94,15 +105,21 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
           title={zh ? 'SEO 总览' : 'SEO Overview'}
           description={zh ? '一条链看全：能不能被 AI 抓到 → 有没有被抓 → 有没有被引用 → 带来了什么。数字只来自真实配置与日志。' : 'One chain: crawlable → crawled → cited → converted — persisted data only.'}
         />
-        <button
-          type="button"
-          onClick={() => setReloadKey((key) => key + 1)}
-          disabled={loading}
-          className="inline-flex h-9 items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          {zh ? '刷新' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-400">
+            <Bot className="h-3.5 w-3.5 text-slate-500" />
+            <span>{zh ? '近 30 天表现' : 'Last 30 days'}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            disabled={loading}
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            {zh ? '刷新' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {error && <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</div>}
@@ -111,65 +128,106 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
         <LoadingState lang={lang} variant="panel" label={zh ? '正在读取 SEO 诊断…' : 'Loading SEO diagnostics…'} />
       ) : (
         <>
-      {/* ① 可发现性 */}
-      <section className={card}>
-        <div className="flex items-center justify-between">
-          <h2 className={sectionTitle}><ShieldCheck className="h-4 w-4 text-emerald-400" />{zh ? '① 可发现性体检' : '① Discoverability audit'}</h2>
-          <button type="button" onClick={() => onNavigate('seo_foundation')} className="text-[12.5px] text-indigo-400 hover:underline">{zh ? '去改配置' : 'Edit config'}</button>
-        </div>
-        {findings.length === 0 ? (
-          <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />{zh ? '当前生效配置没有发现问题。' : 'No issues in the effective configuration.'}</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {findings.map((finding, index) => (
-              <li key={String(finding.key || index)} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[13px] text-amber-100">
-                <span className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-3.5 w-3.5" />{text(finding.title)}</span>
-                <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200/80">{text(finding.detail, '')}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-slate-950/40 px-4 py-3">
-            <div className="text-[12px] text-slate-400">llms.txt</div>
-            <div className={`mt-1 text-sm font-bold ${llms.enabled ? 'text-emerald-300' : 'text-amber-300'}`}>{llms.enabled ? (zh ? '已启用' : 'Enabled') : (zh ? '未启用' : 'Disabled')}</div>
-            <div className="text-[12px] text-slate-500">{zh ? '已发布文章 ' : 'Published '}{num(llms.published_article_count)}</div>
+      {/* ══ KPI 大卡行（设计稿版式；四项全部来自真实接口） ══════════════════ */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div className="text-xs text-slate-400">{zh ? '品牌提及率' : 'Mention rate'}</div>
+          <div className={`mt-1 text-2xl font-extrabold ${mentionReady ? 'text-white' : 'text-slate-500'}`}>
+            {mentionReady ? `${num(record(record(radarItems[0]).mentions).mention_rate_percent)}%` : (zh ? '不可计算' : 'Unavailable')}
           </div>
-          <div className="rounded-xl bg-slate-950/40 px-4 py-3">
-            <div className="text-[12px] text-slate-400">sitemap</div>
-            <div className={`mt-1 text-sm font-bold ${sitemap.enabled ? 'text-emerald-300' : 'text-amber-300'}`}>{sitemap.enabled ? (zh ? '已启用' : 'Enabled') : (zh ? '未启用' : 'Disabled')}</div>
-            <div className="text-[12px] text-slate-500">{zh ? '已发布文章 ' : 'Published '}{num(sitemap.published_article_count)}</div>
-          </div>
-          <div className="rounded-xl bg-slate-950/40 px-4 py-3">
-            <div className="text-[12px] text-slate-400">{zh ? 'AI 爬虫放行情况' : 'AI crawler access'}</div>
-            <div className={`mt-1 text-sm font-bold ${blockedBots.length > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
-              {blockedBots.length > 0 ? (zh ? `被挡 ${blockedBots.length} 个` : `${blockedBots.length} blocked`) : (zh ? '全部放行' : 'All allowed')}
-            </div>
-            <div className="text-[12px] text-slate-500">
-              {botPolicies.filter((p) => p.is_ai_crawler === true).map((p) => `${text(p.name)}:${text(p.action)}`).join(' · ') || '—'}
-            </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            {brand.configured === true
+              ? (zh ? `品牌：${text(brand.names && (brand.names as unknown[])[0])}` : `Brand: ${text(brand.names && (brand.names as unknown[])[0])}`)
+              : (zh ? '尚未声明品牌实体' : 'No brand declared')}
           </div>
         </div>
-      </section>
 
-      {/* ② 抓取到达 */}
-      <section className={card}>
-        <div className="flex items-center justify-between">
-          <h2 className={sectionTitle}><Bot className="h-4 w-4 text-indigo-400" />{zh ? '② AI 爬虫到达（近 30 天）' : '② AI crawler reach (30d)'}</h2>
-          <button type="button" onClick={() => onNavigate('analytics')} className="text-[12.5px] text-indigo-400 hover:underline">{zh ? '看流量明细' : 'Traffic detail'}</button>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div className="text-xs text-slate-400">{zh ? '自有引用份额' : 'Own citation share'}</div>
+          <div className={`mt-1 text-2xl font-extrabold ${shareReady ? 'text-white' : 'text-slate-500'}`}>
+            {shareReady ? `${num(ownShare)}%` : (zh ? '不可计算' : 'Unavailable')}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">{zh ? '竞品 ' : 'Competitors '}{num(competitorSummary.configured_competitor_count)}</div>
         </div>
-        {trafficSummary.has_data === true ? (
+
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div className="text-xs text-slate-400">{zh ? '我方缺席的问题' : 'Blind-spot queries'}</div>
+          <div className="mt-1 text-2xl font-extrabold text-white">{num(competitorSummary.blindspot_query_count)}</div>
+          <div className="mt-1 text-[11px] text-slate-500">{zh ? '已观测引用 ' : 'Citations '}{num(competitorSummary.citation_observation_count)}</div>
+        </div>
+
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+          <div className="text-xs text-slate-400">{zh ? 'AI 爬虫访问（近 30 天）' : 'AI bot visits (30d)'}</div>
+          <div className={`mt-1 text-2xl font-extrabold ${trafficSummary.has_data === true ? 'text-white' : 'text-slate-500'}`}>
+            {trafficSummary.has_data === true ? num(trafficKpis.ai_bot_pv) : (zh ? '不可计算' : 'Unavailable')}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            {trafficSummary.has_data === true ? (zh ? `总访问量 ${num(trafficKpis.pv)}` : `PV ${num(trafficKpis.pv)}`) : (zh ? '时间窗内没有访问日志' : 'No access logs')}
+          </div>
+        </div>
+      </div>
+
+      {/* ══ 2/3 + 1/3 分栏（设计稿版式） ═════════════════════════════════ */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* ① 可发现性体检 */}
+        <section className={`${card} lg:col-span-2`}>
+          <div className="flex items-center justify-between">
+            <h2 className={sectionTitle}><ShieldCheck className="h-4 w-4 text-emerald-400" />{zh ? '① 可发现性体检' : '① Discoverability audit'}</h2>
+            <button type="button" onClick={() => onNavigate('seo_foundation')} className="text-[12.5px] text-indigo-400 hover:underline">{zh ? '去改配置' : 'Edit config'}</button>
+          </div>
+          {findings.length === 0 ? (
+            <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-300"><CheckCircle2 className="h-3.5 w-3.5" />{zh ? '当前生效配置没有发现问题。' : 'No issues in the effective configuration.'}</p>
+          ) : (
+            <ul className="mt-3 space-y-2">
+              {findings.map((finding, index) => (
+                <li key={String(finding.key || index)} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[13px] text-amber-100">
+                  <span className="flex items-center gap-1.5 font-semibold"><AlertTriangle className="h-3.5 w-3.5" />{text(finding.title)}</span>
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-amber-200/80">{text(finding.detail, '')}</p>
+                </li>
+              ))}
+            </ul>
+          )}
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-slate-950/40 px-4 py-3"><div className="text-[12px] text-slate-400">{zh ? 'AI 爬虫访问' : 'AI bot visits'}</div><div className="mt-1 text-xl font-black text-white">{num(trafficKpis.ai_bot_pv)}</div></div>
-            <div className="rounded-xl bg-slate-950/40 px-4 py-3"><div className="text-[12px] text-slate-400">{zh ? '总访问量' : 'Total PV'}</div><div className="mt-1 text-xl font-black text-white">{num(trafficKpis.pv)}</div></div>
-            <div className="rounded-xl bg-slate-950/40 px-4 py-3"><div className="text-[12px] text-slate-400">{zh ? '独立 IP' : 'Unique IP'}</div><div className="mt-1 text-xl font-black text-white">{num(trafficKpis.unique_ip)}</div></div>
+            <div className={subCard}>
+              <div className="text-[12px] text-slate-400">llms.txt</div>
+              <div className={`mt-1 text-sm font-bold ${llms.enabled ? 'text-emerald-300' : 'text-amber-300'}`}>{llms.enabled ? (zh ? '已启用' : 'Enabled') : (zh ? '未启用' : 'Disabled')}</div>
+              <div className="text-[12px] text-slate-500">{zh ? '已发布文章 ' : 'Published '}{num(llms.published_article_count)}</div>
+            </div>
+            <div className={subCard}>
+              <div className="text-[12px] text-slate-400">sitemap</div>
+              <div className={`mt-1 text-sm font-bold ${sitemap.enabled ? 'text-emerald-300' : 'text-amber-300'}`}>{sitemap.enabled ? (zh ? '已启用' : 'Enabled') : (zh ? '未启用' : 'Disabled')}</div>
+              <div className="text-[12px] text-slate-500">{zh ? '已发布文章 ' : 'Published '}{num(sitemap.published_article_count)}</div>
+            </div>
+            <div className={subCard}>
+              <div className="text-[12px] text-slate-400">{zh ? 'AI 爬虫放行情况' : 'AI crawler access'}</div>
+              <div className={`mt-1 text-sm font-bold ${blockedBots.length > 0 ? 'text-rose-300' : 'text-emerald-300'}`}>
+                {blockedBots.length > 0 ? (zh ? `被挡 ${blockedBots.length} 个` : `${blockedBots.length} blocked`) : (zh ? '全部放行' : 'All allowed')}
+              </div>
+              <div className="text-[12px] text-slate-500">
+                {botPolicies.filter((p) => p.is_ai_crawler === true).map((p) => `${text(p.name)}:${text(p.action)}`).join(' · ') || '—'}
+              </div>
+            </div>
           </div>
-        ) : (
-          <p className="mt-3 text-[13px] text-slate-400">{zh ? '时间窗内没有访问日志，AI 爬虫到达情况不可计算。' : 'No access logs in this window; crawler reach is not computable.'}</p>
-        )}
-      </section>
+        </section>
 
-      {/* ③ 可见性（只汇总，深入看各自标签） */}
+        {/* ② 抓取到达 */}
+        <section className={card}>
+          <div className="flex items-center justify-between">
+            <h2 className={sectionTitle}><Bot className="h-4 w-4 text-indigo-400" />{zh ? '② AI 爬虫到达' : '② Crawler reach'}</h2>
+            <button type="button" onClick={() => onNavigate('analytics')} className="text-[12.5px] text-indigo-400 hover:underline">{zh ? '流量明细' : 'Traffic'}</button>
+          </div>
+          {trafficSummary.has_data === true ? (
+            <div className="mt-4 space-y-3">
+              <div className={subCard}><div className="text-[12px] text-slate-400">{zh ? '总访问量（近 30 天）' : 'Total PV (30d)'}</div><div className="mt-1 text-xl font-black text-white">{num(trafficKpis.pv)}</div></div>
+              <div className={subCard}><div className="text-[12px] text-slate-400">{zh ? '独立 IP' : 'Unique IP'}</div><div className="mt-1 text-xl font-black text-white">{num(trafficKpis.unique_ip)}</div></div>
+            </div>
+          ) : (
+            <p className="mt-3 text-[13px] text-slate-400">{zh ? '时间窗内没有访问日志，AI 爬虫到达情况不可计算。' : 'No access logs in this window; crawler reach is not computable.'}</p>
+          )}
+        </section>
+      </div>
+
+      {/* ══ ③ 被引用与提及 ═══════════════════════════════════════════════ */}
       <section className={card}>
         <div className="flex items-center justify-between">
           <h2 className={sectionTitle}><Link2 className="h-4 w-4 text-indigo-400" />{zh ? '③ 被引用与提及' : '③ Citations & mentions'}</h2>
@@ -179,25 +237,23 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
           </div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-slate-950/40 px-4 py-3">
+          <div className={subCard}>
             <div className="text-[12px] text-slate-400">{zh ? '品牌提及率' : 'Mention rate'}</div>
-            <div className="mt-1 text-xl font-black text-white">
-              {mentionAvailability === 'available' ? `${num(record(record(radarItems[0]).mentions).mention_rate_percent)}%` : (zh ? '不可计算' : 'Unavailable')}
+            <div className={`mt-1 text-xl font-black ${mentionReady ? 'text-white' : 'text-slate-500'}`}>
+              {mentionReady ? `${num(record(record(radarItems[0]).mentions).mention_rate_percent)}%` : (zh ? '不可计算' : 'Unavailable')}
             </div>
             <div className="text-[12px] text-slate-500">
               {brand.configured === true ? (zh ? `品牌：${text(brand.names && (brand.names as unknown[])[0])}` : `Brand: ${text(brand.names && (brand.names as unknown[])[0])}`) : (zh ? '尚未声明品牌' : 'No brand declared')}
             </div>
           </div>
-          <div className="rounded-xl bg-slate-950/40 px-4 py-3">
+          <div className={subCard}>
             <div className="text-[12px] text-slate-400">{zh ? '自有引用份额' : 'Own citation share'}</div>
-            <div className="mt-1 text-xl font-black text-white">
-              {competitorSummary.own_citation_share_percent === null || competitorSummary.own_citation_share_percent === undefined
-                ? (zh ? '不可计算' : 'Unavailable')
-                : `${num(competitorSummary.own_citation_share_percent)}%`}
+            <div className={`mt-1 text-xl font-black ${shareReady ? 'text-white' : 'text-slate-500'}`}>
+              {shareReady ? `${num(ownShare)}%` : (zh ? '不可计算' : 'Unavailable')}
             </div>
             <div className="text-[12px] text-slate-500">{zh ? '竞品 ' : 'Competitors '}{num(competitorSummary.configured_competitor_count)}</div>
           </div>
-          <div className="rounded-xl bg-slate-950/40 px-4 py-3">
+          <div className={subCard}>
             <div className="text-[12px] text-slate-400">{zh ? '我方缺席的问题' : 'Blind-spot queries'}</div>
             <div className="mt-1 text-xl font-black text-white">{num(competitorSummary.blindspot_query_count)}</div>
             <div className="text-[12px] text-slate-500">{zh ? '已观测引用 ' : 'Citations '}{num(competitorSummary.citation_observation_count)}</div>
@@ -205,7 +261,7 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
         </div>
       </section>
 
-      {/* ④ 结果 */}
+      {/* ══ ④ 结果 ═══════════════════════════════════════════════════════ */}
       <section className={card}>
         <div className="flex items-center justify-between">
           <h2 className={sectionTitle}><TrendingUp className="h-4 w-4 text-emerald-400" />{zh ? '④ AI 引荐带来的结果' : '④ What referrals produced'}</h2>
@@ -216,7 +272,7 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
         ) : (
           <div className="mt-4 grid gap-3 sm:grid-cols-4">
             {funnelStages.map((stage, index) => (
-              <div key={String(stage.key || index)} className="rounded-xl bg-slate-950/40 px-4 py-3">
+              <div key={String(stage.key || index)} className={subCard}>
                 <div className="text-[12px] text-slate-400">{text(stage.label, '')}</div>
                 <div className="mt-1 text-xl font-black text-white">{num(stage.count)}</div>
               </div>

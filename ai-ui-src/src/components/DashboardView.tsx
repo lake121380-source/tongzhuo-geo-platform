@@ -12,7 +12,6 @@ import { ApiRecord } from '../api/geoflowClient';
 import { Article, Task } from '../types';
 import { GettingStartedPanel, GettingStartedStep } from './GettingStartedPanel';
 import { Skeleton, SkeletonRows } from './Skeleton';
-import { PageHeader } from './PageHeader';
 
 /**
  * 按点号路径从后端投影里取值（`kpis.articles`、`traffic.kpis.pv`）。
@@ -62,13 +61,14 @@ interface DashboardViewProps {
 }
 
 /**
- * 工作台（2026-09-13 视觉整改第二轮重排）。
+ * 工作台。
  *
- * 版式顺序固定为：**页头 → 今天要做什么 → 核心表现 → 最近变化**。
- * 第一屏回答「我现在该干什么」（待办），第二屏回答「做得怎么样」（指标），
- * 最后才是「最近发生了什么」（列表）。技术指标（模型数/切片数/Worker）不上这一页。
+ * 2026-09-18 版式重排（对齐外部设计稿）：**深色首屏横幅 → 核心表现 → 待办清单 + 生成任务
+ * 并列 → 最近内容**。与旧版的差别只在版式——横幅把「今天有多少事等你」提到第一眼，
+ * 待办从四张卡改成一份清单（同一批数据，一屏能扫完，也更符合「先处理今天要做的」）。
  *
  * 取值原则不变：**取不到就显示「暂无数据」，绝不用 0 或估算值冒充**。
+ * `data-todo` 保留：冒烟测试靠它断言「待审磁贴能跳到文章页」。
  */
 export const DashboardView: React.FC<DashboardViewProps> = ({
   articles,
@@ -115,80 +115,71 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const formatMetric = (value: number | null, suffix = '') =>
     value === null ? (zh ? '暂无数据' : 'No data') : `${value}${suffix}`;
 
-  const toneClass: Record<string, string> = {
+  const toneText: Record<string, string> = {
     amber: 'text-amber-600',
     indigo: 'text-indigo-600',
     rose: 'text-rose-600',
   };
+  const toneDot: Record<string, string> = {
+    amber: 'bg-amber-500',
+    indigo: 'bg-indigo-500',
+    rose: 'bg-rose-500',
+  };
+
+  const today = new Date();
+  const todayLabel = zh
+    ? `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日 · 星期${'日一二三四五六'[today.getDay()]}`
+    : today.toISOString().slice(0, 10);
 
   return (
-    <div className="space-y-8">
-      <PageHeader
-        icon={LayoutDashboard}
-        title={zh ? '工作台' : 'Workspace'}
-        description={zh
-          ? '你的 GEO 全局状态：先处理今天要做的，再看内容和 AI 侧的表现。'
-          : 'Your GEO at a glance: what needs action today, then content and AI performance.'}
-        actions={onGenerate && (
+    <div className="space-y-6">
+      {/* ══ 首屏横幅（深色） ══════════════════════════════════════════════
+          把「今天有多少事等你」提到第一眼。深色面的文字色由 .app-dark-surface
+          作用域里的反相刻度决定（见 index.css），这里正常写 text-slate-400 即可。 */}
+      <div className="app-dark-surface flex flex-wrap items-center justify-between gap-5 rounded-xl px-6 py-5">
+        <div className="min-w-0">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded bg-slate-800 px-2 py-0.5 text-[11px] font-medium text-indigo-300">
+              {zh ? '今日看板' : 'Today'}
+            </span>
+            <span className="text-[11px] tabular-nums text-slate-400">{todayLabel}</span>
+          </div>
+          {loading ? (
+            <div className="py-1"><Skeleton className="h-6 w-64" label={zh ? '正在读取' : 'Loading'} /></div>
+          ) : (
+            <h1 className="text-xl font-bold text-white">
+              {reviewCount > 0
+                ? (zh
+                  ? <>今天有 <span className="text-amber-400">{reviewCount} 篇</span>文章等待审核发布</>
+                  : <>{reviewCount} article(s) waiting for review</>)
+                : (zh ? '今天没有待审文章' : 'Nothing to review today')}
+            </h1>
+          )}
+          <p className="mt-1.5 max-w-2xl text-xs text-slate-400">
+            {loading
+              ? (zh ? '正在读取待办…' : 'Loading…')
+              : todoItems.length > 0
+                ? todoItems.map((i) => `${i.count} ${i.label}`).join(' · ')
+                : (zh ? '没有待处理事项——没有待审文章、没有暂停的任务、没有待跟进线索。' : 'Nothing needs your attention right now.')}
+          </p>
+        </div>
+        {onGenerate && (
           <button
             type="button"
             onClick={onGenerate}
-            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-[13px] font-bold text-white shadow-sm transition hover:bg-indigo-500"
+            className="flex shrink-0 items-center gap-2 rounded-lg bg-white px-4 py-2.5 text-xs font-semibold text-slate-900 transition hover:bg-slate-100"
           >
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="h-3.5 w-3.5" />
             {zh ? 'AI 生成文章' : 'Generate with AI'}
           </button>
         )}
-      />
+      </div>
 
-      {/* 「开始使用」清单：还没配齐时占在最前面，配齐了它自己消失。
+      {/* 「开始使用」清单：还没配齐时出现，配齐了它自己消失。
           加载中不渲染：此刻「未配置」还没被后端确认，显示出来就是假状态。 */}
       {!loading && <GettingStartedPanel steps={gettingStarted} lang={lang} />}
 
-      {/* ① 今天要做什么 —— 第一屏的主角（原来最显眼的是两张 KPI 大卡，而用户真正要做的事藏在下面） */}
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-section-title">{zh ? '今天要做什么' : 'To do today'}</h2>
-          {!loading && todoItems.length === 0 && (
-            <span className="text-caption">{zh ? '没有待办，一切正常' : 'Nothing pending'}</span>
-          )}
-        </div>
-        {loading ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="rounded-2xl bg-slate-900/80 p-5"><SkeletonRows rows={2} /></div>
-            ))}
-          </div>
-        ) : todoItems.length === 0 ? (
-          <div className="flex items-center gap-3 rounded-2xl bg-slate-900/80 px-5 py-4">
-            <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-500" />
-            <span className="text-body">{zh ? '没有待处理事项——没有待审文章、没有暂停的任务、没有待跟进线索。' : 'Nothing needs your attention right now.'}</span>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {todoItems.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                data-todo={item.key}
-                onClick={() => onNavigate(item.tab)}
-                className="group rounded-2xl bg-slate-900/80 p-5 text-left transition hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                <div className={`text-[34px] font-black leading-none tabular-nums ${toneClass[item.tone] ?? 'text-white'}`}>
-                  {item.count}
-                </div>
-                <div className="mt-2 text-[13.5px] font-semibold text-white">{item.label}</div>
-                <div className="mt-1 flex items-center gap-1 text-caption">
-                  {item.hint}
-                  <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ② 核心表现 */}
+      {/* ══ 核心表现 ═════════════════════════════════════════════════════ */}
       <section className="space-y-3">
         <h2 className="text-section-title">{zh ? 'GEO 核心表现' : 'GEO performance'}</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -198,7 +189,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             { label: zh ? '内容资产（已发布/总数）' : 'Published / total', value: null, text: `${publishedCount} / ${totalArticles ?? articles.length}` },
             { label: zh ? '网站访问（近 30 天）' : 'Site views (30d)', value: pv },
           ].map((tile) => (
-            <div key={tile.label} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md">
+            <div key={tile.label} className="rounded-xl border border-slate-800 bg-slate-900 p-5 transition hover:border-slate-700">
               <div className="text-caption">{tile.label}</div>
               {/* 加载中画骨架，不画 0 / 暂无数据：那会把「还没读到」说成「确认是零」。 */}
               {loading ? (
@@ -213,7 +204,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {!loading && !aiVisibilityConfigured && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-amber-500/8 px-5 py-3.5">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-amber-500/25 bg-amber-500/8 px-5 py-3.5">
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
             <span className="text-[13px] text-slate-200">
               {zh
@@ -231,50 +222,53 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         )}
       </section>
 
-      {/* ③ 最近变化 */}
+      {/* ══ 待办清单 + 生成任务 ═══════════════════════════════════════════
+          待办从「四张卡」改成「一份清单」：同一批数据，一屏能扫完。
+          没有待办时给一条明确的「一切正常」，而不是空着让人猜。 */}
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl bg-slate-900/80 p-6 lg:col-span-2">
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-section-title flex items-center gap-2">
-              <FileText className="h-[18px] w-[18px] text-slate-400" />
-              {zh ? '最近内容' : 'Recent content'}
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              {zh ? '今日待办' : 'To do today'}
             </h2>
-            <button
-              type="button"
-              onClick={() => onNavigate('articles')}
-              className="flex items-center gap-1 text-[13px] font-semibold text-indigo-600 hover:underline"
-            >
-              {zh ? '查看全部' : 'View all'}
-              <ArrowUpRight className="h-3.5 w-3.5" />
-            </button>
+            {!loading && (
+              <span className="text-caption">
+                {todoItems.length > 0 ? (zh ? `共 ${todoItems.length} 项` : `${todoItems.length} item(s)`) : (zh ? '没有待办，一切正常' : 'Nothing pending')}
+              </span>
+            )}
           </div>
 
           {loading ? (
-            <div className="py-4"><SkeletonRows rows={4} /></div>
-          ) : recentArticles.length === 0 ? (
-            <div className="py-10 text-center text-caption">
-              {zh ? '还没有文章——点右上角「AI 生成文章」写第一篇。' : 'No articles yet.'}
+            <div className="py-4"><SkeletonRows rows={3} /></div>
+          ) : todoItems.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-xl bg-slate-800/60 px-5 py-4">
+              <ShieldCheck className="h-5 w-5 shrink-0 text-emerald-500" />
+              <span className="text-body">
+                {zh ? '没有待处理事项——没有待审文章、没有暂停的任务、没有待跟进线索。' : 'Nothing needs your attention right now.'}
+              </span>
             </div>
           ) : (
-            <ul className="divide-y divide-slate-800/70">
-              {recentArticles.map((art) => (
-                <li key={art.id}>
+            <ul className="space-y-2">
+              {todoItems.map((item) => (
+                <li key={item.key}>
                   <button
                     type="button"
-                    onClick={() => onSelectArticle(art)}
-                    className="flex w-full items-center justify-between gap-4 py-2.5 text-left transition hover:text-indigo-600"
+                    data-todo={item.key}
+                    onClick={() => onNavigate(item.tab)}
+                    className="group flex w-full items-center gap-4 rounded-xl border border-slate-800 px-4 py-3 text-left transition hover:border-slate-700 hover:bg-slate-800/40"
                   >
-                    <span className="truncate text-[13.5px] font-medium text-slate-200">{art.title}</span>
-                    <span className="flex shrink-0 items-center gap-3">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
-                          art.status === 'published' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
-                        }`}
-                      >
-                        {art.status === 'published' ? (zh ? '已发布' : 'Published') : zh ? '待审核' : 'In review'}
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${toneDot[item.tone] ?? 'bg-slate-500'}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2">
+                        <span className={`text-lg font-black leading-none tabular-nums ${toneText[item.tone] ?? 'text-white'}`}>
+                          {item.count}
+                        </span>
+                        <span className="truncate text-[13.5px] font-semibold text-white">{item.label}</span>
                       </span>
-                      <span className="text-[11.5px] tabular-nums text-slate-500">{art.createdAt}</span>
+                      <span className="mt-0.5 block text-caption">{item.hint}</span>
                     </span>
+                    <ArrowUpRight className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:text-indigo-600" />
                   </button>
                 </li>
               ))}
@@ -282,7 +276,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
 
-        <div className="rounded-2xl bg-slate-900/80 p-6">
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-section-title flex items-center gap-2">
               <Activity className="h-[18px] w-[18px] text-slate-400" />
@@ -324,6 +318,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           )}
         </div>
+      </section>
+
+      {/* ══ 最近内容 ═════════════════════════════════════════════════════ */}
+      <section className="rounded-xl border border-slate-800 bg-slate-900 p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-section-title flex items-center gap-2">
+            <FileText className="h-[18px] w-[18px] text-slate-400" />
+            {zh ? '最近内容' : 'Recent content'}
+          </h2>
+          <button
+            type="button"
+            onClick={() => onNavigate('articles')}
+            className="flex items-center gap-1 text-[13px] font-semibold text-indigo-600 hover:underline"
+          >
+            {zh ? '查看全部' : 'View all'}
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="py-4"><SkeletonRows rows={4} /></div>
+        ) : recentArticles.length === 0 ? (
+          <div className="py-10 text-center text-caption">
+            {zh ? '还没有文章——点上方「AI 生成文章」写第一篇。' : 'No articles yet.'}
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-800/70">
+            {recentArticles.map((art) => (
+              <li key={art.id}>
+                <button
+                  type="button"
+                  onClick={() => onSelectArticle(art)}
+                  className="flex w-full items-center justify-between gap-4 py-2.5 text-left transition hover:text-indigo-600"
+                >
+                  <span className="truncate text-[13.5px] font-medium text-slate-200">{art.title}</span>
+                  <span className="flex shrink-0 items-center gap-3">
+                    <span
+                      className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
+                        art.status === 'published' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
+                      }`}
+                    >
+                      {art.status === 'published' ? (zh ? '已发布' : 'Published') : zh ? '待审核' : 'In review'}
+                    </span>
+                    <span className="text-[11.5px] tabular-nums text-slate-500">{art.createdAt}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

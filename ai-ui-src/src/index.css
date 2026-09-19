@@ -66,7 +66,7 @@
   --text-primary: #0f1012;         /* 一级标题：白底 19.6:1 */
   --text-secondary: #343840;       /* 正文：白底 10.8:1 */
   /* 辅助文字。这一档是全站用量最大的一档（`text-slate-400/500` 共 700 余处），
-     所以换色必须重算：**#5a606c 在新页面底 #f4f4f0 上是 5.72:1、白底 6.31:1**，
+     所以换色必须重算：**#5a606c 在页面底 #f2f2f0 上是 5.64:1、白卡 6.32:1**，
      仍稳稳过 AA 4.5:1（旧值 #6e6a62 在旧暖底上是 4.75:1，余量更小）。
      换这一档前先重算——差一点就会让每一页的对比度审计挂红。 */
   --text-tertiary: #5a606c;
@@ -464,9 +464,29 @@
 }
 
 @layer components {
-  /* 侧栏表面：亮色下比内容区浅、比卡片深；深色下比卡片更深（层次一致，方向相反）。 */
-  .app-sidebar {
-    background-color: var(--bg-sidebar);
+  /* 侧栏表面。
+     2026-09-18：**改成深色**，与外部设计稿一致（哥哥要求「别的都按这个走」）。
+     本项目的 slate 刻度是给浅底重排过的，深色面直接套会整片看不见——
+     所以这里给侧栏一套**反相刻度**作用域：组件里继续写 `text-slate-400` /
+      `hover:bg-slate-800/70` 这类类名，方向由作用域决定，不用逐个改类名。
+     ⚠️ 深色面的高亮**不能用主色**：主色是墨黑，与深色侧栏同色，选中态会消失。
+     深色侧栏的选中态走「比底色亮一档」的标准做法（见 Sidebar 的 ACTIVE_NAV_CLASS）。 */
+  /* 深色面作用域：侧栏 + 工作台首屏横幅（2026-09-18 与外部设计稿一致）。 */
+  .app-sidebar,
+  .app-dark-surface {
+    background-color: #101214;
+    --color-white: #ffffff;
+    --color-slate-50: #f6f7f8;
+    --color-slate-100: #eceef0;
+    --color-slate-200: #dfe2e5;
+    --color-slate-300: #c9ced4;
+    --color-slate-400: #a6acb4;
+    --color-slate-500: #878e97;
+    --color-slate-600: #6b727b;
+    --color-slate-700: #3a4048;
+    --color-slate-800: #262b31;
+    --color-slate-900: #1a1e23;
+    --color-slate-950: #101214;
   }
 
   .control {

@@ -2012,10 +2012,32 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex font-sans">
       {/* 窄屏守卫：<1024px 时盖一层「请用桌面浏览器」的受控提示（见组件注释）。 */}
       <DesktopOnlyNotice />
-      {/* Top Header */}
+
+      {/* 2026-09-18 布局重排：设计稿是「侧栏通高、品牌嵌在侧栏顶部、顶栏只盖内容区」，
+          原来这里是「顶栏横跨整宽 + 下面一行放侧栏与内容」——品牌会留在顶栏左边的白条上，
+          而侧栏顶部空着。现在把侧栏提到最外层、顶栏下移到右侧列。
+          收尾结构（main → div → div）没动，只改了开头的嵌套顺序。 */}
+      <Sidebar
+        currentTab={currentTab}
+        onSelectTab={navigateToTab}
+        lang={lang}
+        mode="geoflow"
+        disabledTabs={apiEnabled ? API_DISABLED_TABS : []}
+        aiWorkspaceEnabled={aiWorkspaceEnabled}
+        aiWorkspaceProbeFailed={aiWorkspaceProbeFailed}
+        badgeCounts={{
+          articles: articles.filter((a) => a.status === 'review').length,
+          tasks: tasks.filter((t) => t.status === 'running').length,
+          channels: channels.length,
+        }}
+        badgesLoading={apiEnabled && bootDataLoading}
+      />
+
+      {/* 右侧列：顶栏 + 内容 */}
+      <div className="flex-1 flex flex-col overflow-hidden">
       <Header
         lang={lang}
         setLang={setLang}
@@ -2027,25 +2049,6 @@ export default function App() {
         onQuickGenerate={apiEnabled && hasScope(apiSession, 'catalog:read') && hasScope(apiSession, 'tasks:write') ? openAiGenerate : undefined}
         onOpenPreview={() => navigateToTab('preview')}
       />
-
-      {/* Main Body */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar
-          currentTab={currentTab}
-          onSelectTab={navigateToTab}
-          lang={lang}
-          mode="geoflow"
-          disabledTabs={apiEnabled ? API_DISABLED_TABS : []}
-          aiWorkspaceEnabled={aiWorkspaceEnabled}
-          aiWorkspaceProbeFailed={aiWorkspaceProbeFailed}
-          badgeCounts={{
-            articles: articles.filter((a) => a.status === 'review').length,
-            tasks: tasks.filter((t) => t.status === 'running').length,
-            channels: channels.length,
-          }}
-          badgesLoading={apiEnabled && bootDataLoading}
-        />
 
         {/* Content View Container */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-slate-950/90">

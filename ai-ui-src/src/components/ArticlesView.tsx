@@ -326,8 +326,14 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
       {/* 筛选与搜索：状态用带计数的小胶囊，搜索/分类靠右。
           这一段**不再包卡片**——它属于页头下方的「控制条」，再套一层卡片就是典型的「卡片堆砌」。
           点任意状态页签会**退出回收站视图**（原来点「全部」仍停在回收站，是审计里的 P0 陷阱）。 */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-1 overflow-x-auto rounded-xl bg-slate-800/50 p-1.5">
+      {/* 2026-09-19 版式对齐设计稿：**页签 + 搜索 + 批量条 + 表格收进同一张卡片**，
+          页签改用「浅灰容器 + 白色胶囊」的样式（原先是散装的一排深色胶囊，浮在表格上方）。
+          容器底用 `bg-slate-800`（本项目亮色下＝浅填充），选中胶囊用 `bg-slate-900`
+          （＝卡片白）配 `text-white`（＝主文字深色）——**不能写 `bg-white`**，
+          亮色主题把 `--color-white` 重映射成了主文字色，会得到一块黑胶囊。 */}
+      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+      <div className="flex flex-col gap-3 border-b border-slate-800 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-1 overflow-x-auto rounded-lg bg-slate-800 p-1">
           {([
             { key: 'all' as const, label: lang === 'zh' ? '全部' : 'All', count: articles.length },
             { key: 'review' as const, label: lang === 'zh' ? '待审核' : 'Review', count: articles.filter((a) => a.status === 'review').length },
@@ -342,7 +348,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                 /* 悬停色用 `text-white`（本项目的"主文字"令牌，亮色下会解析成深色），
                    **不能用 `text-slate-900`**：亮色主题把 `--color-slate-900` 重映射成了
                    卡片面色（白），悬停会得到白字白底、文字直接消失。 */
-                !showTrash && selectedStatus === tab.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                !showTrash && selectedStatus === tab.key ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-white'
               }`}
             >
               {tab.label} ({countLabel(tab.count)})
@@ -352,7 +358,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
             <button
               type="button"
               onClick={() => { setShowTrash(true); setSelectedIds(new Set()); }}
-              className={`whitespace-nowrap rounded-lg px-3.5 py-2 text-[13px] font-semibold transition ${showTrash ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+              className={`whitespace-nowrap rounded-md px-3.5 py-2 text-[13px] font-semibold transition ${showTrash ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
             >
               {lang === 'zh' ? '回收站' : 'Trash'} ({countLabel(trashedArticles.length)})
             </button>
@@ -455,8 +461,8 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
         </div>
       )}
 
-      {/* Articles Table */}
-      <div className="overflow-hidden rounded-2xl bg-slate-900/80">
+      {/* Articles Table（已在上面的卡片内，不再自套一层卡片） */}
+      <div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-slate-300">
             <thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400">
@@ -604,6 +610,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
             </tbody>
           </table>
         </div>
+      </div>
       </div>
 
       {/* Distribute Modal */}

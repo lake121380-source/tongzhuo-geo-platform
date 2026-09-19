@@ -551,28 +551,38 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
         </div>
       </details>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-        {MATERIAL_TYPES.map((type) => {
-          const Icon = labels[type].icon;
-          return (
-            <button
-              type="button"
-              key={type}
-              onClick={() => setActiveType(type)}
-              className={`rounded-2xl p-4 text-left transition ${activeType === type ? 'bg-indigo-500/10 ring-1 ring-indigo-500/60' : 'bg-slate-900/80 hover:bg-slate-800/60'}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <Icon className={`h-4 w-4 ${activeType === type ? 'text-indigo-400' : 'text-slate-400'}`} />
-                <span className="text-lg font-bold tabular-nums text-white">{summaryCount(type)}</span>
-              </div>
-              <div className="mt-2 truncate text-caption">{labels[type][lang]}</div>
-            </button>
-          );
-        })}
-      </div>
+      {/* 2026-09-19 版式对齐设计稿：**横排的类型格改成卡片内的左栏「知识目录」树**，
+          目录树与右侧内容区共处一张卡（原来是「横排 6 格 + 两张独立卡」三块并列）。
+          窄屏下目录树退化成横向可滑的一排，不占掉首屏。 */}
+      <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+        <div className="flex flex-col xl:flex-row">
+          <div className="shrink-0 border-b border-slate-800 p-3 xl:w-56 xl:border-b-0 xl:border-r">
+            <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              {lang === 'zh' ? '知识目录' : 'Catalog'}
+            </div>
+            <div className="flex gap-1 overflow-x-auto xl:flex-col xl:overflow-visible">
+              {MATERIAL_TYPES.map((type) => {
+                const Icon = labels[type].icon;
+                const active = activeType === type;
+                return (
+                  <button
+                    type="button"
+                    key={type}
+                    onClick={() => setActiveType(type)}
+                    className={`flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-[13px] font-medium transition xl:w-full ${active ? 'bg-slate-800 text-white' : 'text-slate-400 hover:bg-slate-800/60 hover:text-white'}`}
+                  >
+                    <Icon className={`h-4 w-4 shrink-0 ${active ? 'text-indigo-400' : 'text-slate-500'}`} />
+                    <span className="truncate">{labels[type][lang]}</span>
+                    <span className="ml-auto text-[11px] tabular-nums text-slate-500">{summaryCount(type)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
+          <div className="min-w-0 flex-1 p-5">
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <section className="min-h-[420px] rounded-2xl bg-slate-900/80 p-5 xl:col-span-5">
+        <section className="min-h-[420px] rounded-xl bg-slate-800/40 p-5 xl:col-span-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <ActiveIcon className="h-4 w-4 shrink-0 text-indigo-400" />
@@ -720,6 +730,9 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             {!activeRecord && !formOpen && <EmptyState icon={FolderKanban} title={lang === 'zh' ? '暂无可查看的素材库' : 'No library selected'} description={lang === 'zh' ? '先在左侧选一个素材库；还没有的话，点右上角新建。' : 'Pick a library on the left, or create one first.'} />}
           </div>
         </section>
+      </div>
+          </div>
+        </div>
       </div>
 
       {importOpen && activeRecord && (activeType === 'keyword-libraries' || activeType === 'title-libraries') && (
