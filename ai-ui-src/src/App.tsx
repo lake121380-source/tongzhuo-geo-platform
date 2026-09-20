@@ -330,12 +330,16 @@ export default function App() {
   useEffect(() => {
     if (currentTab !== 'distribution' || !apiSession) return;
     if (!hasScope(apiSession, 'distribution:read') || apiSession.admin.role !== 'super_admin') return;
+    // 目录已明确告知 Hosted Site 关闭时不请求：后端路由按设计返回 404，
+    // 而浏览器会把这条 HTTP 404 记进控制台（catch 拦不住），每次进分发页都留一条噪音。
+    // 目录尚未返回（features 为 undefined）时保持原行为，不改变已启用该功能的实例。
+    if (apiCatalog?.features?.hosted_sites === false) return;
     let cancelled = false;
     void apiClient.listHostedSites({ page: 1, per_page: 100 })
       .then((page) => { if (!cancelled) setHostedSites(page.items || []); })
       .catch(() => { /* 开关关掉时是 404，属预期；其它失败也只在分发页表现为空列表。 */ });
     return () => { cancelled = true; };
-  }, [apiClient, apiSession, currentTab]);
+  }, [apiClient, apiSession, currentTab, apiCatalog]);
 
   useEffect(() => {
     if (!apiSession || !apiClient.authenticated) {
@@ -2257,7 +2261,7 @@ export default function App() {
                 canWrite={hasScope(apiSession, 'distribution:write')}
                 canManageSecrets={(hasScope(apiSession, 'distribution:write') && apiSession?.admin.role === 'super_admin')}
                 canManageDestructive={(hasScope(apiSession, 'distribution:write') && apiSession?.admin.role === 'super_admin')}
-                canManageHostedSites={(hasScope(apiSession, 'distribution:write') && apiSession?.admin.role === 'super_admin')}
+                canManageHostedSites={(hasScope(apiSession, 'distribution:write') && apiSession?.admin.role === 'super_admin' && apiCatalog?.features?.hosted_sites !== false)}
                 lang={lang}
                 apiMode={apiEnabled}
               />

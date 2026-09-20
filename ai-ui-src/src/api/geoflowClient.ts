@@ -74,6 +74,12 @@ export interface CatalogResponse {
   knowledge_bases: Array<Record<string, unknown>>;
   authors: Array<Record<string, unknown>>;
   categories: Array<Record<string, unknown>>;
+  /** 特性开关，随目录一起下发。旧后端不带这个键，所以是可选——
+   *  前端只在**明确为 false** 时才改变行为（避免前后端版本不同步时误伤）。 */
+  features?: {
+    hosted_sites?: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export interface PaginatedResponse<T> {

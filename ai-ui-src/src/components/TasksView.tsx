@@ -286,7 +286,14 @@ export const TasksView: React.FC<TasksViewProps> = ({
     setTitleLibraryId(apiMode && apiCatalog?.titleLibraries[0]
       ? String(apiCatalog.titleLibraries[0].id)
       : '');
-    setPromptId(apiMode && apiCatalog?.prompts[0] ? String(apiCatalog.prompts[0].id) : '');
+    // 中文界面下优先挑带中日韩字符的提示词，避免默认选中英文模板、生成出英文正文
+    // （与「AI 生成文章」弹窗 AiGenerateModal 同口径；prompts 列表按名字排序，英文排前面）
+    const preferredPrompt = apiMode && apiCatalog?.prompts?.length
+      ? (lang === 'zh'
+        ? apiCatalog.prompts.find((prompt) => /[一-鿿]/.test(String(prompt.name))) ?? apiCatalog.prompts[0]
+        : apiCatalog.prompts[0])
+      : null;
+    setPromptId(preferredPrompt ? String(preferredPrompt.id) : '');
     const chatModel = apiCatalog?.models.find((model) => !model.type || model.type === 'chat');
     setAiModelId(apiMode && chatModel ? String(chatModel.id) : '');
     setCategoryId('');

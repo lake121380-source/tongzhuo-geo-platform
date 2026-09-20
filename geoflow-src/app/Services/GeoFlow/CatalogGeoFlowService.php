@@ -103,6 +103,11 @@ class CatalogGeoFlowService
             'knowledge_bases' => $knowledgeBases,
             'authors' => $authors,
             'categories' => $categories,
+            // 功能开关随目录一起下发：Hosted Site 关闭时它的路由按设计返回 404，
+            // 前端若照常请求，只会在控制台留下一条无意义的 404（页面本身没问题）。
+            'features' => [
+                'hosted_sites' => (bool) config('geoflow.hosted_sites.enabled', false),
+            ],
         ];
     }
 

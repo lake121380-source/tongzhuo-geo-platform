@@ -95,6 +95,9 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
       ? undefined
       : activeChunks.length;
   const canRestoreActiveKnowledgeBase = Boolean(assetDetails?.item?.is_system_managed);
+  /** 知识媒体资产是给系统知识库挂「后台功能帮助截图」用的（值要形如 /geo_admin?tab=xxx），
+   *  后端 SystemKnowledgeMediaManager 也只放行系统托管库——私有库展示上传表单只会白填一次。 */
+  const activeKbIsSystemManaged = Boolean(assetDetails?.item?.is_system_managed);
 
   const formatCount = (count: number | undefined): string => count === undefined ? '—' : String(count);
 
@@ -483,15 +486,22 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                         <button type="button" onClick={() => { setSelectedMediaId(Number(media.id)); setMediaForm((previous) => ({ ...previous, asset_key: String(media.asset_key || ''), section_key: String(media.section_key || ''), route_name: String(media.route_name || ''), title: String(media.title || ''), alt_text: String(media.alt_text || ''), caption: String(media.caption || ''), keywords: Array.isArray(media.keywords) ? media.keywords.join(', ') : String(media.keywords || '') })); }} className={`min-w-0 truncate text-left ${selectedMediaId === Number(media.id) ? 'text-indigo-300' : 'text-slate-400'}`}>{media.title || media.asset_key} · v{media.asset_version}</button>
                         {canWrite && <div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => void toggleMedia(Number(media.id), !Boolean(media.is_active))} disabled={assetBusy !== ''} className={`inline-flex items-center gap-1 rounded border px-2 py-1 ${media.is_active ? 'border-emerald-500/30 text-emerald-300' : 'border-slate-700 text-slate-500'}`}><Power className="h-3 w-3" />{media.is_active ? (lang === 'zh' ? '启用' : 'Active') : (lang === 'zh' ? '停用' : 'Inactive')}</button>{mediaFile && <button type="button" onClick={() => void replaceMedia(Number(media.id))} disabled={assetBusy !== ''} className="rounded-lg border border-indigo-500/30 px-2 py-1 text-[12px] font-semibold text-indigo-300 disabled:opacity-50">{assetBusy === `replace-${media.id}` ? '…' : (lang === 'zh' ? '替换' : 'Replace')}</button>}</div>}
                       </div>
-                    )) : <p className="text-[12px] text-slate-500">{lang === 'zh' ? '暂无媒体资产（系统知识媒体需 PNG/WebP 和受控入口）' : 'No media assets'}</p>}
+                    )) : <p className="text-[12px] text-slate-500">{lang === 'zh' ? '暂无媒体资产' : 'No media assets'}</p>}
                   </div>
-                  {canWrite && <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
+                  {canWrite && activeKbIsSystemManaged && <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
                     <input type="file" accept="image/png,image/webp" onChange={(event) => setMediaFile(event.target.files?.[0] || null)} className="block w-full text-[12px] text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-[12px] file:text-slate-300" />
                     <div className="grid grid-cols-2 gap-2">
                       {(['asset_key', 'section_key', 'route_name', 'title', 'alt_text', 'caption'] as const).map((field) => <input key={field} value={mediaForm[field]} onChange={(event) => setMediaForm((previous) => ({ ...previous, [field]: event.target.value }))} placeholder={field} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />)}
                     </div>
                     <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void uploadMedia()} disabled={!mediaFile || assetBusy !== ''} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">{assetBusy === 'media' ? (lang === 'zh' ? '上传中…' : 'Uploading…') : (lang === 'zh' ? '上传媒体' : 'Upload media')}</button>{selectedMediaId && <button type="button" onClick={() => void updateMediaMetadata()} disabled={assetBusy !== ''} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">{assetBusy === `update-media-${selectedMediaId}` ? '…' : (lang === 'zh' ? '保存元数据' : 'Save metadata')}</button>}</div>
                   </div>}
+                  {!activeKbIsSystemManaged && (
+                    <p className="mt-3 border-t border-slate-800 pt-3 text-[12px] text-slate-500">
+                      {lang === 'zh'
+                        ? '知识媒体资产用于给系统知识库挂后台功能帮助截图，仅系统托管知识库可维护。'
+                        : 'Knowledge media is reserved for system-managed libraries.'}
+                    </p>
+                  )}
                 </section>
               </div>
             )}

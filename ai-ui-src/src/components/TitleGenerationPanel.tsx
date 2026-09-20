@@ -210,7 +210,7 @@ const TitleGenerationPanel: React.FC<TitleGenerationPanelProps> = ({
             </button>
           )}
           <button type="button" onClick={() => setOpen((previous) => !previous)} className="text-[11px] text-indigo-300 hover:text-indigo-200">
-            {open ? (zh ? '收起' : 'Hide') : (zh ? '生成' : 'Generate')}
+            {open ? (zh ? '收起' : 'Hide') : (zh ? '配置' : 'Configure')}
           </button>
         </div>
       </div>
@@ -293,10 +293,18 @@ const TitleGenerationPanel: React.FC<TitleGenerationPanelProps> = ({
                 </label>
               </div>
 
+              {keywordCount === 0 && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-[11px] text-amber-200">
+                  {zh
+                    ? `「${libraryName}」里还没有关键词——先去「素材库 → 关键词库」添加，AI 才能按词生成标题。`
+                    : `"${libraryName}" has no keywords yet. Add some under Materials → Keyword library first.`}
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => void start()}
-                disabled={busy === 'start' || !canWrite || current?.active === true || draft.keyword_library_id === '' || draft.ai_model_id === ''}
+                disabled={busy === 'start' || !canWrite || current?.active === true || draft.keyword_library_id === '' || draft.ai_model_id === '' || keywordCount === 0}
                 className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
               >
                 {busy === 'start' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
