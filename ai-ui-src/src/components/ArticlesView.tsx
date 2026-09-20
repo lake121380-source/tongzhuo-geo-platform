@@ -24,7 +24,7 @@ import { ArticleReviewMode } from './ArticleReviewMode';
 import { StatusBadge, articleStatusSpec, qualityStatusSpec } from './StatusBadge';
 import { Skeleton, SkeletonRows } from './Skeleton';
 import { PageHeader } from './PageHeader';
-import { Button, EmptyState } from './ui';
+import { Button, EmptyState, useConfirm } from './ui';
 
 /**
  * 质检分的配色：**与通过线比**，不是拍脑袋定档。
@@ -134,6 +134,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showTrash, setShowTrash] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
+  const confirmDialog = useConfirm();
   const [batchError, setBatchError] = useState('');
   const [isReviewMode, setIsReviewMode] = useState(false);
 
@@ -201,9 +202,21 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   const runBatchAction = async (action: 'review' | 'reject' | 'publish' | 'trash' | 'retract') => {
     const ids = visibleIds.filter((id) => selectedIds.has(id));
     if (!onBatchAction || ids.length === 0) return;
-    if (action === 'trash' && !window.confirm(lang === 'zh' ? `确定将选中的 ${ids.length} 篇文章移入回收站吗？` : `Move ${ids.length} articles to trash?`)) return;
+    // 用 ConfirmDialog 而不是 window.confirm：原生 confirm 在部分内嵌浏览器里不渲染，
+    // 1ms 就返回 false，表现成「点了没反应」。
+    if (action === 'trash' && !(await confirmDialog({
+      title: lang === 'zh' ? `将选中的 ${ids.length} 篇文章移入回收站？` : `Move ${ids.length} articles to trash?`,
+      description: lang === 'zh' ? '移入回收站后仍可恢复。' : 'You can restore them from the trash.',
+      confirmLabel: lang === 'zh' ? '移入回收站' : 'Move to trash',
+      tone: 'danger',
+    }))) return;
     // 撤回会把已发布的文章从公开站点撤下来，先说清楚再动手。
-    if (action === 'retract' && !window.confirm(lang === 'zh' ? `确定把选中的 ${ids.length} 篇文章撤回为草稿吗？已发布的会从公开站点撤下。` : `Retract ${ids.length} articles to draft? Published ones will be removed from the public site.`)) return;
+    if (action === 'retract' && !(await confirmDialog({
+      title: lang === 'zh' ? `撤回选中的 ${ids.length} 篇文章？` : `Retract ${ids.length} articles?`,
+      description: lang === 'zh' ? '已发布的会从公开站点撤下，变成草稿。' : 'Published ones will be removed from the public site and become drafts.',
+      confirmLabel: lang === 'zh' ? '撤回为草稿' : 'Retract',
+      tone: 'danger',
+    }))) return;
     setBatchBusy(true);
     setBatchError('');
     try {
@@ -226,10 +239,20 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
     const ids = actionIds || visibleIds.filter((id) => selectedIds.has(id));
     if (action === 'empty') {
       if (!onEmptyTrash || trashedArticles.length === 0) return;
-      if (!window.confirm(lang === 'zh' ? '确定永久清空文章回收站吗？此操作不可撤销。' : 'Empty the article trash permanently? This cannot be undone.')) return;
+      if (!(await confirmDialog({
+        title: lang === 'zh' ? '永久清空文章回收站？' : 'Empty the article trash permanently?',
+        description: lang === 'zh' ? '此操作不可撤销。' : 'This cannot be undone.',
+        confirmLabel: lang === 'zh' ? '永久清空' : 'Empty trash',
+        tone: 'danger',
+      }))) return;
     } else if (ids.length === 0) {
       return;
-    } else if (action === 'force-delete' && !window.confirm(lang === 'zh' ? `确定永久删除选中的 ${ids.length} 篇文章吗？` : `Permanently delete ${ids.length} selected articles?`)) {
+    } else if (action === 'force-delete' && !(await confirmDialog({
+      title: lang === 'zh' ? `永久删除选中的 ${ids.length} 篇文章？` : `Permanently delete ${ids.length} articles?`,
+      description: lang === 'zh' ? '此操作不可撤销。' : 'This cannot be undone.',
+      confirmLabel: lang === 'zh' ? '永久删除' : 'Delete',
+      tone: 'danger',
+    }))) {
       return;
     }
     setBatchBusy(true);

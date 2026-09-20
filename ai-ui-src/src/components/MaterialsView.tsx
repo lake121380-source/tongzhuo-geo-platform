@@ -25,6 +25,7 @@ import TitleGenerationPanel from './TitleGenerationPanel';
 import AuthorRecentArticles from './AuthorRecentArticles';
 import LibraryImportDialog from './LibraryImportDialog';
 import KnowledgeOfficialAdoptPanel from './KnowledgeOfficialAdoptPanel';
+import { useConfirm } from './ui';
 import { PageHeader } from './PageHeader';
 import { Button, EmptyState } from './ui';
 
@@ -172,6 +173,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const [error, setError] = useState('');
   const [itemError, setItemError] = useState('');
   const [notice, setNotice] = useState('');
+  const confirmDialog = useConfirm();
   const [editing, setEditing] = useState<Material | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<Record<string, string>>(emptyForm);
@@ -432,7 +434,14 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       return;
     }
     const name = text(record, 'name') || materialId(record);
-    if (typeof window !== 'undefined' && !window.confirm(lang === 'zh' ? `确定删除「${name}」吗？该操作不可撤销。` : `Delete “${name}”? This cannot be undone.`)) return;
+    // 用 ConfirmDialog 而不是 window.confirm：原生 confirm 在部分内嵌浏览器里**根本不渲染**，
+    // 1ms 就返回 false，表现成「点了删除没反应」（2026-09-20 哥哥就是这么撞上的）。
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? `删除「${name}」？` : `Delete "${name}"?`,
+      description: lang === 'zh' ? '该操作不可撤销。' : 'This cannot be undone.',
+      confirmLabel: lang === 'zh' ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
     setBusy(`delete-${materialId(record)}`);
     setNotice('');
     try {
