@@ -221,11 +221,11 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
   const activeFilterCount = [taskId, categoryId, articleId, channelId, aiKeyword].filter((value) => value !== '').length;
 
   /**
-   * AI 关键词控件只在**真正消费该参数**的分区出现。AI 可见度栏目已切换为见度数据
-   * （2026-09-20 拍板「替换」）：见度以「问题」为口径，没有该关键词维度，控件不再出现；
-   * 总览页的卡片仍走旧参数，保留。
+   * AI 关键词控件已整体退役（2026-09-20）：AI 可见度切换为见度数据后以「问题」
+   * 为口径，后端不再消费 `ai_keyword`（总览卡片同源）。留 `false` 而不是删 JSX，
+   * 是为了下次要恢复旧采集视图时改动最小。
    */
-  const keywordFilterVisible = section === 'overview';
+  const keywordFilterVisible = false;
 
   const clearFilters = useCallback(() => {
     setTaskId('');
@@ -427,6 +427,9 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
         {sections.map((item) => <button key={item.key} type="button" onClick={() => setSection(item.key)} className={`rounded-lg px-3.5 py-2 text-[12.5px] font-semibold transition ${section === item.key ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>{lang === 'zh' ? item.zh : item.en}</button>)}
       </div>
 
+      {/* 筛选条服务于本站各数据分区；AI 可见度分区展示的是见度数据，这些筛选对它
+          不起作用——与其摆一排按了没反应的控件，不如不显示（本项目的家规）。 */}
+      {section !== 'ai_visibility' && (
       <div className="rounded-2xl bg-slate-900/80 p-5">
         <div className="flex flex-wrap items-end gap-3">
           <span className="flex items-center gap-1.5 pb-2.5 text-caption font-semibold"><Filter className="h-3.5 w-3.5" />{lang === 'zh' ? '筛选' : 'Filters'}</span>
@@ -469,6 +472,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
             : `AI keyword suggestions are only the first ${keywordSuggestions.length} returned, not the full set; any exact keyword can be typed.`}</p>
         )}
       </div>
+      )}
 
       {error && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-[13px] text-rose-200">{error}<button type="button" onClick={() => void load()} className="ml-3 font-semibold underline">{lang === 'zh' ? '重试' : 'Retry'}</button></div>}
 
