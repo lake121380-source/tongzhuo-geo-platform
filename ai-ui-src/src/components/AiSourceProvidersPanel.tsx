@@ -3,6 +3,7 @@ import { KeyRound, Pencil, Plus, Save, Trash2, Loader2, Wifi} from 'lucide-react
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import { LoadingState } from './LoadingState';
+import { useConfirm } from './ui';
 
 interface AiSourceProvidersPanelProps {
   apiClient: GeoFlowApiClient;
@@ -30,6 +31,7 @@ const asRecord = (value: unknown): ApiRecord => (
  */
 export const AiSourceProvidersPanel: React.FC<AiSourceProvidersPanelProps> = ({ apiClient, lang, canManage }) => {
   const [providers, setProviders] = useState<ApiRecord[]>([]);
+  const confirmDialog = useConfirm();
   const [draft, setDraft] = useState<Record<string, string> | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -119,7 +121,12 @@ export const AiSourceProvidersPanel: React.FC<AiSourceProvidersPanelProps> = ({ 
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm(lang === 'zh' ? '确定删除此来源 Provider？已有关联可见度记录时后端会拒绝删除。' : 'Delete this source provider? The server rejects providers that still have visibility records.')) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? '删除此来源 Provider？' : 'Delete this source provider?',
+      description: lang === 'zh' ? '已有关联可见度记录时后端会拒绝删除。' : 'The server rejects providers that still have visibility records.',
+      confirmLabel: lang === 'zh' ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
     setBusy(true);
     setNotice('');
     try {

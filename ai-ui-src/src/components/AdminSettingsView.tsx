@@ -17,7 +17,7 @@ import { LoadingState } from './LoadingState';
 import BrowserClientsPanel from './BrowserClientsPanel';
 import AdminUsersView from './AdminUsersView';
 import { PageHeader } from './PageHeader';
-import { EmptyState } from './ui';
+import { EmptyState, useConfirm } from './ui';
 
 interface AdminSettingsViewProps {
   apiClient: GeoFlowApiClient;
@@ -178,6 +178,7 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   isSuperAdmin = false,
 }) => {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const confirmDialog = useConfirm();
   const [profileVersion, setProfileVersion] = useState('');
   const [profileDraft, setProfileDraft] = useState({ display_name: '', email: '' });
   const [passwordDraft, setPasswordDraft] = useState({
@@ -342,7 +343,14 @@ export const AdminSettingsView: React.FC<AdminSettingsViewProps> = ({
   };
 
   const revokeToken = async (token: TokenRecord) => {
-    if (!window.confirm(isZh ? `确定撤销「${token.name}」吗？此操作不可恢复。` : `Revoke “${token.name}”? This cannot be undone.`)) return;
+    // 用 ConfirmDialog 而不是 window.confirm：原生 confirm 在部分内嵌浏览器里不渲染，
+    // 1ms 返回 false，表现成「点了撤销没反应」。
+    if (!(await confirmDialog({
+      title: isZh ? `撤销「${token.name}」？` : `Revoke "${token.name}"?`,
+      description: isZh ? '此操作不可恢复，用该令牌的集成会立即失效。' : 'This cannot be undone; integrations using this token stop working immediately.',
+      confirmLabel: isZh ? '撤销' : 'Revoke',
+      tone: 'danger',
+    }))) return;
     setBusy(`revoke-${token.id}`); setNotice('');
     try {
       await apiClient.revokeAdminToken(token.id, { idempotencyKey: makeIdempotencyKey(`revoke-${token.id}`) });

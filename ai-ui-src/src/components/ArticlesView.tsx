@@ -24,7 +24,7 @@ import { ArticleReviewMode } from './ArticleReviewMode';
 import { StatusBadge, articleStatusSpec, qualityStatusSpec } from './StatusBadge';
 import { Skeleton, SkeletonRows } from './Skeleton';
 import { PageHeader } from './PageHeader';
-import { Button, EmptyState, useConfirm } from './ui';
+import { Button, EmptyState, useConfirm, useToast } from './ui';
 
 /**
  * 质检分的配色：**与通过线比**，不是拍脑袋定档。
@@ -135,6 +135,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   const [showTrash, setShowTrash] = useState(false);
   const [batchBusy, setBatchBusy] = useState(false);
   const confirmDialog = useConfirm();
+  const toast = useToast();
   const [batchError, setBatchError] = useState('');
   const [isReviewMode, setIsReviewMode] = useState(false);
 
@@ -224,9 +225,28 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
       const result = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
       const succeeded = Number(result.succeeded_count || 0);
       const failed = Number(result.failed_count || 0);
-      window.alert(lang === 'zh'
-        ? `批量${action === 'review' ? '审核' : action === 'publish' ? '发布' : action === 'retract' ? '撤回' : '回收'}完成：成功 ${succeeded}，失败 ${failed}`
-        : `Batch action complete: ${succeeded} succeeded, ${failed} failed.`);
+      // 原来这里是 window.alert——和 confirm 一样，在部分内嵌浏览器里不渲染，
+      // 于是「批量成功了没、失败几篇」等于没有反馈。
+      const actionLabel = action === 'review'
+        ? (lang === 'zh' ? '审核' : 'review')
+        : action === 'publish'
+          ? (lang === 'zh' ? '发布' : 'publish')
+          : action === 'retract'
+            ? (lang === 'zh' ? '撤回' : 'retract')
+            : (lang === 'zh' ? '回收' : 'trash');
+      if (failed > 0) {
+        toast.warning(
+          lang === 'zh' ? `批量${actionLabel}：${succeeded} 篇成功、${failed} 篇未通过` : `Batch ${actionLabel}: ${succeeded} ok, ${failed} failed`,
+          lang === 'zh'
+            ? '未通过的仍留在列表里。若是被质检门禁拦下的，进文章详情跑一次质检（或按规则人工放行）后即可发布。'
+            : 'Failed items stay in the list. If the quality gate blocked them, run a quality check or release them first.',
+        );
+      } else {
+        toast.success(
+          lang === 'zh' ? `批量${actionLabel}完成` : `Batch ${actionLabel} complete`,
+          lang === 'zh' ? `成功 ${succeeded} 篇` : `${succeeded} article(s).`,
+        );
+      }
       setSelectedIds(new Set());
     } catch (error) {
       setBatchError(error instanceof Error ? error.message : (lang === 'zh' ? '批量操作失败' : 'Batch action failed'));

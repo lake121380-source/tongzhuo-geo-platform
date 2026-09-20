@@ -18,7 +18,7 @@ import {
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError, requiredScopeLabel } from '../api/permissions';
 import { PageHeader } from './PageHeader';
-import { EmptyState } from './ui';
+import { EmptyState, useConfirm } from './ui';
 
 type Lang = 'zh' | 'en';
 type ViewMode = 'forms' | 'leads';
@@ -181,6 +181,7 @@ const statusLabels: Record<string, { zh: string; en: string }> = {
 
 export const LeadManagementView: React.FC<Props> = ({ apiClient, lang, canRead, canWrite, embedded = false }) => {
   const [mode, setMode] = useState<ViewMode>('forms');
+  const confirmDialog = useConfirm();
   const [forms, setForms] = useState<LeadFormRecord[]>([]);
   const [leads, setLeads] = useState<LeadRecord[]>([]);
   const [formMeta, setFormMeta] = useState<PageMeta>({ page: 1, totalPages: 1, total: 0 });
@@ -316,10 +317,12 @@ export const LeadManagementView: React.FC<Props> = ({ apiClient, lang, canRead, 
 
   const deleteForm = async (form: LeadFormRecord) => {
     if (!canWrite) return;
-    const confirmed = window.confirm(lang === 'zh'
-      ? `确认删除表单“${form.name}”？已有线索的表单不会被删除。`
-      : `Delete “${form.name}”? Forms with submissions cannot be deleted.`);
-    if (!confirmed) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? `删除表单「${form.name}」？` : `Delete "${form.name}"?`,
+      description: lang === 'zh' ? '已有线索的表单不会被删除（后端会拒绝）。' : 'Forms with submissions cannot be deleted.',
+      confirmLabel: lang === 'zh' ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
     setSaving(true);
     setError('');
     try {

@@ -3,6 +3,7 @@ import { FileText, Eye, Send, CheckCircle2, X, Tag, ShieldCheck, Loader2, Pencil
 import { Article } from '../types';
 import { GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
+import { useConfirm } from './ui';
 import { ArticleQualityPanel } from './ArticleQualityPanel';
 import { StatusBadge, qualityStatusSpec } from './StatusBadge';
 
@@ -76,6 +77,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   onPublishAndDistribute,
 }) => {
   const [isPublishing, setIsPublishing] = useState(false);
+  const confirmDialog = useConfirm();
   const [publishError, setPublishError] = useState('');
   /** 质检面板的位置，供「发布被拦下」时把用户带过去。 */
   const qualitySectionRef = useRef<HTMLDivElement>(null);
@@ -157,9 +159,12 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
       return;
     }
     // 生成是「替换正文」，不是追加——有内容时先说清楚再动手。
-    if (draft.content.trim() !== '' && !window.confirm(
-      lang === 'zh' ? 'AI 生成会覆盖当前正文，继续？' : 'AI generation replaces the current content. Continue?',
-    )) return;
+    if (draft.content.trim() !== '' && !(await confirmDialog({
+      title: lang === 'zh' ? 'AI 生成会覆盖当前正文' : 'AI generation replaces the current content',
+      description: lang === 'zh' ? '当前正文会被新生成的内容替换。' : 'The current content will be replaced.',
+      confirmLabel: lang === 'zh' ? '继续生成' : 'Continue',
+      tone: 'danger',
+    }))) return;
 
     setAssistantBusy(true);
     setAssistantError('');

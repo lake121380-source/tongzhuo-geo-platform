@@ -24,6 +24,7 @@ import {
 import { describeApiError } from '../api/permissions';
 import PermissionNotice from './PermissionNotice';
 import { LoadingState } from './LoadingState';
+import { useConfirm } from './ui';
 
 interface UrlImportPanelProps {
   apiClient: GeoFlowApiClient;
@@ -168,6 +169,7 @@ export const UrlImportPanel: React.FC<UrlImportPanelProps> = ({
   canWrite = true,
 }) => {
   const [jobs, setJobs] = useState<UrlImportJobSummary[]>([]);
+  const confirmDialog = useConfirm();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<UrlImportDetailResponse | null>(null);
   const [form, setForm] = useState<ImportForm>({ ...DEFAULT_FORM, outputs: [...DEFAULT_FORM.outputs] });
@@ -332,9 +334,12 @@ export const UrlImportPanel: React.FC<UrlImportPanelProps> = ({
 
   const commitJob = async () => {
     if (!selectedJob || !canWrite) return;
-    if (typeof window !== 'undefined' && !window.confirm(lang === 'zh'
-      ? '确认将这次 URL 预览写入任务中选择的素材库吗？该操作会创建真实素材记录。'
-      : 'Commit this URL preview to the selected material libraries? This creates real material records.')) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? '把这次 URL 预览写入素材库？' : 'Commit this URL preview?',
+      description: lang === 'zh' ? '会在所选素材库里创建真实记录。' : 'This creates real material records in the selected libraries.',
+      confirmLabel: lang === 'zh' ? '写入' : 'Commit',
+      tone: 'primary',
+    }))) return;
     setBusy(`commit-${selectedJob.id}`);
     setError('');
     setNotice('');

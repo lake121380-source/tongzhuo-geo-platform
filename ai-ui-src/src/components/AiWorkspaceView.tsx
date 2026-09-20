@@ -18,7 +18,7 @@ import {
   GeoFlowApiClient,
   GeoFlowApiError,
 } from '../api/geoflowClient';
-import { EmptyState } from './ui';
+import { EmptyState, useConfirm } from './ui';
 
 interface Props {
   apiClient: GeoFlowApiClient;
@@ -118,6 +118,7 @@ function idempotencyKey(prefix: string): string {
 
 export const AiWorkspaceView: React.FC<Props> = ({ apiClient, lang, canRead, canWrite, onNavigate }) => {
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
+  const confirmDialog = useConfirm();
   const [conversations, setConversations] = useState<WorkspaceConversation[]>([]);
   const [activeId, setActiveId] = useState('');
   const [messages, setMessages] = useState<WorkspaceMessage[]>([]);
@@ -250,7 +251,12 @@ export const AiWorkspaceView: React.FC<Props> = ({ apiClient, lang, canRead, can
 
   const archiveConversation = async () => {
     if (!activeConversation || !canWrite) return;
-    if (!window.confirm(lang === 'zh' ? '归档当前会话？历史记录会保留在数据库中。' : 'Archive this conversation? Its history remains persisted.')) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? '归档当前会话？' : 'Archive this conversation?',
+      description: lang === 'zh' ? '历史记录会保留在数据库中，之后仍可查阅。' : 'Its history remains persisted and can be reviewed later.',
+      confirmLabel: lang === 'zh' ? '归档' : 'Archive',
+      tone: 'primary',
+    }))) return;
     setError('');
     try {
       await apiClient.archiveAiWorkspaceConversation(activeConversation.id, {

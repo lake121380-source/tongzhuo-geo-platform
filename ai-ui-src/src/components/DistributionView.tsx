@@ -24,7 +24,7 @@ import {
 import { DistributionChannel } from '../types';
 import PermissionNotice from './PermissionNotice';
 import { PageHeader } from './PageHeader';
-import { EmptyState } from './ui';
+import { EmptyState, useConfirm } from './ui';
 import { describeApiError } from '../api/permissions';
 
 interface DistributionViewProps {
@@ -124,6 +124,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
   onAssignHostedArticle,
 }) => {
   const [activeTab, setActiveTab] = useState<'channels' | 'deployment'>('channels');
+  const confirmDialog = useConfirm();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -628,7 +629,16 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                           })()}
                           {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `maintenance-${siteId}`} onClick={() => void runHostedAction(siteId, 'maintenance')} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"><Wrench className="h-3 w-3" />维护</button>}
                           {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `indexing-${siteId}`} onClick={() => void runHostedAction(siteId, 'indexing', { indexing_status: indexing === 'index' ? 'noindex' : 'index', quality_confirmed: quality === 'passed' })} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[11.5px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"><Globe2 className="h-3 w-3" />{indexing === 'index' ? '设为不索引' : '允许索引'}</button>}
-                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `archive-${siteId}`} onClick={() => { if (window.confirm(`确认归档 ${String(profile.hostname || site.name || '')}？`)) void runHostedAction(siteId, 'archive', { hostname: String(profile.hostname || site.domain || '') }); }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 text-[11.5px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"><Archive className="h-3 w-3" />归档</button>}
+                          {serving !== 'archived' && <button type="button" disabled={!canWrite || hostedBusy === `archive-${siteId}`} onClick={async () => {
+                            // 原为 window.confirm——在内嵌浏览器里不渲染，点了归档等于没点。
+                            if (!(await confirmDialog({
+                              title: `确认归档 ${String(profile.hostname || site.name || '')}？`,
+                              description: lang === 'zh' ? '归档后该站点不再参与分发，之后可以恢复。' : 'The site stops receiving distributions until restored.',
+                              confirmLabel: lang === 'zh' ? '归档' : 'Archive',
+                              tone: 'danger',
+                            }))) return;
+                            void runHostedAction(siteId, 'archive', { hostname: String(profile.hostname || site.domain || '') });
+                          }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 text-[11.5px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"><Archive className="h-3 w-3" />归档</button>}
                         </div>
                         {onAssignHostedArticle && serving !== 'archived' && <div className="flex items-center gap-2 border-t border-slate-800 pt-3"><input value={hostedArticleIds[siteId] || ''} onChange={(event) => setHostedArticleIds((current) => ({ ...current, [siteId]: event.target.value }))} placeholder={lang === 'zh' ? '输入文章 ID 分配容量' : 'Article ID'} className="h-9 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /><button type="button" disabled={!canWrite || hostedBusy === `assign-${siteId}`} onClick={() => void assignHostedArticle(siteId)} className="inline-flex h-9 shrink-0 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50">分配文章</button></div>}
                       </article>

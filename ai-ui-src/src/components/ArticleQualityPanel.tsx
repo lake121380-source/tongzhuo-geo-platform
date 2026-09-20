@@ -19,6 +19,7 @@ import {
   GeoFlowApiError,
 } from '../api/geoflowClient';
 import { mapArticle } from '../api/mappers';
+import { useConfirm } from './ui';
 
 interface ArticleQualityPanelProps {
   article: Article;
@@ -153,6 +154,7 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
   onArticleStateChange,
 }) => {
   const [snapshot, setSnapshot] = useState<ApiRecord | null>(null);
+  const confirmDialog = useConfirm();
   const [candidate, setCandidate] = useState<ApiRecord | null>(null);
   const [busy, setBusy] = useState<BusyAction>(null);
   const [error, setError] = useState<string | null>(null);
@@ -447,7 +449,12 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
       setError(lang === 'zh' ? '优化候选尚未准备好，无法应用。' : 'The optimization candidate is not ready to apply.');
       return;
     }
-    if (!window.confirm(lang === 'zh' ? '应用候选会修改文章正文，并保留可回滚记录。确定继续吗？' : 'Apply this candidate to the article? A rollback record will be kept.')) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? '应用候选修改？' : 'Apply this candidate?',
+      description: lang === 'zh' ? '会修改文章正文，并保留可回滚记录。' : 'The article body changes; a rollback record is kept.',
+      confirmLabel: lang === 'zh' ? '应用' : 'Apply',
+      tone: 'primary',
+    }))) return;
     await run(
       'apply',
       () => apiClient.applyArticleOptimization(article.id, runId, candidateHash),
@@ -466,7 +473,12 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
 
   const handleRollback = async () => {
     if (!runId) return;
-    if (!window.confirm(lang === 'zh' ? '确定回滚到优化前的文章版本吗？' : 'Roll back to the article version before optimization?')) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? '回滚到优化前的版本？' : 'Roll back to the pre-optimization version?',
+      description: lang === 'zh' ? '当前正文会恢复到优化前的状态。' : 'The article returns to its state before the optimization.',
+      confirmLabel: lang === 'zh' ? '回滚' : 'Roll back',
+      tone: 'danger',
+    }))) return;
     await run(
       'rollback',
       () => apiClient.rollbackArticleOptimization(article.id, runId),

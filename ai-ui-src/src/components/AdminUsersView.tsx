@@ -3,6 +3,7 @@ import { Edit3, Loader2, Plus, RefreshCw, Shield, Trash2, UserRound, X } from 'l
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import PermissionNotice from './PermissionNotice';
+import { useConfirm } from './ui';
 import { LoadingState } from './LoadingState';
 
 type AdminUser = {
@@ -88,6 +89,7 @@ function formatDate(value: string | null, lang: 'zh' | 'en'): string {
 export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ apiClient, lang, canRead, canWrite }) => {
   const isZh = lang === 'zh';
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const confirmDialog = useConfirm();
   const [stats, setStats] = useState({ total_admins: 0, active_admins: 0, super_admins: 0 });
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState('');
@@ -175,7 +177,12 @@ export const AdminUsersView: React.FC<AdminUsersViewProps> = ({ apiClient, lang,
 
   const remove = async (user: AdminUser) => {
     if (!canWrite || user.is_super_admin) return;
-    if (!window.confirm(isZh ? `确定删除管理员「${user.username}」吗？` : `Delete administrator “${user.username}”?`)) return;
+    if (!(await confirmDialog({
+      title: isZh ? `删除管理员「${user.username}」？` : `Delete administrator "${user.username}"?`,
+      description: isZh ? '此操作不可恢复。' : 'This cannot be undone.',
+      confirmLabel: isZh ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
     setBusy(`delete-${user.id}`); setNotice('');
     try {
       await apiClient.deleteAdminUser(user.id, { idempotencyKey: idempotencyKey(`admin-delete-${user.id}`) });
