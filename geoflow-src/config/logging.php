@@ -67,6 +67,8 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+            // 权限必须 0666，理由见下方 daily 通道的注释（创建者不定：root 或 www-data）。
+            'permission' => 0666,
         ],
 
         'daily' => [
@@ -75,6 +77,15 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 14),
             'replace_placeholders' => true,
+            /**
+             * **0666 而不是默认 0644**：这个日志文件由谁创建是不确定的——queue/scheduler
+             * 容器跑在 root 下、php-fpm 跑在 www-data 下，按天滚动时谁先写谁创建文件。
+             * 2026-09-20 凌晨就是 root 先创建（0644）、www-data 写不进，于是所有
+             * 「需要记日志的报错路径」在写日志那一步直接 fatal 成裸 500（运营的
+             * 「AI 生成标题」那次就是这样——本该弹「关键词库为空」的提示被吞成 500）。
+             * Monolog 打开文件时会 chmod 到该值，两个用户此后都能追加。
+             */
+            'permission' => 0666,
         ],
 
         'slack' => [
