@@ -3,6 +3,7 @@ import { Sliders, Bot, Code, Copy, Plus, Save, Trash2, Wifi } from 'lucide-react
 import { AiModelConfig, PromptTemplate } from '../types';
 import { GeoFlowApiClient } from '../api/geoflowClient';
 import { AiSourceProvidersPanel } from './AiSourceProvidersPanel';
+import { JianduPanel } from './JianduPanel';
 import SpecialPromptsPanel from './SpecialPromptsPanel';
 import AiSystemSettingsPanel from './AiSystemSettingsPanel';
 import ModelBindingsPanel from './ModelBindingsPanel';
@@ -246,6 +247,8 @@ export const AiModelsView: React.FC<AiModelsViewProps> = ({
         </div>
       </div>
       {apiMode && apiClient && <AiSourceProvidersPanel apiClient={apiClient} lang={lang} canManage={canManageSourceProviders} />}
+      {/* 见度GEO 检测：第三方接入（连接一次 + 每日检测的问题集），与「来源提供者」同区 */}
+      {apiMode && apiClient && <JianduPanel apiClient={apiClient} lang={lang} canManage={canManageSourceProviders} />}
       {apiMode && apiClient && (
         <div className="space-y-4">
           {/* 系统级配置（切片/默认向量，超管）与个人默认、运行概览 */}

@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\ApiException;
 use App\Services\Admin\Analytics\AiVisibilityAnalyticsFilter;
-use App\Services\Admin\Analytics\AiVisibilityAnalyticsService;
 use App\Services\Admin\Analytics\AnalyticsFilter;
 use App\Services\Admin\Analytics\AnalyticsLogFilter;
 use App\Services\Admin\Analytics\AnalyticsLogQueryService;
@@ -13,6 +12,7 @@ use App\Services\Admin\Analytics\DistributionAnalyticsService;
 use App\Services\Admin\Analytics\GrowthOverviewService;
 use App\Services\Admin\Analytics\LeadAnalyticsFilter;
 use App\Services\Admin\Analytics\LeadAnalyticsService;
+use App\Services\Jiandu\JianduVisibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -30,14 +30,13 @@ class AnalyticsController extends BaseApiController
         Request $request,
         AnalyticsOverviewService $analytics,
         AnalyticsLogQueryService $traffic,
-        AiVisibilityAnalyticsService $visibility,
+        JianduVisibilityService $jiandu,
         DistributionAnalyticsService $distribution,
         LeadAnalyticsService $leads,
     ): JsonResponse {
         $this->executionAdmin($request);
         $filter = $this->contentFilter($request);
         $logFilter = $this->logFilter($request);
-        $aiFilter = $this->visibilityFilter($request);
         $leadFilter = $this->leadFilter($request);
         $distributionStatus = $this->status($request);
 
@@ -52,7 +51,10 @@ class AnalyticsController extends BaseApiController
             'ai_health' => $analytics->aiHealth(),
             'url_import_health' => $analytics->urlImportHealth($filter),
             'traffic' => $traffic->summary($logFilter, $filter),
-            'ai_visibility' => $visibility->overview($aiFilter),
+            // AI 可见度已整体切换为见度数据（2026-09-20 拍板「替换」）：总览卡片用
+            // 见度的提及率喂旧投影键 `brand_visibility`；未连接/取数失败为空数组，
+            // 前端显示「—」。完整栏目见 aiVisibility()。
+            'ai_visibility' => ['kpis' => $jiandu->overviewCardKpis()],
             'distribution' => $distribution->summary($filter, $distributionStatus),
             'leads' => [
                 'ready' => (bool) ($leadSummary['ready'] ?? false),
@@ -117,15 +119,23 @@ class AnalyticsController extends BaseApiController
         return $this->traffic($request, $traffic);
     }
 
-    public function aiVisibility(Request $request, AiVisibilityAnalyticsService $visibility): JsonResponse
+    /**
+     * AI 可见度栏目——**已整体切换为见度数据**（2026-09-20 拍板「替换」）。
+     *
+     * 未连接见度 → 引导态（`connected:false`，前端提示去「AI 模型与提示词」页
+     * 完成一次性连接）；连接后 → 实时拉取见度的提及率/平台/批次/报告。
+     * 上游故障不抛页：降级载荷带 `error` 与 `needs_reconnect` 标志。
+     */
+    public function aiVisibility(Request $request, JianduVisibilityService $jiandu): JsonResponse
     {
         $this->executionAdmin($request);
         $filter = $this->visibilityFilter($request);
+        $range = JianduVisibilityService::rangeFromPreset((string) $request->query('ai_preset', $request->query('preset', '30d')));
 
         return $this->success($request, [
             'range' => $filter->toArray(),
-            'source' => $this->sourceMeta(),
-            'overview' => $visibility->overview($filter),
+            'source' => ['kind' => 'jiandu_api', 'system' => '见度GEO', 'complete' => true, 'estimated' => false],
+            'overview' => $jiandu->overview($range),
         ]);
     }
 

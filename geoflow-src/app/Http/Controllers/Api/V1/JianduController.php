@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\ApiException;
+use App\Models\JianduDetectionSetting;
+use App\Models\JianduQuestion;
 use App\Services\Api\IdempotencyService;
 use App\Services\Jiandu\JianduApiClient;
 use App\Services\Jiandu\JianduConnectionService;
@@ -236,6 +238,127 @@ final class JianduController extends BaseApiController
             'source' => $this->sourceMeta(),
             'account' => $account,
         ]);
+    }
+
+    // ---------------------------------------------------------------- 每日自动检测的配置
+
+    /** 检测问题列表——每日自动检测跑的就是它们（运营在后台维护）。 */
+    public function questionsIndex(Request $request): JsonResponse
+    {
+        $this->executionAdmin($request);
+        $items = JianduQuestion::query()->orderBy('sort_order')->orderBy('id')->get();
+
+        return $this->success($request, [
+            'items' => $items->map(static fn (JianduQuestion $question): array => $question->projection())->all(),
+            'total' => $items->count(),
+            'max_questions' => JianduDetectionSetting::MAX_QUESTIONS,
+        ]);
+    }
+
+    /** 新增一条检测问题。 */
+    public function questionsStore(Request $request): JsonResponse
+    {
+        $this->requireIdempotencyKey($request);
+        $admin = $this->executionAdmin($request);
+        $payload = $request->validate([
+            'question' => ['required', 'string', 'max:500'],
+        ]);
+
+        return IdempotencyService::executeJson($request, 'POST /jiandu/questions', function () use ($admin, $payload, $request): JsonResponse {
+            if (JianduQuestion::query()->count() >= JianduDetectionSetting::MAX_QUESTIONS) {
+                throw new ApiException('jiandu_questions_limit', '检测问题最多 '.JianduDetectionSetting::MAX_QUESTIONS.' 条——先删掉不用的再加', 409);
+            }
+            $question = JianduQuestion::query()->create([
+                'question' => trim((string) $payload['question']),
+                'is_active' => true,
+                'sort_order' => (int) (JianduQuestion::query()->max('sort_order') ?? 0) + 1,
+                'created_by_admin_id' => $admin->id,
+            ]);
+
+            return $this->success($request, ['item' => $question->projection()], 201);
+        });
+    }
+
+    /** 修改问题文本或启用状态。 */
+    public function questionsUpdate(Request $request, int $question): JsonResponse
+    {
+        $this->requireIdempotencyKey($request);
+        $this->executionAdmin($request);
+        $payload = $request->validate([
+            'question' => ['nullable', 'string', 'max:500'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        return IdempotencyService::executeJson($request, 'PATCH /jiandu/questions/{id}', function () use ($payload, $question, $request): JsonResponse {
+            $row = JianduQuestion::query()->find($question);
+            if (! $row instanceof JianduQuestion) {
+                throw new ApiException('jiandu_question_not_found', '检测问题不存在', 404);
+            }
+            if (isset($payload['question'])) {
+                $row->question = trim((string) $payload['question']);
+            }
+            if (isset($payload['is_active'])) {
+                $row->is_active = (bool) $payload['is_active'];
+            }
+            $row->save();
+
+            return $this->success($request, ['item' => $row->projection()]);
+        });
+    }
+
+    /** 删除一条检测问题。 */
+    public function questionsDestroy(Request $request, int $question): JsonResponse
+    {
+        $this->requireIdempotencyKey($request);
+        $this->executionAdmin($request);
+
+        return IdempotencyService::executeJson($request, 'DELETE /jiandu/questions/{id}', function () use ($question, $request): JsonResponse {
+            JianduQuestion::query()->whereKey($question)->delete();
+
+            return $this->success($request, ['deleted' => true]);
+        });
+    }
+
+    /** 每日自动检测设置：开关 / 平台入口 / 目标项目 / 最近一次运行。 */
+    public function settingsShow(Request $request): JsonResponse
+    {
+        $this->executionAdmin($request);
+
+        return $this->success($request, ['settings' => JianduDetectionSetting::current()->projection()]);
+    }
+
+    /** 更新每日自动检测设置。 */
+    public function settingsUpdate(Request $request): JsonResponse
+    {
+        $this->requireIdempotencyKey($request);
+        $this->executionAdmin($request);
+        $payload = $request->validate([
+            'enabled' => ['nullable', 'boolean'],
+            'platforms' => ['nullable', 'array', 'min:1', 'max:6'],
+            'platforms.*' => ['string', Rule::in(JianduDetectionSetting::PLATFORMS)],
+            'project_id' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        return IdempotencyService::executeJson($request, 'PUT /jiandu/detection-settings', function () use ($payload, $request): JsonResponse {
+            $settings = JianduDetectionSetting::current();
+            if (isset($payload['enabled'])) {
+                $settings->enabled = (bool) $payload['enabled'];
+            }
+            if (isset($payload['platforms'])) {
+                $settings->setPlatforms(array_values((array) $payload['platforms']));
+            }
+            if (isset($payload['project_id'])) {
+                // 只接受非空值切换项目；清空则下次由可见度服务回落到第一个项目。
+                $projectId = trim((string) $payload['project_id']);
+                if ($projectId !== '') {
+                    $settings->project_id = $projectId;
+                    $settings->project_name = null;
+                }
+            }
+            $settings->save();
+
+            return $this->success($request, ['settings' => $settings->projection()]);
+        });
     }
 
     /**

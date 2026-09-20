@@ -167,6 +167,32 @@ final class JianduApiClient
         );
     }
 
+    /**
+     * 创建一次检测（运营在后台维护的问题集 → 交给见度执行）。
+     *
+     * 见度侧有「同日同入口重复」闸：重复提交回 409——调用方（每日调度）
+     * 把它当「今天已经跑过」处理，不当故障。
+     *
+     * @param  list<string>  $platforms  平台 id 列表（见度取值：doubao/deepseek/qianwen/yuanbao/kimi/wenxin）
+     * @param  list<string>  $questions
+     * @return array<string, mixed> 任务投影（含 id / status / totalJobs）
+     */
+    public function createDetection(string $accessToken, string $projectId, array $platforms, array $questions, string $name = ''): array
+    {
+        $payload = [
+            'projectId' => $projectId,
+            'platforms' => array_map(static fn (string $platform): array => ['platform' => $platform, 'channel' => 'web'], $platforms),
+            'questions' => array_values($questions),
+            'sampleCount' => 1,
+            'concurrency' => 2,
+        ];
+        if ($name !== '') {
+            $payload['name'] = $name;
+        }
+
+        return $this->result($this->authorized($accessToken)->post($this->url('/api/v1/detections'), $payload), '创建见度检测');
+    }
+
     private function url(string $path): string
     {
         return (string) config('jiandu.base_url').$path;

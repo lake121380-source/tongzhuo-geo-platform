@@ -77,6 +77,9 @@ export const MERGED_VIEWS: Record<string, { host: string; view: string }> = {
   leads: { host: 'attribution_funnel', view: 'leads' },
   url_scanner: { host: 'seo_dashboard', view: 'scanner' },
   brand_entity: { host: 'seo_foundation', view: 'brand' },
+  // 见度检测（2026-09-20 拍板）：不再单开页面——连接收进「AI 模型与提示词 → 见度对接」，
+  // 数据以「AI 可见度」分区展示在数据分析页内。深链保留，落到该分区。
+  jiandu: { host: 'analytics', view: 'ai_visibility' },
 };
 
 /** 宿主页签的默认内层视图（直接进 `?tab=<宿主>` 时显示哪个）。 */

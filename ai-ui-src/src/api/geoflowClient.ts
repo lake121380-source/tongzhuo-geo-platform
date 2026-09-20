@@ -167,6 +167,27 @@ export interface JianduMeResponse {
   account: ApiRecord;
 }
 
+/** 一条「见度检测问题」（运营在后台维护，每日自动检测的口径来源）。 */
+export interface JianduQuestionRecord {
+  id: number;
+  question: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at?: string | null;
+}
+
+/** 每日自动检测设置。 */
+export interface JianduDetectionSettings {
+  enabled: boolean;
+  platforms: string[];
+  project_id: string | null;
+  project_name: string | null;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  max_questions: number;
+  available_platforms: string[];
+}
+
 export type SystemUpdateOperationKind = 'update' | 'backup' | 'rollback' | 'verify';
 
 export interface KnowledgeSearchResponse {
@@ -1012,6 +1033,37 @@ export class GeoFlowApiClient {
   /** 见度侧账号/套餐/额度（连接信息条用；失败可降级隐藏，不参与整屏成败）。 */
   async getJianduMe(): Promise<JianduMeResponse> {
     return this.request<JianduMeResponse>('jiandu/me');
+  }
+
+  // ---------------------------------------------------------------- 每日自动检测的配置
+
+  /** 检测问题列表（每日自动检测跑的就是它们）。 */
+  async listJianduQuestions(): Promise<{ items: JianduQuestionRecord[]; total: number; max_questions: number }> {
+    return this.request<{ items: JianduQuestionRecord[]; total: number; max_questions: number }>('jiandu/questions');
+  }
+
+  async createJianduQuestion(payload: { question: string }, options: MutationOptions = {}): Promise<{ item: JianduQuestionRecord }> {
+    return this.request<{ item: JianduQuestionRecord }>('jiandu/questions', { method: 'POST', body: payload, idempotencyKey: options.idempotencyKey });
+  }
+
+  async updateJianduQuestion(id: number, payload: { question?: string; is_active?: boolean }, options: MutationOptions = {}): Promise<{ item: JianduQuestionRecord }> {
+    return this.request<{ item: JianduQuestionRecord }>(`jiandu/questions/${this.numericId(id)}`, { method: 'PATCH', body: payload, idempotencyKey: options.idempotencyKey });
+  }
+
+  async deleteJianduQuestion(id: number, options: MutationOptions = {}): Promise<{ deleted: boolean }> {
+    return this.request<{ deleted: boolean }>(`jiandu/questions/${this.numericId(id)}`, { method: 'DELETE', idempotencyKey: options.idempotencyKey });
+  }
+
+  /** 每日自动检测设置（开关 / 平台入口 / 目标项目 / 最近一次运行）。 */
+  async getJianduSettings(): Promise<{ settings: JianduDetectionSettings }> {
+    return this.request<{ settings: JianduDetectionSettings }>('jiandu/detection-settings');
+  }
+
+  async updateJianduSettings(
+    payload: { enabled?: boolean; platforms?: string[]; project_id?: string },
+    options: MutationOptions = {},
+  ): Promise<{ settings: JianduDetectionSettings }> {
+    return this.request<{ settings: JianduDetectionSettings }>('jiandu/detection-settings', { method: 'PUT', body: payload, idempotencyKey: options.idempotencyKey });
   }
 
   /** Manage the real 桐灼GEO public forms and persisted lead inbox. */

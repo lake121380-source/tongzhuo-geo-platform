@@ -263,6 +263,15 @@ final class JianduConnectionService
             ]);
         }
 
+        if ($status === 409) {
+            // 见度侧的**业务拒绝**：额度用尽 / 积分不足 / 同日同入口重复——上游文案
+            // 已经是人话，原样透出。调用方（如每日调度）按 409 当「没跑成但非故障」。
+            $message409 = is_string($exception->payload['error'] ?? null) && $exception->payload['error'] !== ''
+                ? (string) $exception->payload['error']
+                : '见度拒绝了这次请求（额度、积分或同日重复）';
+            throw new ApiException('jiandu_quota_or_duplicate', $message409, 409);
+        }
+
         if ($status === 404) {
             // 404 在两种语境下含义完全不同，分开说——否则用户会照着错的方向去排查。
             if ($context === 'auth') {

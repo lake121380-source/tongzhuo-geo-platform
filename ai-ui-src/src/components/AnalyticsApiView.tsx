@@ -4,6 +4,7 @@ import { ApiRecord, GeoFlowApiClient, GeoFlowApiError } from '../api/geoflowClie
 import { hasScope, normalizeScopes } from '../api/permissions';
 import { LoadingState } from './LoadingState';
 import { PageHeader } from './PageHeader';
+import { AiVisibilityJianduSection } from './AiVisibilityJianduSection';
 import { EmptyState } from './ui';
 
 interface AnalyticsApiViewProps {
@@ -19,6 +20,10 @@ interface AnalyticsApiViewProps {
    * `/geo_admin?tab=xxx` 就是本 SPA 自己的深链，交给外层切页签比整页刷新好。
    */
   onNavigate?: (tab: string) => void;
+  /**
+   * 初始分区。`?tab=jiandu` 的深链落进「AI 可见度」分区用（该页签已并入数据分析页）。
+   */
+  initialSection?: AnalyticsSection;
 }
 
 /** 下拉候选项：`value` 原样作为查询参数发给后端。 */
@@ -101,9 +106,9 @@ const slicePage = (
   return { options, truncated: total !== null && total > options.length };
 };
 
-export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, lang, scopes, onNavigate }) => {
+export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, lang, scopes, onNavigate, initialSection }) => {
   const [preset, setPreset] = useState<'7d' | '30d' | '90d'>('7d');
-  const [section, setSection] = useState<AnalyticsSection>('overview');
+  const [section, setSection] = useState<AnalyticsSection>(initialSection ?? 'overview');
   const [data, setData] = useState<AnalyticsPayload | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -216,12 +221,11 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
   const activeFilterCount = [taskId, categoryId, articleId, channelId, aiKeyword].filter((value) => value !== '').length;
 
   /**
-   * AI 关键词控件只在**真正消费该参数**的分区出现：`ai-visibility` 自不必说，
-   * `overview` 也通过 `AnalyticsController::overview` 里的 `visibilityFilter()`
-   * 把 `ai_keyword` 传给了 AI 可见度子投影。若只在 `ai_visibility` 显示，在总览
-   * 页设过的关键词就会静默收窄总览的 AI 可见度卡片，而控件本身却不可见。
+   * AI 关键词控件只在**真正消费该参数**的分区出现。AI 可见度栏目已切换为见度数据
+   * （2026-09-20 拍板「替换」）：见度以「问题」为口径，没有该关键词维度，控件不再出现；
+   * 总览页的卡片仍走旧参数，保留。
    */
-  const keywordFilterVisible = section === 'ai_visibility' || section === 'overview';
+  const keywordFilterVisible = section === 'overview';
 
   const clearFilters = useCallback(() => {
     setTaskId('');
@@ -487,13 +491,15 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
           </div>
         </>
       )}
-      {data && section !== 'overview' && (
+      {data && section === 'ai_visibility' && (
+        <AiVisibilityJianduSection payload={record(data.overview)} lang={lang} onNavigate={onNavigate} />
+      )}
+      {data && section !== 'overview' && section !== 'ai_visibility' && (
         <>
           <div className="flex flex-wrap items-center gap-2 text-caption">
             <span className="rounded-lg bg-slate-800/60 px-2.5 py-1 text-slate-300">{String(record(data.source).kind || 'geoflow_database')}</span>
             <span>{record(data.source).estimated === false ? (lang === 'zh' ? '非估算数据' : 'Not estimated') : (lang === 'zh' ? '来源状态未知' : 'Unknown source status')}</span>
             {detailRoot.ready === false && <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{lang === 'zh' ? '数据表或采集尚未就绪' : 'Data source is not ready'}</span>}
-            {section === 'ai_visibility' && detailRoot.configured === false && <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{lang === 'zh' ? 'AI 可见度 Provider 尚未配置' : 'AI visibility provider is not configured'}</span>}
           </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             {scalarEntries(detailKpis).map(([key, value]) => <div key={key} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md"><div className="text-caption">{labelFor(key)}</div><div className="mt-1.5 text-[24px] font-black leading-none tabular-nums text-white">{displayScalar(value)}</div></div>)}
@@ -501,7 +507,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
           </div>
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
             <AnalyticsTable title={lang === 'zh' ? '趋势' : 'Trend'} rows={detailTrend} emptyText={lang === 'zh' ? '当前时间范围暂无趋势数据' : 'No trend data in this range'} emptyHint={lang === 'zh' ? '换个时间范围（7 / 30 / 90 天），或清空筛选后再看。' : 'Try another range (7 / 30 / 90 days) or clear the filters.'} />
-            <AnalyticsTable title={section === 'content' ? (lang === 'zh' ? '热门内容' : 'Top content') : section === 'traffic' ? (lang === 'zh' ? '热门路径' : 'Top paths') : section === 'crawlers' ? (lang === 'zh' ? '爬虫分类' : 'Crawler breakdown') : section === 'ai_visibility' ? (lang === 'zh' ? '关键词' : 'Keywords') : section === 'distribution' ? (lang === 'zh' ? '渠道' : 'Channels') : (lang === 'zh' ? '线索来源' : 'Lead sources')} rows={detailRows} emptyText={lang === 'zh' ? '当前时间范围暂无明细' : 'No detail rows in this range'} emptyHint={lang === 'zh' ? '换个时间范围或清空筛选后再看。' : 'Try another range or clear the filters.'} />
+            <AnalyticsTable title={section === 'content' ? (lang === 'zh' ? '热门内容' : 'Top content') : section === 'traffic' ? (lang === 'zh' ? '热门路径' : 'Top paths') : section === 'crawlers' ? (lang === 'zh' ? '爬虫分类' : 'Crawler breakdown') : section === 'distribution' ? (lang === 'zh' ? '渠道' : 'Channels') : (lang === 'zh' ? '线索来源' : 'Lead sources')} rows={detailRows} emptyText={lang === 'zh' ? '当前时间范围暂无明细' : 'No detail rows in this range'} emptyHint={lang === 'zh' ? '换个时间范围或清空筛选后再看。' : 'Try another range or clear the filters.'} />
           </div>
         </>
       )}

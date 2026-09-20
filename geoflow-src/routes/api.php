@@ -584,11 +584,18 @@ Route::prefix('v1')
                     Route::get('overview', [JianduController::class, 'overview']);
                     Route::get('detections', [JianduController::class, 'detections']);
                     Route::get('reports', [JianduController::class, 'reports']);
+                    // 每日自动检测的口径：问题集与设置（运营在后台维护）。
+                    Route::get('questions', [JianduController::class, 'questionsIndex']);
+                    Route::get('detection-settings', [JianduController::class, 'settingsShow']);
                 });
                 Route::middleware(['api.scope:jiandu:write', 'throttle:30,1'])->group(function (): void {
                     Route::post('session', [JianduController::class, 'storeSession']);
                     Route::post('session/send-code', [JianduController::class, 'sendCode']);
                     Route::delete('session', [JianduController::class, 'destroySession']);
+                    Route::post('questions', [JianduController::class, 'questionsStore']);
+                    Route::patch('questions/{question}', [JianduController::class, 'questionsUpdate'])->whereNumber('question');
+                    Route::delete('questions/{question}', [JianduController::class, 'questionsDestroy'])->whereNumber('question');
+                    Route::put('detection-settings', [JianduController::class, 'settingsUpdate']);
                 });
             });
 

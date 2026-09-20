@@ -18,7 +18,6 @@ import { MaterialsView } from './components/MaterialsView';
 import { DistributionView } from './components/DistributionView';
 import ManualPublicationsView from './components/ManualPublicationsView';
 import { AnalyticsApiView } from './components/AnalyticsApiView';
-import { JianduView } from './components/JianduView';
 import { LeadManagementView } from './components/LeadManagementView';
 import { AiWorkspaceView } from './components/AiWorkspaceView';
 import { AiModelsView } from './components/AiModelsView';
@@ -2370,13 +2369,14 @@ export default function App() {
 
 
 
-            {apiEnabled && currentTab === 'analytics' && (
-              <AnalyticsApiView apiClient={apiClient} lang={lang} scopes={apiSession?.scopes} onNavigate={navigateToTab} />
-            )}
-
-            {/* ── GEO 效果 · 见度检测：外部见度GEO 检测系统的数据接入 ── */}
-            {apiEnabled && currentTab === 'jiandu' && (
-              <JianduView apiClient={apiClient} lang={lang} scopes={apiSession?.scopes} />
+            {apiEnabled && (currentTab === 'analytics' || currentTab === 'jiandu') && (
+              <AnalyticsApiView
+                apiClient={apiClient}
+                lang={lang}
+                scopes={apiSession?.scopes}
+                onNavigate={navigateToTab}
+                initialSection={currentTab === 'jiandu' ? 'ai_visibility' : undefined}
+              />
             )}
 
             {/* ── GEO 效果 · 转化与线索：AI 引流归因 + 线索跟进（同一件事的两段） ── */}

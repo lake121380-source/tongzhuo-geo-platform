@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Admin;
 use App\Models\JianduConnection;
+use App\Models\JianduDetectionSetting;
+use App\Models\JianduQuestion;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request as ClientRequest;
 use Illuminate\Support\Facades\Http;
@@ -287,6 +289,123 @@ final class JianduApiTest extends TestCase
             ->postJson('/api/v1/jiandu/session', ['account' => 'user@example.com', 'password' => 'x'])
             ->assertStatus(422)
             ->assertJsonPath('error.code', 'idempotency_key_required');
+    }
+
+    public function test_visibility_column_maps_jiandu_data_when_connected(): void
+    {
+        $this->fakeSessionToken();
+        $this->connect('jd-visibility-connect');
+
+        Http::fake([
+            self::BASE.'/api/v1/projects' => Http::response([['id' => 'proj_1', 'name' => '示例项目', 'brandName' => '示例品牌']]),
+            self::BASE.'/api/v1/dashboard/overview*' => Http::response([
+                'totalAnswers' => 12, 'mentionRate' => 41.7, 'recommendRate' => 25, 'positiveRate' => 66.7, 'geoScore' => 55.2,
+                'trendData' => [['date' => '09-19', 'mentionRate' => 40, 'recommendRate' => 20, 'total' => 6]],
+                'platformPerformance' => [['platformId' => 'deepseek', 'platform' => 'DeepSeek', 'mentionRate' => 50, 'totalCount' => 6]],
+            ]),
+            self::BASE.'/api/v1/detections*' => Http::response(['items' => [['id' => 'task_1', 'status' => 'completed', 'createdAt' => '2026-09-20T10:00:00+08:00', 'totalAnswers' => 6, 'mentionRate' => 50]], 'total' => 1]),
+            self::BASE.'/api/v1/reports*' => Http::response(['items' => [['id' => 'report_task_1', 'title' => '示例报告', 'createdAt' => '2026-09-20T10:01:00+08:00', 'geoScore' => 55.2, 'geoScoreStatus' => 'final', 'metrics' => ['total' => 6, 'mentionRate' => 50, 'recommendRate' => 33]]], 'total' => 1]),
+            self::BASE.'/api/v1/me' => Http::response(['plan' => ['name' => '专业版'], 'quota' => ['monthlyDetectionsUsed' => 3, 'monthlyDetectionsTotal' => 300, 'pointsBalance' => 1200]]),
+        ]);
+
+        $this->withToken($this->admin()->createToken('visibility', ['analytics:read'])->plainTextToken)
+            ->getJson('/api/v1/analytics/ai-visibility?ai_preset=30d')
+            ->assertOk()
+            ->assertJsonPath('data.overview.connected', true)
+            ->assertJsonPath('data.overview.kpis.mention_rate', 41.7)
+            ->assertJsonPath('data.overview.kpis.sampled_answers', 12)
+            ->assertJsonPath('data.overview.project.id', 'proj_1')
+            ->assertJsonPath('data.overview.detections.0.id', 'task_1')
+            ->assertJsonPath('data.overview.reports.0.title', '示例报告')
+            ->assertJsonPath('data.overview.plan_name', '专业版');
+    }
+
+    public function test_visibility_zero_samples_are_null_not_zero(): void
+    {
+        $this->fakeSessionToken();
+        $this->connect('jd-visibility-zero');
+
+        // 零样本口径：见度在 totalAnswers=0 时比率返回字面的 0——映射层必须翻成 null
+        //（「没测出来」不是「测出来是 0」，前端显示「—」）。
+        Http::fake([
+            self::BASE.'/api/v1/projects' => Http::response([['id' => 'proj_1', 'name' => '示例项目']]),
+            self::BASE.'/api/v1/dashboard/overview*' => Http::response(['totalAnswers' => 0, 'mentionRate' => 0, 'recommendRate' => 0, 'positiveRate' => 0, 'geoScore' => 0, 'trendData' => [], 'platformPerformance' => []]),
+            self::BASE.'/api/v1/detections*' => Http::response(['items' => []]),
+            self::BASE.'/api/v1/reports*' => Http::response(['items' => []]),
+            self::BASE.'/api/v1/me' => Http::response(['quota' => []]),
+        ]);
+
+        $this->withToken($this->admin()->createToken('visibility-zero', ['analytics:read'])->plainTextToken)
+            ->getJson('/api/v1/analytics/ai-visibility')
+            ->assertOk()
+            ->assertJsonPath('data.overview.kpis.mention_rate', null)
+            ->assertJsonPath('data.overview.kpis.sampled_answers', 0);
+    }
+
+    public function test_daily_detection_command_submits_only_active_questions(): void
+    {
+        $this->fakeSessionToken();
+        $this->connect('jd-daily-connect');
+
+        JianduQuestion::query()->create(['question' => '甲问题', 'is_active' => true, 'sort_order' => 1]);
+        JianduQuestion::query()->create(['question' => '乙问题', 'is_active' => false, 'sort_order' => 2]);
+
+        Http::fake([
+            self::BASE.'/api/v1/projects' => Http::response([['id' => 'proj_1', 'name' => '示例项目']]),
+            self::BASE.'/api/v1/detections' => Http::response(['id' => 'task_daily_1', 'status' => 'queued', 'totalJobs' => 2], 201),
+        ]);
+
+        $this->artisan('geoflow:jiandu-daily-detection')->assertSuccessful();
+        Http::assertSent(fn (ClientRequest $request): bool => $request->url() === self::BASE.'/api/v1/detections'
+            && $request['projectId'] === 'proj_1'
+            && $request['questions'] === ['甲问题']);
+
+        $settings = JianduDetectionSetting::current();
+        $this->assertStringStartsWith('submitted:task_daily_1', (string) $settings->last_run_status);
+    }
+
+    public function test_questions_and_detection_settings_crud(): void
+    {
+        // 新建（顺带验证 trim）
+        $first = $this->withHeaders($this->writeHeaders('jd-q-1'))
+            ->postJson('/api/v1/jiandu/questions', ['question' => ' 甲问题 '])
+            ->assertCreated()
+            ->json('data.item');
+        $second = $this->withHeaders($this->writeHeaders('jd-q-2'))
+            ->postJson('/api/v1/jiandu/questions', ['question' => '乙问题'])
+            ->assertCreated()
+            ->json('data.item');
+
+        $this->withHeaders($this->readHeaders())->getJson('/api/v1/jiandu/questions')
+            ->assertOk()
+            ->assertJsonPath('data.total', 2)
+            ->assertJsonPath('data.items.0.question', '甲问题');
+
+        // 停用第二条（每日检测只跑 is_active 的）
+        $this->withHeaders($this->writeHeaders('jd-q-3'))
+            ->patchJson('/api/v1/jiandu/questions/'.$second['id'], ['is_active' => false])
+            ->assertOk()
+            ->assertJsonPath('data.item.is_active', false);
+
+        // 每日设置：平台入口 + 开关
+        $this->withHeaders($this->writeHeaders('jd-s-1'))
+            ->putJson('/api/v1/jiandu/detection-settings', ['platforms' => ['deepseek', 'doubao'], 'enabled' => false])
+            ->assertOk()
+            ->assertJsonPath('data.settings.platforms', ['deepseek', 'doubao'])
+            ->assertJsonPath('data.settings.enabled', false);
+
+        // 未知平台一律 422（白名单在服务端）
+        $this->withHeaders($this->writeHeaders('jd-s-2'))
+            ->putJson('/api/v1/jiandu/detection-settings', ['platforms' => ['nope']])
+            ->assertStatus(422);
+
+        // 删除
+        $this->withHeaders($this->writeHeaders('jd-q-4'))
+            ->deleteJson('/api/v1/jiandu/questions/'.$first['id'])
+            ->assertOk();
+        $this->withHeaders($this->readHeaders())->getJson('/api/v1/jiandu/questions')
+            ->assertOk()
+            ->assertJsonPath('data.total', 1);
     }
 
     // ---------------------------------------------------------------- helpers

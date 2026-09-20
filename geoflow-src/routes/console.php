@@ -113,6 +113,15 @@ Schedule::command('geoflow:schedule-tasks')
     ->onOneServer()
     ->withoutOverlapping(10);
 
+/**
+ * 见度GEO 每日自动检测：把后台维护的问题集交给见度跑一遍（额度由见度套餐约束）。
+ * 凌晨跑——早上上班就能看到新数据。
+ */
+Schedule::command('geoflow:jiandu-daily-detection')
+    ->dailyAt('01:10')
+    ->onOneServer()
+    ->withoutOverlapping(30);
+
 Schedule::command('geoflow:recover-knowledge-syncs')
     ->everyFiveMinutes()
     ->onOneServer()

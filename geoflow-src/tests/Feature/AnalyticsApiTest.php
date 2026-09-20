@@ -87,7 +87,10 @@ class AnalyticsApiTest extends TestCase
             ->getJson('/api/v1/analytics/ai-visibility?preset=7d')
             ->assertOk()
             ->assertJsonPath('data.source.estimated', false)
-            ->assertJsonStructure(['data' => ['range', 'source', 'overview' => ['ready', 'configured', 'kpis', 'trend', 'keywords', 'sources']]]);
+            // AI 可见度栏目已切换为见度数据（2026-09-20 拍板「替换」）：未连接见度时
+            // 返回引导态，旧的自研采集投影（kpis/keywords/sources）不再出现。
+            ->assertJsonStructure(['data' => ['range', 'source', 'overview' => ['ready', 'configured', 'connected', 'system']]])
+            ->assertJsonPath('data.overview.connected', false);
 
         // 分发数据是**经营数据**：普通管理员读不到（与旧后台 `admin.super` 一致）。
         $this->withHeaders($headers)
@@ -206,26 +209,14 @@ class AnalyticsApiTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.kpis.distribution_failed', 0);
 
-        // ai_keyword 是精确匹配（`where('keyword', ...)`，不是模糊搜索）。
-        $unfiltered = $this->withHeaders($headers)
+        // AI 可见度已切换为见度数据（2026-09-20 拍板「替换」）：未连接见度时返回
+        // 引导态；旧的 ai_keyword 精确筛选随自研采集一起退役（不再读 ai_visibility_runs）。
+        $this->withHeaders($headers)
             ->getJson('/api/v1/analytics/ai-visibility?ai_preset=30d')
-            ->assertOk();
-        $this->assertEqualsCanonicalizing(
-            ['筛选用甲关键词', '筛选用乙关键词'],
-            array_column($unfiltered->json('data.overview.keywords'), 'keyword'),
-        );
-
-        $this->withHeaders($headers)
-            ->getJson('/api/v1/analytics/ai-visibility?ai_preset=30d&ai_keyword='.rawurlencode('筛选用甲关键词'))
             ->assertOk()
-            ->assertJsonCount(1, 'data.overview.keywords')
-            ->assertJsonPath('data.overview.keywords.0.keyword', '筛选用甲关键词');
-
-        // 精确匹配的负面样本：只差一个字也必须筛空，否则说明后端退回了模糊匹配。
-        $this->withHeaders($headers)
-            ->getJson('/api/v1/analytics/ai-visibility?ai_preset=30d&ai_keyword='.rawurlencode('筛选用甲'))
-            ->assertOk()
-            ->assertJsonCount(0, 'data.overview.keywords');
+            ->assertJsonPath('data.source.kind', 'jiandu_api')
+            ->assertJsonPath('data.overview.connected', false)
+            ->assertJsonPath('data.overview.system', '见度GEO');
     }
 
     private function article(Author $author, Category $category, Task $task, string $title, string $slug): Article
