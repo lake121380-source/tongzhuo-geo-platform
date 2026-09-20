@@ -149,6 +149,7 @@ export interface Task {
   autoKeywords?: boolean;
   autoDescription?: boolean;
   aiQualityEnabled?: boolean;
+  aiQualityPromptId?: number;
   /**
    * 后端给质检配置做的乐观并发版本号（投影里的 `config_version`）。
    * **改任何一个质检字段时必须原样回传**，否则服务端按 409 拒绝——

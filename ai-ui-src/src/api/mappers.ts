@@ -456,6 +456,7 @@ export function mapTask(item: ApiRecord): Task {
     autoKeywords: booleanValue(item, 'auto_keywords'),
     autoDescription: booleanValue(item, 'auto_description'),
     aiQualityEnabled: booleanValue(item, 'ai_quality_enabled'),
+    aiQualityPromptId: numberValue(item, 'ai_quality_prompt_id') || undefined,
     // 改质检字段时后端要求回传这个版本号（乐观并发）。列表与详情投影都给了它，
     // 只是以前没人读——于是保存任务必然 409「请提供当前任务 AI 质检配置版本」。
     aiQualityConfigVersion: numberValue(item, 'config_version', 'ai_quality_config_version') || undefined,

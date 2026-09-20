@@ -26,21 +26,94 @@ class ArticleAiQualityPolicyResolver
     public function resolve(Article $article): array
     {
         $snapshot = is_array($article->ai_quality_policy_snapshot) ? $article->ai_quality_policy_snapshot : [];
-        $required = (bool) $article->ai_quality_required_at_creation;
         $task = $this->taskForArticle($article);
 
         if ($task instanceof Task && ! $task->trashed()) {
             $taskPolicy = $this->fromTask($task, $article);
-            if (($taskPolicy['required'] ?? false) || ! (bool) $article->ai_quality_required_at_creation) {
+
+            // 任务显式开了质检 → 用任务自己的策略（含它配置的模型/提示词/阈值）。
+            if ($taskPolicy['required'] ?? false) {
                 return $taskPolicy;
             }
+
+            /*
+             * 任务没开质检时，**不再按「文章创建时也不需要质检」直接放行**。
+             *
+             * 原实现在这里 `return $taskPolicy`（required=false），等于宣布「凡是不开质检的任务，
+             * 产出的文章一律不受质检门禁约束」；而建任务表单里这个开关长期是硬编码 false、
+             * 界面上也没有可选项，于是所有文章都能未质检直接审核通过并发布
+             * （2026-09-20 线上实测：从未质检的草稿一路发到已发布）。
+             *
+             * 现在回落到「任务兜底策略」：**仍然要求质检**，配置优先沿用任务可用的项，
+             * 缺失时用系统默认质检提示词与可用 chat 模型补齐——这样「从未质检」的文章会在
+             * 发布时被拦下并自动排队质检，而不是被放过。
+             */
+            return $this->fromTaskQualityBaseline($task, $article);
         }
 
-        if (! $required) {
-            return ['required' => false, 'source' => 'article_snapshot'];
-        }
-
+        // 没有任务的文章（手动新建、任务已删）：同样要求质检，配置取文章自身的策略快照。
         return $this->fromIndependentArticle($article, $snapshot);
+    }
+
+    /**
+     * 任务没开质检时的兜底策略：required 恒为 true，配置按「任务可用的 → 系统默认」顺序补全。
+     *
+     * 存在的理由见 resolve() 里的说明。补全这一步不能省：只把 required 改成 true 而不给
+     * prompt/model，assertExecutable() 会直接抛「配置不可用」，等于把文章从「能随便发」
+     * 换成「谁也发不了」。
+     *
+     * @return array<string, mixed>
+     */
+    private function fromTaskQualityBaseline(Task $task, Article $article): array
+    {
+        $current = $this->fromIndependentArticle(
+            $article,
+            is_array($article->ai_quality_policy_snapshot) ? $article->ai_quality_policy_snapshot : [],
+        );
+        $current['source'] = 'task_quality_baseline';
+        $current['task'] = $task;
+        $current['manual_review_required'] = (bool) $task->need_review;
+
+        $prompt = $task->qualityPrompt;
+        if (! $prompt instanceof Prompt || (string) $prompt->type !== 'quality_check') {
+            $prompt = Prompt::query()
+                ->where('system_key', self::DEFAULT_PROMPT_SYSTEM_KEY)
+                ->where('type', 'quality_check')
+                ->first();
+        }
+        if ($prompt instanceof Prompt) {
+            $current['prompt'] = $prompt;
+        }
+
+        $model = collect([$task->qualityModel, $task->aiModel])
+            ->first(fn (mixed $candidate): bool => $candidate instanceof AiModel
+                && (string) $candidate->status === 'active'
+                && $this->isChatModel($candidate));
+        if (! $model instanceof AiModel) {
+            $model = AiModel::query()
+                ->where('status', 'active')
+                ->where(function ($query): void {
+                    $query->whereNull('model_type')
+                        ->orWhere('model_type', '')
+                        ->orWhere('model_type', 'chat');
+                })
+                ->orderBy('failover_priority')
+                ->orderBy('id')
+                ->first();
+        }
+        if ($model instanceof AiModel) {
+            $current['model'] = $model;
+        }
+
+        $knowledgeBaseIds = $task->knowledgeBases->pluck('id')->map('intval')->all();
+        if ((int) $task->knowledge_base_id > 0) {
+            $knowledgeBaseIds[] = (int) $task->knowledge_base_id;
+        }
+        if ($knowledgeBaseIds !== []) {
+            $current['knowledge_base_ids'] = array_values(array_unique($knowledgeBaseIds));
+        }
+
+        return $current;
     }
 
     /** @return array<string, mixed> */

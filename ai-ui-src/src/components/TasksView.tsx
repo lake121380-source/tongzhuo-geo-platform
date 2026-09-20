@@ -41,6 +41,7 @@ interface TasksViewProps {
     categories: Array<{ id: string | number; name: string }>;
     authors: Array<{ id: string | number; name: string }>;
     knowledgeBases: Array<{ id: string | number; name: string }>;
+    qualityPrompts: Array<{ id: string | number; name: string }>;
   };
 }
 
@@ -90,6 +91,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [categoryId, setCategoryId] = useState('');
   const [authorId, setAuthorId] = useState('');
   const [knowledgeBaseId, setKnowledgeBaseId] = useState('');
+  /** AI 质检开关，默认开启。关掉它意味着这条任务产出的文章不受质检门禁约束
+   *  （后端 ArticleAiQualityPolicyResolver 按 required 短路），所以界面上必须能看见、能选。 */
+  const [qualityEnabled, setQualityEnabled] = useState(true);
+  const [aiQualityPromptId, setAiQualityPromptId] = useState('');
   const [taskStatus, setTaskStatus] = useState<'active' | 'paused'>('paused');
   const [publishScope, setPublishScope] = useState('local_only');
   const [needReview, setNeedReview] = useState(true);
@@ -299,6 +304,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
     setCategoryId('');
     setAuthorId('');
     setKnowledgeBaseId('');
+    setQualityEnabled(true);
+    setAiQualityPromptId(apiMode && apiCatalog?.qualityPrompts?.[0]
+      ? String(apiCatalog.qualityPrompts[0].id)
+      : '');
     setTaskStatus('paused');
     setPublishScope('local_only');
     setNeedReview(true);
@@ -327,6 +336,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
     setCategoryId(task.apiCategoryId ? String(task.apiCategoryId) : '');
     setAuthorId(task.authorId ? String(task.authorId) : '');
     setKnowledgeBaseId(task.knowledgeBaseIds?.[0] ? String(task.knowledgeBaseIds[0]) : '');
+    setQualityEnabled(task.aiQualityEnabled !== false);
+    setAiQualityPromptId(task.aiQualityPromptId ? String(task.aiQualityPromptId) : '');
     setTaskStatus(task.rawStatus === 'active' || task.status === 'running' ? 'active' : 'paused');
     setPublishScope(task.publishScope || (task.distributionScope === 'channels_only'
       ? 'distribution_only'
@@ -561,7 +572,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
             publish_scope: 'local_only',
             category_mode: categoryId ? 'fixed' : 'smart',
             need_review: true,
-            ai_quality_enabled: false,
+            // 质检默认开启：关掉它意味着这条任务产出的文章完全不受质检门禁约束
+            // （后端按 required 短路，等于可以未质检直接发布）。
+            ai_quality_enabled: qualityEnabled,
+            ...(qualityEnabled && aiQualityPromptId ? { ai_quality_prompt_id: Number(aiQualityPromptId) } : {}),
             is_loop: isLoop,
           });
         }
@@ -1151,6 +1165,42 @@ export const TasksView: React.FC<TasksViewProps> = ({
                     </select>
                   </div>
                 </>
+              )}
+
+              {apiMode && (
+                <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+                  <label className="flex items-start gap-2 text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={qualityEnabled}
+                      onChange={(e) => setQualityEnabled(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>
+                      {lang === 'zh' ? '发布前做 AI 质检（推荐）' : 'Run AI quality check before publishing'}
+                      {!qualityEnabled && (
+                        <span className="ml-1 text-amber-300">
+                          {lang === 'zh' ? '关掉后这条任务产出的文章不受质检门禁约束' : 'Off means its articles bypass the quality gate'}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                  {qualityEnabled && (
+                    <label className="block text-xs text-slate-400">
+                      {lang === 'zh' ? '质检方案' : 'Quality prompt'}
+                      <select
+                        value={aiQualityPromptId}
+                        onChange={(e) => setAiQualityPromptId(e.target.value)}
+                        className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-800 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
+                      >
+                        <option value="">{lang === 'zh' ? '使用系统默认质检方案' : 'Use the default quality prompt'}</option>
+                        {(apiCatalog?.qualityPrompts || []).map((item) => (
+                          <option key={item.id} value={String(item.id)}>{item.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                </div>
               )}
 
               <div className="grid grid-cols-2 gap-3">

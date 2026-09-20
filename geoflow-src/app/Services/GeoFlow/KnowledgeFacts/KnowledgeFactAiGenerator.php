@@ -114,7 +114,7 @@ class KnowledgeFactAiGenerator
             $response = (new KnowledgeFactGeneratorAgent)->prompt($prompt, [], $provider, (string) $invocationModel->model_id, 150);
             $providerReturned = true;
             $responseUsage = $response->usage ?? null;
-            $facts = is_array($response->structured['facts'] ?? null) ? array_slice($response->structured['facts'], 0, $count) : [];
+            $facts = array_slice($this->extractFacts($response), 0, $count);
             $allowed = array_column($evidence, 'evidence_key');
             $facts = array_values(array_filter(array_map(fn (mixed $fact): ?array => $this->normalizeCandidate($fact, $allowed), $facts)));
             DB::transaction(function () use ($invocationModel, $executionContext, $reservation, $configurationFingerprint): void {
@@ -182,6 +182,42 @@ class KnowledgeFactAiGenerator
             $usageAttempt?->discarded('knowledge_fact_result_not_committed', $responseUsage);
             $this->invocationLocks->release($invocationLock);
         }
+    }
+
+    /**
+     * 从模型响应里取出 facts 数组。
+     *
+     * 两条路都要走：provider 原生支持结构化输出时（OpenAI/Gemini 等）结果在 `$response->structured`；
+     * 而 DeepSeek 这类 OpenAI 兼容 provider **不支持 `json_schema`**，agent 已改成用提示词描述结构
+     * （见 KnowledgeFactGeneratorAgent 的说明），此时结果在**纯文本里的 JSON**。
+     *
+     * @return list<mixed>
+     */
+    private function extractFacts(object $response): array
+    {
+        $structured = is_array($response->structured ?? null)
+            ? ($response->structured['facts'] ?? null)
+            : null;
+        if (is_array($structured)) {
+            return array_values($structured);
+        }
+
+        $text = trim((string) ($response->text ?? ''));
+        if ($text === '') {
+            return [];
+        }
+        // 模型偶尔会把 JSON 包在 ```json 围栏里或带一句说明——取第一个 { 到最后一个 } 的区间。
+        $start = strpos($text, '{');
+        $end = strrpos($text, '}');
+        if ($start === false || $end === false || $end <= $start) {
+            return [];
+        }
+        $decoded = json_decode(substr($text, $start, $end - $start + 1), true);
+        if (! is_array($decoded) || ! is_array($decoded['facts'] ?? null)) {
+            return [];
+        }
+
+        return array_values($decoded['facts']);
     }
 
     private function currentModelForInvocation(
