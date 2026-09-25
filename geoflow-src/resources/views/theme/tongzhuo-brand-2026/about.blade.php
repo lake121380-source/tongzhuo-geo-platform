@@ -34,40 +34,42 @@
 
     <div class="tz-container tz-section">
         <div class="tz-prose">
-            <p>
-                客户现在越来越多先问 AI，而不是先翻搜索引擎。如果 AI 答不上来你，
-                或者把你答错了，生意就在这一步丢掉了——而这一步，多数企业自己看不见，
-                也没法验证。
-            </p>
-            <p>
-                我们做的事就是把这件事变成可控的：把企业的业务资料、行业经验和真实案例，
-                整理成 AI 能读懂、能引用、也能追溯来源的信源，再持续地把它发布出去。
-                客户在 AI 那边问到相关问题的时候，能被找到、被准确地说起。
-            </p>
-            <p>
-                这件事没有捷径，也不靠堆量。它靠的是资料本身是不是完整、可核验，
-                以及内容是不是真的在回答客户的问题——所以我们的每一个交付物，
-                都能说清楚它出自哪份资料、依据哪条规则、由谁放行。
-            </p>
-
-            <h2>我们提供的服务</h2>
-            @if($tzCompany?->hasServices())
-                <ul>
-                    @foreach($tzCompany->services as $tzService)
-                        <li>
-                            <strong>{{ $tzService['title'] }}</strong>@if(trim((string) ($tzService['description'] ?? '')) !== '')：{{ $tzService['description'] }}@endif
-                        </li>
-                    @endforeach
-                </ul>
+            @if(!empty($aboutBodyParts))
+                {{--
+                    后台「站点与品牌设置 → 关于页正文」配了内容：按 Markdown 渲染，
+                    `{{services}}`（单独一行）处插入服务清单块——见 SiteSettingsController 的字段说明。
+                --}}
+                {!! $aboutBodyParts[0] !!}
+                @if(count($aboutBodyParts) > 1)
+                    @include('theme.tongzhuo-brand-2026.partials.about-services', ['servicesTitle' => $servicesTitle ?? '', 'companyProfile' => $tzCompany])
+                    {!! implode('', array_slice($aboutBodyParts, 1)) !!}
+                @endif
             @else
-                <p><a href="{{ route('site.services') }}">查看服务清单</a></p>
-            @endif
+                {{-- 没配置：内置默认文案（2026-09-18 定稿），保证全新安装不出现空白页。 --}}
+                <p>
+                    客户现在越来越多先问 AI，而不是先翻搜索引擎。如果 AI 答不上来你，
+                    或者把你答错了，生意就在这一步丢掉了——而这一步，多数企业自己看不见，
+                    也没法验证。
+                </p>
+                <p>
+                    我们做的事就是把这件事变成可控的：把企业的业务资料、行业经验和真实案例，
+                    整理成 AI 能读懂、能引用、也能追溯来源的信源，再持续地把它发布出去。
+                    客户在 AI 那边问到相关问题的时候，能被找到、被准确地说起。
+                </p>
+                <p>
+                    这件事没有捷径，也不靠堆量。它靠的是资料本身是不是完整、可核验，
+                    以及内容是不是真的在回答客户的问题——所以我们的每一个交付物，
+                    都能说清楚它出自哪份资料、依据哪条规则、由谁放行。
+                </p>
 
-            <h2>怎么开始</h2>
-            <p>
-                先聊一次你的业务和现在的线上表现，我们会说清楚哪一部分现在就能做、
-                哪一部分没把握——没把握的不会接。
-            </p>
+                @include('theme.tongzhuo-brand-2026.partials.about-services', ['servicesTitle' => $servicesTitle ?? '', 'companyProfile' => $tzCompany])
+
+                <h2>怎么开始</h2>
+                <p>
+                    先聊一次你的业务和现在的线上表现，我们会说清楚哪一部分现在就能做、
+                    哪一部分没把握——没把握的不会接。
+                </p>
+            @endif
         </div>
     </div>
 

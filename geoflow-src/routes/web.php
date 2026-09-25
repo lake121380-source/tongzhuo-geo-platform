@@ -9,6 +9,7 @@
 
 use App\Http\Controllers\Site\AboutController;
 use App\Http\Controllers\Site\ArchiveController;
+use App\Http\Controllers\Site\ContactController;
 use App\Http\Controllers\Site\ArticleController as SiteArticleController;
 use App\Http\Controllers\Site\CategoryController as SiteCategoryController;
 use App\Http\Controllers\Site\HomeController;
@@ -38,6 +39,8 @@ Route::middleware(['site.locale', 'site.view_log'])->group(function (): void {
     Route::get('/about', [AboutController::class, 'index'])->name('site.about');
     // 服务页：官网首页的服务卡片要有点得进去的地方（2026-09-16 新增）。
     Route::get('/services', [SiteServiceController::class, 'index'])->name('site.services');
+    // 联系我们（2026-09-25 新增）：联系信息 + 在线留言入口，联系方式不再只埋在页脚。
+    Route::get('/contact', [ContactController::class, 'index'])->name('site.contact');
     Route::get('/robots.txt', [SiteDiscoveryController::class, 'robots'])->name('site.robots');
     Route::get('/sitemap.xml', [SiteDiscoveryController::class, 'sitemap'])->name('site.sitemap');
     Route::get('/llms.txt', [SiteDiscoveryController::class, 'llms'])->name('site.llms');

@@ -13,17 +13,16 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 /**
- * 服务页。
+ * 联系我们（2026-09-25 新增，哥哥要求）。
  *
- * 2026-09-16 新增。此前系统只有「文章 / 分类 / 归档 / 关于 / 表单」这几类页面，
- * 官网首页把「我们提供哪些服务」讲完，**服务卡片却没有地方可点**——一个获客官网
- * 给出了服务清单，却不给任何详情入口。这一页用 CompanyProfile 的服务清单渲染，
- * 与首页服务卡片、Organization 结构化数据、llms.txt **同源**（同一份数据，第四个出口）。
+ * 此前联系方式只埋在页脚——对一个获客官网来说，独立联系页对转化和 SEO 都更好，
+ * 而且能挂上已经建好的「线索表单」当在线留言入口。
  *
- * 没有配置服务时返回 404，而不是渲染一个空壳页面——导航里的「服务」入口也是按同样的
- * 条件显示的（见 SiteLayoutComposer）。
+ * 页面内容全部来自站点设置里那份「公司实体」（与首页 / 关于页 / 结构化数据 /
+ * llms.txt 同源，见 CompanyProfile）——**运营改联系方式只需要改一处**。
+ * 有启用中的线索表单时给「在线留言」按钮；没有就退回邮箱按钮，不渲染死链。
  */
-class ServiceController extends Controller
+class ContactController extends Controller
 {
     public function __construct(
         private readonly SiteUrlGenerator $urls,
@@ -35,22 +34,13 @@ class ServiceController extends Controller
         $map = SiteSettingsBag::all();
         $company = CompanyProfile::fromSettings($map);
 
-        abort_unless($company->hasServices(), 404);
-
         $siteTitle = (string) ($map['site_name'] ?? config('geoflow.site_name', config('app.name')));
         $siteDescription = (string) ($map['site_description'] ?? '');
-        $pageTitle = '服务 - '.$siteTitle;
         $pageDescription = $company->tagline !== ''
             ? $company->tagline
-            : ($company->description !== '' ? $company->description : $siteDescription);
+            : ($company->description !== '' ? $company->description : ($siteDescription !== '' ? $siteDescription : '联系 '.$siteTitle));
 
-        // 服务页大标题可配（2026-09-25）；默认保持原来的「我们提供的服务」。
-        $servicesTitle = trim((string) ($map['company_services_title'] ?? ''));
-        if ($servicesTitle === '') {
-            $servicesTitle = '我们提供的服务';
-        }
-
-        // 转化目标：与首页 CTA 用同一条判定（有可用表单就指向表单）。
+        // 转化目标：与首页 CTA / 服务页同一条判定（有可用表单就指向表单）。
         $contactFormUrl = '';
         if (Schema::hasTable('lead_forms')) {
             $slug = LeadForm::query()
@@ -62,22 +52,20 @@ class ServiceController extends Controller
             }
         }
 
-        return SiteThemeViewResolver::first('services', [
-            'activeNav' => 'services',
+        return SiteThemeViewResolver::first('contact', [
+            'activeNav' => 'contact',
             'siteTitle' => $siteTitle,
             'siteDescription' => $siteDescription,
             'siteKeywords' => (string) ($map['site_keywords'] ?? ''),
-            'pageTitle' => $pageTitle,
+            'pageTitle' => '联系我们 - '.$siteTitle,
             'pageDescription' => $pageDescription,
             'pageKeywords' => (string) ($map['site_keywords'] ?? ''),
             'pageOgType' => 'website',
-            'canonicalUrl' => $this->urls->services(),
+            'canonicalUrl' => $this->urls->contact(),
             // 子视图的 @section 作用域拿不到布局 composer 注入的变量，这里显式传。
             'companyProfile' => $company,
-            'companyServices' => $company->services,
-            'servicesTitle' => $servicesTitle,
             'contactFormUrl' => $contactFormUrl,
-            'isHostedServices' => $this->currentSite->isHosted(),
+            'isHostedContact' => $this->currentSite->isHosted(),
         ]);
     }
 }

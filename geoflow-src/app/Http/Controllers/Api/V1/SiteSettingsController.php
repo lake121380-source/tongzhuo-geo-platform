@@ -60,6 +60,15 @@ final class SiteSettingsController extends BaseApiController
             'contact_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'company_address' => ['sometimes', 'nullable', 'string', 'max:255'],
             'company_founded' => ['sometimes', 'nullable', 'string', 'max:20'],
+            /*
+             * 关于页与服务页的正文（2026-09-25 新增，哥哥报「这两页内容后台找不到改的地方」）。
+             * `about_content` 用 Markdown；需要插入服务清单的位置单独一行写 `{{services}}`
+             * （不写就不显示清单）。主站从 site_settings 读这两个键；托管站的同名键
+             * 存在各自 channel 配置里（见 SiteSettingsBag::hosted）——两套存储互不影响。
+             */
+            'about_title' => ['sometimes', 'nullable', 'string', 'max:160'],
+            'about_content' => ['sometimes', 'nullable', 'string', 'max:20000'],
+            'company_services_title' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
         if (array_key_exists('analytics_code', $payload) && ! $admin->isSuperAdmin()) {
             throw new ApiException('forbidden', '只有超级管理员可以修改统计代码', 403, [
@@ -190,6 +199,8 @@ final class SiteSettingsController extends BaseApiController
             // 公司实体（人看的页面 / 结构化数据 / llms.txt 共用的那份事实）
             'company_legal_name' => '', 'company_tagline' => '', 'company_services' => '',
             'contact_email' => '', 'contact_phone' => '', 'company_address' => '', 'company_founded' => '',
+            // 关于页 / 服务页正文（Markdown；空 = 模板走内置默认文案）
+            'about_title' => '', 'about_content' => '', 'company_services_title' => '',
         ];
         $stored = SiteSetting::query()->whereIn('setting_key', array_keys($defaults))->pluck('setting_value', 'setting_key')->all();
         foreach ($defaults as $key => $default) {

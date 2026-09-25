@@ -11,13 +11,14 @@
      *
      * 导航没有移动端汉堡菜单，靠折行。站点常年只有 4–6 个短项，
      * 折行的可用性和健壮性都优于一个需要 JS 的抽屉。
-     * 顺序：首页 · 服务 · 分类… · 关于我们（2026-09-18 定）。分类最多 5 个。
+     * 顺序：首页 · 服务 · 分类… · 关于我们 · 联系我们（2026-09-25 加联系我们）。分类最多 5 个。
      */
     $tzActiveCategory = request()->routeIs('site.category') ? (string) request()->route('slug') : '';
     $tzHome = !request()->routeIs('site.category')
         && !request()->routeIs('site.article')
         && !request()->routeIs('site.services')
         && !request()->routeIs('site.about')
+        && !request()->routeIs('site.contact')
         && !request()->routeIs('site.archive');
 @endphp
 <div class="tz-topbar">
@@ -61,6 +62,8 @@
             @endforeach
 
             <a href="{{ route('site.about') }}" data-nav-item="about" class="{{ request()->routeIs('site.about') ? 'is-active' : '' }}">关于我们</a>
+
+            <a href="{{ route('site.contact') }}" data-nav-item="contact" class="{{ request()->routeIs('site.contact') ? 'is-active' : '' }}">联系我们</a>
         </nav>
 
         <div class="tz-header-cta">

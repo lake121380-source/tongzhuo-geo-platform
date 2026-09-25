@@ -42,7 +42,7 @@ export default function SiteSettingsPanel({ apiClient, lang, canRead, canWrite, 
   const [settings, setSettings] = useState<ApiRecord>({});
   const [themes, setThemes] = useState<ApiRecord[]>([]);
   const [homepage, setHomepage] = useState<ApiRecord>({ style: {}, modules: [], presets: [] });
-  const [draft, setDraft] = useState({ site_name: '', site_subtitle: '', site_description: '', site_keywords: '', copyright_info: '', filing_info: '', filing_url: '', site_logo: '', site_favicon: '', seo_title_template: '', seo_description_template: '', featured_limit: '6', per_page: '12', analytics_code: '', company_legal_name: '', company_tagline: '', company_services: '', contact_email: '', contact_phone: '', company_address: '', company_founded: '' });
+  const [draft, setDraft] = useState({ site_name: '', site_subtitle: '', site_description: '', site_keywords: '', copyright_info: '', filing_info: '', filing_url: '', site_logo: '', site_favicon: '', seo_title_template: '', seo_description_template: '', featured_limit: '6', per_page: '12', analytics_code: '', company_legal_name: '', company_tagline: '', company_services: '', company_services_title: '', contact_email: '', contact_phone: '', company_address: '', company_founded: '', about_title: '', about_content: '' });
   const [carousel, setCarousel] = useState<CarouselSlide[]>([]);
   const [theme, setTheme] = useState('');
   const [homepageJson, setHomepageJson] = useState('{\n  "style": {},\n  "modules": []\n}');
@@ -232,6 +232,45 @@ export default function SiteSettingsPanel({ apiClient, lang, canRead, canWrite, 
             onChange={(event) => setDraft((current) => ({ ...current, company_services: event.target.value }))}
             placeholder={zh ? 'GEO 优化|让企业信息能被搜索引擎与 AI 准确理解并引用' : 'GEO optimization|Make your business citable by search and AI'}
             className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-white disabled:opacity-50"
+          />
+        </label>
+      </div>
+      <div className="border-t border-slate-800 pt-4">
+        <h3 className="text-xs font-bold text-white">{zh ? '关于页与服务页' : 'About & services pages'}</h3>
+        <p className="mt-1 text-[11px] text-slate-500">
+          {zh
+            ? '这两页的正文此前写死在模板里（改一句话要动代码），现在收在这里。正文用 Markdown；单独一行写 {{services}} 表示「服务清单插在这里」，不写就不显示清单；全部留空则回落到系统内置文案。'
+            : 'These pages used to be hard-coded. Body uses Markdown; a lone {{services}} line inserts the service list; leaving everything empty falls back to the built-in copy.'}
+        </p>
+        <label className="mt-3 block text-xs text-slate-400">
+          {zh ? '关于页标题（留空显示「关于 站点名」）' : 'About page title'}
+          <input
+            value={draft.about_title}
+            disabled={!canWrite}
+            onChange={(event) => setDraft((current) => ({ ...current, about_title: event.target.value }))}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50"
+            placeholder={zh ? '关于 桐灼GEO' : 'About'}
+          />
+        </label>
+        <label className="mt-3 block text-xs text-slate-400">
+          {zh ? '关于页正文（Markdown）' : 'About page body (Markdown)'}
+          <textarea
+            rows={10}
+            value={draft.about_content}
+            disabled={!canWrite}
+            onChange={(event) => setDraft((current) => ({ ...current, about_content: event.target.value }))}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-white disabled:opacity-50"
+            placeholder={zh ? '## 我们是谁\n\n……\n\n{{services}}\n\n## 怎么开始\n\n……' : '## Who we are'}
+          />
+        </label>
+        <label className="mt-3 block text-xs text-slate-400">
+          {zh ? '服务页标题（留空显示「我们提供的服务」）' : 'Services page title'}
+          <input
+            value={draft.company_services_title}
+            disabled={!canWrite}
+            onChange={(event) => setDraft((current) => ({ ...current, company_services_title: event.target.value }))}
+            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white disabled:opacity-50"
+            placeholder={zh ? '我们提供的服务' : 'Our services'}
           />
         </label>
       </div>

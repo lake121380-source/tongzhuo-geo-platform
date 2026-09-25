@@ -11,8 +11,9 @@
         {{--
             H1 不用 $pageTitle：那是给 <title> 的 SEO 串（「服务 - 桐灼GEO」），
             当可见标题会把品牌名重复一遍（页头刚写过）。<title> 仍由 seo-head 输出。
+            2026-09-25：改成读 `company_services_title`（站点设置可改），默认「我们提供的服务」。
         --}}
-        <h1 class="tz-page-title">我们提供的服务</h1>
+        <h1 class="tz-page-title">{{ $servicesTitle ?? '我们提供的服务' }}</h1>
         @if(trim((string) ($pageDescription ?? '')) !== '')
             <p class="tz-page-lede">{{ $pageDescription }}</p>
         @endif

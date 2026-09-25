@@ -28,6 +28,12 @@ final class SiteUrlGenerator
         return $this->url('/services');
     }
 
+    /** 联系我们（2026-09-25 新增）：联系方式原先只埋在页脚，独立页对转化与 SEO 都更好。 */
+    public function contact(): string
+    {
+        return $this->url('/contact');
+    }
+
     public function category(Category|string $category): string
     {
         $slug = $category instanceof Category ? $category->slug : $category;

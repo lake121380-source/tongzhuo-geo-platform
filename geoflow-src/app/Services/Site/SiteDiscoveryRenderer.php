@@ -169,6 +169,8 @@ final class SiteDiscoveryRenderer
              * `/services` 只在配置了服务清单时才有内容（否则该页 404），所以条件加入。
              */
             $urls[] = ['loc' => $this->urls->about(), 'lastmod' => null];
+            // 联系我们（2026-09-25 新增的静态页），同样是没有 lastmod 语义的固定页。
+            $urls[] = ['loc' => $this->urls->contact(), 'lastmod' => null];
             $urls[] = ['loc' => $this->urls->url('/archive'), 'lastmod' => null];
             if (CompanyProfile::fromSettings(SiteSettingsBag::all())->hasServices()) {
                 $urls[] = ['loc' => $this->urls->services(), 'lastmod' => null];
