@@ -24,11 +24,13 @@ use App\Services\HostedSites\HostedSiteLifecycleService;
 use App\Services\HostedSites\HostedSiteReconciler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class HostedSiteDistributionFlowTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     protected function setUp(): void
     {
@@ -308,6 +310,8 @@ class HostedSiteDistributionFlowTest extends TestCase
 
         $this->travel(30)->minutes();
         $article->update(['content' => 'Updated without changing the publish interval.']);
+        // 改正文会让已通过的质检失效（门禁 fail-closed）→ 重新质检通过后才能再分发。
+        $this->seedPassedQualityCheck($article->fresh());
         $publisher->update($distribution, []);
         $this->assertTrue($profile->fresh()->last_published_at?->equalTo($firstPublishedAt));
 
@@ -610,7 +614,8 @@ class HostedSiteDistributionFlowTest extends TestCase
             ['name' => 'Hosted Flow Author', 'bio' => '', 'avatar' => '', 'website' => '']
         );
 
-        return Article::query()->create([
+        // 发布/分发门禁 fail-closed：任务要配置齐全、文章要有一条通过的质检（2026-09-20 起）。
+        $article = Article::query()->create([
             'title' => 'Hosted '.$suffix,
             'slug' => 'hosted-flow-'.$suffix,
             'content' => 'Hosted content '.$suffix,
@@ -620,5 +625,9 @@ class HostedSiteDistributionFlowTest extends TestCase
             'status' => 'private',
             'review_status' => 'approved',
         ]);
+        $this->makeTaskQualityReady($task);
+        $this->seedPassedQualityCheck($article);
+
+        return $article;
     }
 }

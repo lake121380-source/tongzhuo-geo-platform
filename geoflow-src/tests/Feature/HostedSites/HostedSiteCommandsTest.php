@@ -15,11 +15,13 @@ use App\Services\HostedSites\HostedSiteAllocationRequestService;
 use App\Services\HostedSites\HostedSiteAllocator;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class HostedSiteCommandsTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     protected function setUp(): void
     {
@@ -145,6 +147,10 @@ class HostedSiteCommandsTest extends TestCase
             'status' => 'private',
             'review_status' => 'approved',
         ]);
+
+        // 发布/分发门禁 fail-closed：任务配置齐全 + 文章有一条通过的质检（2026-09-20 起）。
+        $this->makeTaskQualityReady($task);
+        $this->seedPassedQualityCheck($article);
 
         return [$channel, $article];
     }

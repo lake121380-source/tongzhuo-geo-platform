@@ -27,11 +27,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class DistributionArticleRiskWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     protected function setUp(): void
     {
@@ -801,7 +803,10 @@ class DistributionArticleRiskWorkflowTest extends TestCase
     }
 
     /** @return array{Article, Task, DistributionChannel} */
-    private function createDistributionArticle(string $content): array
+    /**
+     * @param  bool  $qualityReady  默认补「已通过质检」；断言「没质检会被拦 / 质检基座变了」的用例传 false。
+     */
+    private function createDistributionArticle(string $content, bool $qualityReady = true): array
     {
         $task = Task::query()->create([
             'name' => 'Risk distribution task',
@@ -836,6 +841,11 @@ class DistributionArticleRiskWorkflowTest extends TestCase
             'review_status' => 'approved',
             'published_at' => now(),
         ]);
+
+        if ($qualityReady) {
+            // 发布/分发门禁 fail-closed：任务要配置齐全、文章要有一条通过的质检（2026-09-20 起）。
+            $this->makeArticleQualityReady($article);
+        }
 
         return [$article, $task, $channel];
     }

@@ -22,11 +22,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class ApiArticleRiskWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     private Admin $admin;
 
@@ -201,14 +203,21 @@ class ApiArticleRiskWorkflowTest extends TestCase
             'risk_override_reason' => 'Reviewed by the API editor.',
         ]));
 
-        $response->assertCreated()
-            ->assertJsonPath('data.status', 'published')
-            ->assertJsonPath('data.review_status', 'approved');
+        // 09-20 起发布门禁 fail-closed：**「创建即发布」要求文章已有一条通过的质检**，
+        // 而新建文章还没有 —— 门禁会拦下并说明原因（原来是 201 直接发布成功）。
+        // 「草稿 → 审核（带放行理由）→ 质检通过 → 发布」的完整链路见
+        // test_warning_approved_with_explicit_risk_override_reason_then_publish_succeeds。
+        // 这里给的是 `..._failed` 而不是 `..._pending`：测试环境没有质检配置，
+        // 门禁连「排队质检」都做不到（配置齐全会是 pending，见同文件的
+        // test_idempotent_quality_pending_response_commits_the_check_and_replays_it）。
+        $response->assertStatus(409)
+            ->assertJsonPath('error.code', 'article_ai_quality_failed');
 
-        $article = Article::query()->findOrFail((int) $response->json('data.id'));
+        $article = Article::query()->findOrFail((int) $response->json('error.details.article_id'));
         $scan = $article->latestRiskScan()->firstOrFail();
 
-        $this->assertNotNull($article->published_at);
+        $this->assertSame('draft', (string) $article->status);
+        $this->assertNull($article->published_at);
         $this->assertTrue($scan->is_overridden);
         $this->assertSame('Reviewed by the API editor.', $scan->override_reason);
         $this->assertSame($this->admin->id, $scan->overridden_by_admin_id);
@@ -323,6 +332,9 @@ class ApiArticleRiskWorkflowTest extends TestCase
         ]))->assertCreated();
         $articleId = (int) $create->json('data.id');
 
+        // 09-20 起**审核**这一步就要过质检门禁：先给 API 建出来的文章补「已通过质检」的前置。
+        $this->makeArticleQualityReady(Article::query()->findOrFail($articleId));
+
         $review = $this->withHeader('Authorization', 'Bearer '.$this->token)
             ->postJson("/api/v1/articles/{$articleId}/review", [
                 'review_status' => 'approved',
@@ -376,6 +388,8 @@ class ApiArticleRiskWorkflowTest extends TestCase
         ]))->assertCreated();
         $article = Article::query()->findOrFail((int) $create->json('data.id'));
         $scan = $article->latestRiskScan()->firstOrFail();
+        // 本用例要验的是「审核留痕写失败时整体回滚」，得先过质检门禁才能走到那一步。
+        $this->makeArticleQualityReady($article);
         Schema::drop('article_reviews');
 
         $this->withHeader('Authorization', 'Bearer '.$this->token)
@@ -487,7 +501,7 @@ class ApiArticleRiskWorkflowTest extends TestCase
         $article = $this->createArticle([
             'task_id' => $task->id,
             'review_status' => 'approved',
-        ]);
+        ], qualityReady: false); // 本用例就是要验「没有质检记录时会被门禁拦下」
         $headers = [
             'Authorization' => 'Bearer '.$this->token,
             'X-Idempotency-Key' => 'quality-pending-publish-retry',
@@ -692,10 +706,13 @@ class ApiArticleRiskWorkflowTest extends TestCase
             ->postJson('/api/v1/articles', $payload);
     }
 
-    /** @param array<string, mixed> $overrides */
-    private function createArticle(array $overrides = []): Article
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @param  bool  $qualityReady  默认补上「已通过质检」的前置；断言「没质检会被拦」的用例传 false。
+     */
+    private function createArticle(array $overrides = [], bool $qualityReady = true): Article
     {
-        return Article::query()->create(array_merge([
+        $article = Article::query()->create(array_merge([
             'title' => 'Existing API risk article',
             'slug' => 'existing-api-risk-article-'.uniqid(),
             'content' => 'Existing safe content.',
@@ -705,5 +722,12 @@ class ApiArticleRiskWorkflowTest extends TestCase
             'status' => 'draft',
             'review_status' => 'pending',
         ], $overrides));
+
+        // 发布/分发门禁 fail-closed：任务要配置齐全、文章要有一条通过的质检（2026-09-20 起）。
+        if ($qualityReady) {
+            $this->makeArticleQualityReady($article);
+        }
+
+        return $article;
     }
 }

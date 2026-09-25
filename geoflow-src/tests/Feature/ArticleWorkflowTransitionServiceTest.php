@@ -12,11 +12,13 @@ use App\Services\GeoFlow\ArticleWorkflowTransitionService;
 use App\Support\GeoFlow\ArticleWorkflow;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class ArticleWorkflowTransitionServiceTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     protected function setUp(): void
     {
@@ -119,7 +121,7 @@ class ArticleWorkflowTransitionServiceTest extends TestCase
             'email' => uniqid().'@example.com',
         ]);
 
-        return Article::query()->create(array_merge([
+        $article = Article::query()->create(array_merge([
             'title' => 'Workflow article',
             'slug' => 'workflow-article-'.uniqid(),
             'excerpt' => 'Workflow excerpt',
@@ -129,5 +131,10 @@ class ArticleWorkflowTransitionServiceTest extends TestCase
             'status' => 'draft',
             'review_status' => 'pending',
         ], $attributes));
+
+        // 发布/分发门禁 fail-closed：任务要配置齐全、文章要有一条通过的质检（2026-09-20 起）。
+        $this->makeArticleQualityReady($article);
+
+        return $article;
     }
 }

@@ -201,7 +201,20 @@ class ArticleGeoFlowService
             throw $this->qualityBlockedException($article, $creation['gate_rejection']);
         }
         if ($article->ai_quality_required_at_creation) {
-            $this->articleAiQualityInspectionService->createOrReuse($article, trigger: 'api_create');
+            try {
+                $this->articleAiQualityInspectionService->createOrReuse($article, trigger: 'api_create');
+            } catch (\RuntimeException $exception) {
+                // ⚠️ 质检配置不完整（缺提示词 / 模型 / 知识库）时，**不能把「建文章」也一起弄崩**：
+                // 09-20 的 fail-closed 让 `required` 恒真，而这里无条件排队质检 → 解析器抛
+                // `ai_quality_*` 异常 → 未捕获 → **建文章直接 500**（任何还没配齐质检的部署，
+                // 连草稿都建不出来）。文章照建（草稿态），发布时门禁会给出可读的拦截理由
+                // （「AI 质检配置不可用，文章已暂停发布」）——那才是该报错的地方。
+                // 只吞解析器的这几个配置类错误，其它异常照旧往上抛。
+                if (! str_starts_with(trim($exception->getMessage()), 'ai_quality_')) {
+                    throw $exception;
+                }
+                report($exception);
+            }
         }
 
         return $this->getArticle((int) $article->id);

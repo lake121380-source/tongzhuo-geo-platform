@@ -50,7 +50,9 @@ class JsonLdComponentTest extends TestCase
         }
 
         $this->assertSame([], $violations, implode(PHP_EOL, $violations));
-        $this->assertSame(104, $componentCount, 'The theme JSON-LD block count changed.');
+        // 2026-09-25：新增「联系我们」页（+ Organization/ContactPage 等 3 个 JSON-LD 块）→ 104 → 107。
+        // 这个数字是**守卫**：变了就要停下来确认「多出来的是有意的」，别顺手改大。
+        $this->assertSame(107, $componentCount, 'The theme JSON-LD block count changed.');
     }
 
     public function test_json_ld_component_prevents_script_breakout_and_preserves_data(): void

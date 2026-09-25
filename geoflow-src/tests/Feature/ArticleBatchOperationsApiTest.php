@@ -18,11 +18,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class ArticleBatchOperationsApiTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     private Admin $admin;
 
@@ -225,7 +227,7 @@ class ArticleBatchOperationsApiTest extends TestCase
             'title' => 'Quality-gated batch publish',
             'task_id' => $task->id,
             'review_status' => 'approved',
-        ]);
+        ], qualityReady: false); // 本用例就是要验「没有质检记录 → 被门禁拦下并排队质检」
         $token = $this->token(['articles:publish']);
 
         $this->withHeaders($this->headers($token, 'batch-quality-gate'))
@@ -366,9 +368,13 @@ class ArticleBatchOperationsApiTest extends TestCase
         $this->assertSame('published', $article->refresh()->status);
     }
 
-    private function article(array $overrides = []): Article
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @param  bool  $qualityReady  默认补「已通过质检」；断言「不过门禁」的用例传 false。
+     */
+    private function article(array $overrides = [], bool $qualityReady = true): Article
     {
-        return Article::query()->create(array_merge([
+        $article = Article::query()->create(array_merge([
             'title' => 'Batch article '.uniqid(),
             'slug' => 'batch-article-'.uniqid(),
             'content' => 'Safe batch article content.',
@@ -378,6 +384,13 @@ class ArticleBatchOperationsApiTest extends TestCase
             'status' => 'draft',
             'review_status' => 'pending',
         ], $overrides));
+
+        // 09-20 起审核/发布都要过质检门禁：默认给文章补上「已通过质检」的前置。
+        if ($qualityReady) {
+            $this->makeArticleQualityReady($article);
+        }
+
+        return $article;
     }
 
     /** @param list<string> $scopes */

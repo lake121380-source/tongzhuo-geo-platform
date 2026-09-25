@@ -14,11 +14,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use ReflectionMethod;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class WorkerArticleRiskWorkflowTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     protected function setUp(): void
     {
@@ -163,6 +165,10 @@ class WorkerArticleRiskWorkflowTest extends TestCase
             'review_status' => 'approved',
             'published_at' => null,
         ], $articleOverrides));
+
+        // 2026-09-20 起发布门禁 fail-closed：worker 发布同样要求「质检配置齐全 + 已通过一次质检」。
+        // 不补这套前置，`publishDueDraftArticle` 会静默返回 null（那是门禁在要求先质检，不是坏）。
+        $this->makeReadyToPublish($task, $article);
 
         return [$task, $article];
     }
