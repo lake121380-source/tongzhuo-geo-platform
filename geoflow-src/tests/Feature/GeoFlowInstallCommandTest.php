@@ -42,7 +42,11 @@ class GeoFlowInstallCommandTest extends TestCase
         $this->assertTrue(Hash::check('password', (string) $admin->password));
         $this->assertSame(0, Category::query()->count());
         $this->assertSame(0, Article::query()->count());
-        $this->assertSame(24, KnowledgeMediaAsset::query()->where('is_active', true)->count());
+        // ⚠️ 24 → 0：出厂帮助媒体于 2026-09-13 **整体清空**（`f91b48f`）——那 24 张图画的是
+        // 「已退役的旧后台」，AI 助手会把它们当帮助内容附在回答后面，等于教用户去点不存在的菜单。
+        // 清空是有意的：随包清单 `resources/knowledge/ai-workspace/media/manifest.json` 的
+        // `assets` 现在是空数组，所以**新装一份就是 0 条出厂媒体**（这条断言原来写 24，漏改）。
+        $this->assertSame(0, KnowledgeMediaAsset::query()->where('is_active', true)->count());
 
         $state = SystemState::query()->where('key', GeoFlowInstallCommand::INSTALLATION_STATE_KEY)->first();
         $this->assertNotNull($state);

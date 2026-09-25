@@ -82,7 +82,8 @@ return [
         'app/Services/GeoFlow/ArticleAiOptimizationCoordinator.php' => ['category' => 'user_content', 'owner' => 'optimization frozen execution identity', 'calls' => 3],
         'app/Services/GeoFlow/ArticleAiOptimizationReconciliationService.php' => ['category' => 'user_content', 'owner' => 'optimization recovery identity', 'calls' => 1],
         'app/Services/GeoFlow/ArticleAiQualityInspectionService.php' => ['category' => 'user_content', 'owner' => 'quality frozen execution identity', 'calls' => 3],
-        'app/Services/GeoFlow/ArticleAiQualityPolicyResolver.php' => ['category' => 'user_content', 'owner' => 'quality scoped candidate resolver', 'calls' => 3],
+        // 2026-09-25：3 → 4 —— 09-20 那批质检改造加了一处直连 AiModel 的取值（本轮对账时发现清单没跟上）。
+        'app/Services/GeoFlow/ArticleAiQualityPolicyResolver.php' => ['category' => 'user_content', 'owner' => 'quality scoped candidate resolver', 'calls' => 4],
         'app/Services/GeoFlow/ArticleAiQualityReadinessRecorder.php' => ['category' => 'user_content', 'owner' => 'quality model readiness persistence', 'calls' => 1],
         'app/Services/GeoFlow/EnterpriseKnowledgeAiExecutionGuard.php' => ['category' => 'user_content', 'owner' => 'enterprise knowledge frozen execution identity', 'calls' => 3],
         'app/Services/GeoFlow/EnterpriseKnowledgeDraftService.php' => ['category' => 'user_content', 'owner' => 'enterprise knowledge provider usage session', 'calls' => 1],

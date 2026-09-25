@@ -36,11 +36,13 @@ use Illuminate\Support\Facades\Queue;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class AdminAiExecutionIdentityTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     public function test_task_creation_records_the_stable_ai_execution_admin_identity(): void
     {
@@ -607,6 +609,8 @@ class AdminAiExecutionIdentityTest extends TestCase
             'status' => 'draft',
             'review_status' => 'approved',
         ]);
+        // 09-20 起到期草稿的发布要过质检门禁：补前置，否则 worker 会以为没有可发布的草稿而转去生成。
+        $this->makeReadyToPublish($task, $article);
         $runId = app(JobQueueService::class)->enqueueTaskJob((int) $task->id);
         $this->assertIsArray(app(JobQueueService::class)->claimPendingJobById((int) $runId, 'distribution-fence-worker'));
         $context = app(AiExecutionContextFactory::class)->fromTaskRun(TaskRun::query()->findOrFail((int) $runId));
@@ -1369,6 +1373,8 @@ class AdminAiExecutionIdentityTest extends TestCase
             'status' => 'draft',
             'review_status' => 'approved',
         ]);
+        // 09-20 起到期草稿的发布也要过质检门禁：补「已通过质检」的前置。
+        $this->makeReadyToPublish($task, $article);
         $runId = app(JobQueueService::class)->enqueueTaskJob((int) $task->id);
         $provider->forceFill(['status' => 'inactive'])->save();
         config()->set('geoflow.admin_ai_access.access_enforce_enabled', true);
@@ -1406,6 +1412,8 @@ class AdminAiExecutionIdentityTest extends TestCase
             'status' => 'draft',
             'review_status' => 'approved',
         ]);
+        // 09-20 起到期草稿的发布也要过质检门禁：补「已通过质检」的前置。
+        $this->makeReadyToPublish($task, $article);
         $runId = app(JobQueueService::class)->enqueueTaskJob((int) $task->id);
         TaskRun::query()->whereKey($runId)->update([
             'model_access_admin_id' => null,

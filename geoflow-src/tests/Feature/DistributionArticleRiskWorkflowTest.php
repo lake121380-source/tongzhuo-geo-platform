@@ -73,7 +73,7 @@ class DistributionArticleRiskWorkflowTest extends TestCase
         Queue::assertPushed(ProcessArticleDistributionJob::class, 1);
     }
 
-    public function test_enqueued_distribution_keeps_an_immutable_payload_and_binds_it_to_the_idempotency_key(): void
+    public function test_enqueued_distribution_binds_an_immutable_payload_and_refuses_a_stale_basis_after_edit(): void
     {
         [$article, , $channel] = $this->createDistributionArticle('Original approved content.');
         $orchestrator = app(DistributionOrchestrator::class);
@@ -85,6 +85,9 @@ class DistributionArticleRiskWorkflowTest extends TestCase
         $this->assertStringEndsWith(substr($payloadHash, 0, 16), (string) $distribution->idempotency_key);
 
         $article->update(['content' => 'New safe content queued for a later update.']);
+        // 新版策略：**改正文会让已通过的质检失效**，处理时会再验一次。这里模拟运营「改完重新质检通过」，
+        // 好让本用例继续只验它要验的那件事——**已入队的载荷不可变、与幂等键绑定**。
+        $this->seedPassedQualityCheck($article->fresh());
         DistributionChannelSecret::query()->create([
             'distribution_channel_id' => $channel->id,
             'key_id' => 'gfk_immutable_payload',
@@ -98,14 +101,21 @@ class DistributionArticleRiskWorkflowTest extends TestCase
             'remote_url' => 'https://risk-target.example.com/articles/immutable-remote',
         ])]);
 
-        $orchestrator->process($distribution);
-
-        Http::assertSent(fn ($request): bool => data_get($request->data(), 'article.content') === 'Original approved content.');
+        // 新版策略（fail-closed 质检）：**入队后改过的正文，其分发绑定已失效** ——
+        // 处理时必须拒绝并明说要「重新入队」，而不是照旧把旧载荷发出去。
+        // 「载荷不可变 + 与幂等键绑定」这两条由上面入队那一刻的断言继续守住。
+        try {
+            $orchestrator->process($distribution);
+            $this->fail('文章在入队后被改，分发不应继续按旧的质检依据发出。');
+        } catch (\App\Exceptions\ArticleAiQualityGateException $exception) {
+            $this->assertStringContainsString('重新入队', $exception->getMessage());
+        }
+        Http::assertNothingSent();
     }
 
     public function test_distribution_job_waits_for_a_pending_ai_quality_result_without_consuming_an_attempt(): void
     {
-        [$article, $task, $channel] = $this->createDistributionArticle('Pending quality content.');
+        [$article, $task, $channel] = $this->createDistributionArticle('Pending quality content.', qualityReady: false); // 要验「等质检时有出口」，不能预置通过的质检
         $this->enableQualityPolicy($task);
         $distribution = ArticleDistribution::query()->create([
             'article_id' => $article->id,
@@ -282,7 +292,7 @@ class DistributionArticleRiskWorkflowTest extends TestCase
 
     public function test_distribution_execution_rejects_a_guard_whose_current_quality_policy_disappeared(): void
     {
-        [$article, $task] = $this->createDistributionArticle('Guarded quality content.');
+        [$article, $task] = $this->createDistributionArticle('Guarded quality content.', qualityReady: false);
         $this->enableQualityPolicy($task);
         $check = app(ArticleAiQualityInspectionService::class)->createOrReuse($article->fresh(), dispatch: false);
         $check->forceFill([
@@ -302,16 +312,19 @@ class DistributionArticleRiskWorkflowTest extends TestCase
         );
 
         $distribution->refresh();
-        $this->assertSame('failed', $distribution->status);
+        // 新契约（fail-closed）：关掉任务上的质检开关**不再等于「无需质检」**——策略回落到兜底
+        // （required 恒真），绑定对不上旧结论时**排回队列等重新质检**，而不是发出去、也不是终态失败。
+        $this->assertSame('queued', $distribution->status);
         $this->assertSame(
-            'article_ai_quality_basis_changed',
+            'article_ai_quality_stale',
             data_get($distribution->remote_meta, 'ai_quality_dispatch.error_code'),
         );
+        $this->assertNotNull($distribution->next_retry_at);
     }
 
-    public function test_reenqueue_clears_an_old_quality_guard_after_quality_is_disabled(): void
+    public function test_reenqueue_keeps_the_quality_guard_even_after_the_task_flag_is_disabled(): void
     {
-        [$article, $task] = $this->createDistributionArticle('Quality guard reuse content.');
+        [$article, $task] = $this->createDistributionArticle('Quality guard reuse content.', qualityReady: false);
         $this->enableQualityPolicy($task);
         $check = app(ArticleAiQualityInspectionService::class)->createOrReuse($article->fresh(), dispatch: false);
         $check->forceFill([
@@ -329,7 +342,10 @@ class DistributionArticleRiskWorkflowTest extends TestCase
         $task->forceFill(['ai_quality_enabled' => false])->save();
         $orchestrator->enqueueForArticle($article->fresh());
 
-        $this->assertNull(data_get($distribution->fresh()->remote_meta, 'ai_quality_guard'));
+        // 新契约（fail-closed）：关掉任务上的质检开关**不再等于「无需质检」**——策略回落到兜底
+        // （required 恒真），所以重新入队时那条 AI 质检绑定**依然在**，分发继续按质检结论走。
+        // 旧断言「关掉就清空绑定」属于 09-20 之前的契约。
+        $this->assertIsArray(data_get($distribution->fresh()->remote_meta, 'ai_quality_guard'));
     }
 
     public function test_ai_workspace_enqueue_surfaces_an_approved_payload_mismatch(): void
@@ -494,6 +510,8 @@ class DistributionArticleRiskWorkflowTest extends TestCase
         [$article, , $channel] = $this->createDistributionArticle('blocked stale content');
         $staleArticle = Article::query()->findOrFail($article->id);
         $article->update(['content' => 'Fresh safe content.']);
+        // 改正文会让旧质检失效：先按新正文重新质检通过，再验「载荷取自新鲜快照」。
+        $this->seedPassedQualityCheck($article->fresh());
         $distribution = ArticleDistribution::query()->create([
             'article_id' => $article->id,
             'distribution_channel_id' => $channel->id,
@@ -535,6 +553,9 @@ class DistributionArticleRiskWorkflowTest extends TestCase
             'task_id' => null,
             'review_status' => 'pending',
         ]);
+        // 摘掉任务后策略来源会换成**文章自己的快照**（无任务的独立文章路径），
+        // 所以要按那条路径重新补一次质检前置——否则门禁会因为「配置不可用」把分发挡下。
+        $this->makeArticleQualityReady($article->fresh());
         $distribution = ArticleDistribution::query()->create([
             'article_id' => $article->id,
             'distribution_channel_id' => $channel->id,

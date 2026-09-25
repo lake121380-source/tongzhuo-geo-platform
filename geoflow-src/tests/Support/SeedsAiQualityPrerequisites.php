@@ -99,8 +99,6 @@ trait SeedsAiQualityPrerequisites
             'decision' => 'passed',
             'score' => $score,
             'active_dedupe_key' => null,
-            // 与 `ArticleAiQualityGateTest` 保持一致：测试环境没有执行上下文，走 legacy 算法版本。
-            'algorithm_version' => 'exec=legacy;ret=1;prompt=1;score=1',
             'advertising_rules_snapshot' => $inspection->rules(),
         ])->save();
 

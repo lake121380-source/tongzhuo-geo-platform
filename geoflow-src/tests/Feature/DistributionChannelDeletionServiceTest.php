@@ -23,11 +23,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class DistributionChannelDeletionServiceTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     public function test_deletion_impact_reports_remote_content_credentials_jobs_and_task_changes(): void
     {
@@ -310,6 +312,8 @@ class DistributionChannelDeletionServiceTest extends TestCase
         $channel = $this->channel();
         $task = $this->task('local_and_distribution');
         $article = $this->article($task);
+        // 门禁在「渠道是否可写」之前跑：先让质检过掉，才能验到渠道删除态那条拦截。
+        $this->makeReadyToPublish($task, $article);
         $distribution = ArticleDistribution::query()->create([
             'article_id' => (int) $article->id,
             'distribution_channel_id' => (int) $channel->id,
