@@ -1,3 +1,4 @@
+@charset "UTF-8";
 /* 博客系统自定义样式 */
 
 /* 基础样式变量 */
@@ -987,7 +988,8 @@ blockquote {
 }
 
 .geo-home-module__link::after {
-    content: "→";
+    /* 用转义而不是直接写 "→"：.css 的 Content-Type 不带 charset 时浏览器按 Latin-1 解析，非 ASCII 会变乱码 */
+    content: "\2192";
     font-weight: 700;
 }
 

@@ -71,7 +71,9 @@
 
     @if($relatedArticles->isNotEmpty())
         <div class="tz-container tz-section tz-section--top">
-            <h2 class="tz-section-title">{{ __('site.related_articles') }}</h2>
+            {{-- 键名是 article_related（语言包里六种语言都有），不是 related_articles——
+                 写错时 Laravel 找不到译文，会直接把键名渲染到页面上（原样显示 site.related_articles）。 --}}
+            <h2 class="tz-section-title">{{ __('site.article_related') }}</h2>
             <div class="tz-list">
                 @foreach($relatedArticles as $relatedArticle)
                     {{-- relatedArticles 只 select 了 id/title/slug 三列，不要访问 ->category --}}

@@ -1,3 +1,4 @@
+@charset "UTF-8";
 /*
  * ════════════════════════════════════════════════════════════════════════════
  *  桐灼GEO 前台主题 · tongzhuo-brand-2026
@@ -67,8 +68,15 @@
     /* ── 字体：全部系统栈，零外部依赖 ──────────────────────────────────── */
     --tz-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
         "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", system-ui, sans-serif;
+    /*
+     * ⚠️ 等宽栈末尾**必须带中文字体**：标签、页脚公司名这类位置会往 --tz-mono 里塞中文，
+     * 而 ui-monospace/Menlo/Consolas 都没有中文字形——浏览器只能回落到默认的等宽字体，
+     * 中文会渲染得又细又小（2026-09-20 哥哥在本地指出「这一类字体看不清」就是这个）。
+     * 把中文字体排在中文字形缺失的等宽字体之后，英文照旧等宽、中文走雅黑/苹方。
+     */
     --tz-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-        "Liberation Mono", "Courier New", monospace;
+        "Liberation Mono", "Courier New",
+        "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", monospace;
 
     /* ── 字号 ───────────────────────────────────────────────────────────── */
     --tz-display: clamp(1.875rem, 4.2vw, 3.5rem);   /* 30 → 56 */
@@ -78,7 +86,7 @@
     --tz-body: 0.9375rem;                           /* 15 —— 参考稿偏小，这里上调一档保可读性 */
     --tz-sm: 0.875rem;                              /* 14 */
     --tz-xs: 0.75rem;                               /* 12 */
-    --tz-2xs: 0.6875rem;                            /* 11 —— 等宽标签 */
+    --tz-2xs: 0.8125rem;                            /* 13 —— 原为 11；小标签（首屏使命条、页脚栏目标题等 25 处）太小看不清，上调两档 */
 
     /* ── 节奏 ───────────────────────────────────────────────────────────── */
     --tz-container: 1280px;
@@ -748,7 +756,12 @@
 }
 
 .tz-checklist li::before {
-    content: "✓";
+    /*
+     * 用 CSS 转义而不是直接写 "✓"：nginx 给 .css 的 Content-Type 不带 charset，
+     * 浏览器会按 Latin-1 解析文件里的非 ASCII 字符，直接写就成了乱码「âœ"」。
+     * 转义是纯 ASCII，不依赖任何编码声明，最保险。
+     */
+    content: "\2713";
     flex-shrink: 0;
     color: var(--tz-ink-950);
     font-weight: 700;
@@ -1142,6 +1155,9 @@
    ══════════════════════════════════════════════════════════════════════════ */
 .tz-article-head {
     padding-block: clamp(2rem, 4vw, 3rem) 1.5rem;
+    /* 文章头（日期/分类、大标题、摘要）整体居中；正文里的 h2/h3 不居中是刻意的
+       （哥哥 2026-09-20 明确「正文里面的标题不用」）。 */
+    text-align: center;
 }
 
 .tz-article-title {
@@ -1157,6 +1173,7 @@
 .tz-article-meta {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
     gap: 0.4rem 1.1rem;
     font-family: var(--tz-mono);
     font-size: var(--tz-2xs);
@@ -1173,17 +1190,23 @@
 }
 
 .tz-article-lede {
-    margin: 1.5rem 0 0;
+    /* 水平 auto：限宽 44rem 的摘要块跟着文章头一起居中（左边那道竖线随块走） */
+    margin: 1.5rem auto 0;
     padding-left: 1.1rem;
     border-left: 2px solid var(--tz-ink-950);
     max-width: 44rem;
     font-size: var(--tz-sm);
     line-height: 1.85;
     color: var(--tz-ink-500);
+    text-align: left;
 }
 
 .tz-prose {
     max-width: 44rem;
+    /* 正文限宽 44rem，但原来在外层容器里是左对齐的——右边空一大片，
+       读起来像「整块偏左」（2026-09-20 哥哥指出）。这里让整块居中。
+       段落与列表仍保持左对齐：长文整段居中，每行长短不一反而更难读。 */
+    margin-inline: auto;
     padding-bottom: var(--tz-block);
     font-size: var(--tz-body);
     line-height: 1.9;
@@ -1370,8 +1393,10 @@
     border-top: 1px solid var(--tz-hairline);
     background: var(--tz-paper-2);
     padding-block: 3rem 2rem;
-    font-size: var(--tz-xs);
-    color: var(--tz-ink-500);
+    /* 原来 12px + 灰字（--tz-ink-500）在浅灰底上对比度不足，读着费劲；
+       这里抬到正文档、并加深一档（2026-09-20 哥哥指出「页脚看不清晰」）。 */
+    font-size: var(--tz-sm);
+    color: var(--tz-ink-700);
 }
 
 .tz-footer-grid {
@@ -1400,7 +1425,7 @@
 }
 
 .tz-footer-list a {
-    color: var(--tz-ink-500);
+    color: var(--tz-ink-700);
     text-decoration: none;
 }
 
@@ -1682,4 +1707,41 @@
         opacity: 1;
         transform: none;
     }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   首屏与内页标题区：居中版式
+   ──────────────────────────────────────────────────────────────────────────
+   原来这两处都是左对齐。这里**只改对齐**，其余（标题的刻意断行 .tz-br、
+   描述的 max-width、各处间距）一律不动——居中靠三件事：
+   ① 父级 text-align（对内联/块级文本）；② 限宽块的 margin-inline:auto；
+   ③ flex 容器的 justify-content。原有规则一条不改，方便逐条对比、随时回退。
+   ══════════════════════════════════════════════════════════════════════════ */
+.tz-hero {
+    /* 首屏的使命标签（.tz-pill）和标题都是文本，靠它居中 */
+    text-align: center;
+}
+
+.tz-hero-lede {
+    /* 描述限宽 34rem，光 text-align 不会居中，得让左右外边距自动分配 */
+    margin-inline: auto;
+}
+
+.tz-hero-actions {
+    /* 按钮区是 flex 容器，text-align 对它无效 */
+    justify-content: center;
+}
+
+.tz-stats {
+    /* 数据条是 grid，让每格里的文字居中 */
+    text-align: center;
+}
+
+/* 内页标题区：常见问题 / 服务 / 关于等页共用同一个 .tz-page-head */
+.tz-page-head {
+    text-align: center;
+}
+
+.tz-page-lede {
+    margin-inline: auto;
 }
