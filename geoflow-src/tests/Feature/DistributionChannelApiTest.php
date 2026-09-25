@@ -31,7 +31,7 @@ class DistributionChannelApiTest extends TestCase
 
     public function test_agent_channel_creation_returns_one_time_secret_and_only_ciphertext_is_persisted(): void
     {
-        $token = $this->token($admin = $this->admin(), ['distribution:write']);
+        $token = $this->token($admin = $this->admin('distribution_create_super', 'super_admin'), ['distribution:write']);
 
         $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->withHeader('X-Idempotency-Key', 'distribution-create-1')
@@ -59,7 +59,7 @@ class DistributionChannelApiTest extends TestCase
 
     public function test_replaying_create_idempotency_key_does_not_reveal_secret_again_or_create_duplicate(): void
     {
-        $token = $this->token($this->admin('distribution_replay_admin'), ['distribution:write']);
+        $token = $this->token($this->admin('distribution_replay_admin', 'super_admin'), ['distribution:write']);
         $headers = [
             'Authorization' => 'Bearer '.$token,
             'X-Idempotency-Key' => 'distribution-create-replay',
@@ -77,6 +77,26 @@ class DistributionChannelApiTest extends TestCase
         $this->assertNotNull($first->json('data.one_time_secret.secret'));
         $this->assertNull($second->json('data.one_time_secret'));
         $this->assertSame($first->json('data.channel.id'), $second->json('data.channel.id'));
+    }
+
+    /**
+     * 建渠道会**签发一枚与「轮换密钥」同权限的密钥**（scopes 完全相同），
+     * 所以它的门槛必须与轮换一致 —— 只有超管（2026-09-25 收口；此前只要 scope 就能绕过那条边界）。
+     */
+    public function test_channel_creation_is_super_admin_only(): void
+    {
+        $token = $this->token($this->admin('distribution_plain_admin'), ['distribution:write']);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->withHeader('X-Idempotency-Key', 'distribution-create-plain-admin')
+            ->postJson('/api/v1/distribution/channels', [
+                'name' => '借道渠道',
+                'endpoint_url' => 'https://bypass.example.test/agent',
+            ])
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'forbidden');
+
+        $this->assertSame(0, DistributionChannel::query()->count());
     }
 
     public function test_channel_creation_requires_distribution_write_scope_and_idempotency_key(): void
@@ -103,7 +123,7 @@ class DistributionChannelApiTest extends TestCase
 
     public function test_channel_update_pause_and_activate_are_persisted_and_audited(): void
     {
-        $admin = $this->admin('distribution_lifecycle_admin');
+        $admin = $this->admin('distribution_lifecycle_admin', 'super_admin'); // 建渠道 = 签发密钥 → 仅超管
         $token = $this->token($admin, ['distribution:read', 'distribution:write']);
         $headers = ['Authorization' => 'Bearer '.$token];
 

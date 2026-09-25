@@ -14,11 +14,13 @@ use App\Support\GeoFlow\ApiKeyCrypto;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class WordPressRestPublisherTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     public function test_it_publishes_article_to_wordpress_posts_endpoint(): void
     {
@@ -238,6 +240,9 @@ class WordPressRestPublisherTest extends TestCase
             'review_status' => 'approved',
             'published_at' => now(),
         ]);
+
+        // 09-20 起分发路径也要过质检门禁：给文章补「已通过质检」的前置。
+        $this->makeArticleQualityReady($article);
 
         $distribution = ArticleDistribution::query()->create(array_merge([
             'article_id' => (int) $article->id,

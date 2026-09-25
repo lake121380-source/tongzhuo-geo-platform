@@ -17,11 +17,13 @@ use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
+use Tests\Support\SeedsAiQualityPrerequisites;
 use Tests\TestCase;
 
 class ManualPublicationServiceTest extends TestCase
 {
     use RefreshDatabase;
+    use SeedsAiQualityPrerequisites;
 
     public function test_post_creation_snapshots_approved_article_and_records_risk_and_duplicates(): void
     {
@@ -432,7 +434,7 @@ class ManualPublicationServiceTest extends TestCase
         ]);
         $author = Author::query()->create(['name' => uniqid('作者')]);
 
-        return Article::query()->create([
+        $article = Article::query()->create([
             'title' => '人工发布测试文章',
             'slug' => uniqid('manual-publication-article-'),
             'excerpt' => '摘要',
@@ -442,6 +444,11 @@ class ManualPublicationServiceTest extends TestCase
             'status' => 'draft',
             'review_status' => $reviewStatus,
         ]);
+
+        // 09-20 起人工发布/状态流转也要过质检门禁：给文章补「已通过质检」的前置。
+        $this->makeArticleQualityReady($article);
+
+        return $article;
     }
 
     /** @param array<string, mixed> $overrides */
