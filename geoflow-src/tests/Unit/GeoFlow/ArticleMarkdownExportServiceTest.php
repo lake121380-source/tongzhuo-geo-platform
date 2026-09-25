@@ -148,7 +148,13 @@ class ArticleMarkdownExportServiceTest extends TestCase
         $this->assertStringContainsString('长标题文章正文', $markdown);
     }
 
-    public function test_rejects_an_export_when_an_earlier_chunk_is_deleted_during_the_build(): void
+    /**
+     * 构建途中文章被**彻底删除**（硬删）时，归档必须失效。
+     *
+     * ⚠️ 2026-09-25 起**软删不再拦**（回收站的「导出 Markdown」就是给「先导出留档、再永久删除」
+     * 用的，详见下一条用例）；真正会让归档对不上的是行消失，所以这里改用 `forceDelete()`。
+     */
+    public function test_rejects_an_export_when_an_earlier_chunk_is_force_deleted_during_the_build(): void
     {
         [$category, $author] = $this->articleRelations();
         $articles = collect(range(1, 26))->map(fn (int $number): Article => $this->article(
@@ -166,14 +172,14 @@ class ArticleMarkdownExportServiceTest extends TestCase
         $lastId = (int) $last->id;
 
         Event::listen('eloquent.retrieved: '.Article::class, function (Article $article) use ($first, $lastId): void {
-            if ((int) $article->id === $lastId && ! $first->trashed()) {
-                $first->delete();
+            if ((int) $article->id === $lastId && Article::withTrashed()->whereKey($first->id)->exists()) {
+                $first->forceDelete();
             }
         });
 
         try {
             $this->service()->prepare(7, $articles->pluck('id')->map(fn (mixed $id): int => (int) $id)->all());
-            $this->fail('Expected a deleted article to invalidate the completed archive.');
+            $this->fail('Expected a force-deleted article to invalidate the completed archive.');
         } catch (ValidationException $exception) {
             $this->assertSame(
                 __('admin.articles.export.errors.invalid_selection'),
@@ -182,6 +188,26 @@ class ArticleMarkdownExportServiceTest extends TestCase
         }
 
         $this->assertSame([], File::allFiles($this->exportRoot));
+    }
+
+    /**
+     * 回收站里的文章**可以导出**（软删不影响正文行）。
+     *
+     * 回收站工具栏就挂着「导出 Markdown」：先导出留档、再永久删除是最常见的用法。
+     * 2026-09-25 之前导出服务用默认作用域取数，软删文章一律被当成「无效或已删除的数据」
+     * 而**整批拒绝**——那个按钮点了必然失败。
+     */
+    public function test_exports_a_soft_deleted_article_from_the_recycle_bin(): void
+    {
+        [$category, $author] = $this->articleRelations();
+        $article = $this->article($category, $author, ['title' => '回收站里的文章']);
+        $article->delete();
+        $this->assertTrue($article->fresh()?->trashed() ?? false);
+
+        $result = $this->service()->prepare(7, [(int) $article->id]);
+
+        $this->assertSame(1, $result['count'] ?? null);
+        $this->assertNotSame([], File::allFiles($this->exportRoot), '软删的文章也应该产出一个归档');
     }
 
     public function test_limits_the_number_of_retained_archives_for_each_admin(): void
