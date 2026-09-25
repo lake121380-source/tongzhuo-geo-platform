@@ -189,11 +189,20 @@ export const ArticleReviewMode: React.FC<ArticleReviewModeProps> = ({
   }
 
   const score = typeof current.geoScore === 'number' ? current.geoScore : null;
-  const scoreTone = score === null
+  /**
+   * 判色用**这篇自己的**通过线/人工放行线。
+   *
+   * 以前这里写死 80/60，而文章列表按真实 `pass_score` 判、质检面板又写死 85/70——
+   * 同一篇 82 分（通过线 85）在三个地方会是三种颜色：审核人看到绿灯点「通过审核」，
+   * 结果被质检门禁拒掉。取不到通过线时回落到中性色，不假装知道。
+   */
+  const passLine = typeof current.aiQualityPassScore === 'number' ? current.aiQualityPassScore : null;
+  const overrideLine = typeof current.aiQualityOverrideMinScore === 'number' ? current.aiQualityOverrideMinScore : null;
+  const scoreTone = score === null || passLine === null
     ? 'bg-slate-800 text-slate-300 border-slate-700'
-    : score >= 80
+    : score >= passLine
       ? 'bg-emerald-950/40 text-emerald-200 border-emerald-500/40'
-      : score >= 60
+      : overrideLine !== null && score >= overrideLine
         ? 'bg-amber-950/40 text-amber-200 border-amber-500/40'
         : 'bg-rose-950/40 text-rose-200 border-rose-500/40';
 
@@ -249,7 +258,7 @@ export const ArticleReviewMode: React.FC<ArticleReviewModeProps> = ({
                   <div className="text-[10px] opacity-70 mt-0.5">{article.category}</div>
                   {article.aiQualityStatus && (
                     <div className="mt-1">
-                      <StatusBadge spec={qualityStatusSpec(article.aiQualityStatus, article.aiQualityDecision)} lang={lang} className="!text-[10px]" />
+                      <StatusBadge spec={qualityStatusSpec(article.aiQualityStatus, article.aiQualityDecision, { degraded: article.aiQualityDegraded === true })} lang={lang} className="!text-[10px]" />
                     </div>
                   )}
                 </button>
@@ -290,7 +299,7 @@ export const ArticleReviewMode: React.FC<ArticleReviewModeProps> = ({
             {/* 质检状态 */}
             {(current.aiQualityStatus || score !== null) && (() => {
               // 只看「判定」：status=completed 只说明跑完了，能不能过要看 decision。
-              const verdict = qualityStatusSpec(current.aiQualityStatus, current.aiQualityDecision);
+              const verdict = qualityStatusSpec(current.aiQualityStatus, current.aiQualityDecision, { degraded: current.aiQualityDegraded === true });
               const released = releasedIds.includes(current.id) || current.aiQualityIsOverridden === true;
               const needsRelease = verdict.tone === 'warning' && !released && Boolean(onReleaseArticle);
               const toneClass = verdict.tone === 'success'

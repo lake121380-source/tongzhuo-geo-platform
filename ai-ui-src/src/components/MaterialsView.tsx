@@ -188,7 +188,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
   const activeRecord = activeRecords.find((row) => materialId(row) === selectedId) || null;
   const activeItemsEnabled = ITEM_TYPES.has(activeType as ItemType);
 
-  const visibleRecords = useMemo(() => {
+  const localVisibleRecords = useMemo(() => {
     const normalized = search.trim().toLowerCase();
     if (!normalized) return activeRecords;
     return activeRecords.filter((record) => {
@@ -202,6 +202,35 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
       return haystack.includes(normalized);
     });
   }, [activeRecords, search]);
+
+  /**
+   * 服务端搜索结果（为 null 表示「没在搜索」）。
+   *
+   * 六类库都只加载前 100 条，原来的搜索是在这 100 条里本地过滤：第 101 条之后的记录
+   * 「搜不到」，界面却回「没有匹配结果」——运营会以为它被删了。后端一直支持 `search`。
+   */
+  const [serverRows, setServerRows] = useState<Material[] | null>(null);
+  const [serverSearching, setServerSearching] = useState(false);
+  useEffect(() => {
+    const term = search.trim();
+    if (!canRead || term === '') {
+      setServerRows(null);
+      setServerSearching(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setServerSearching(true);
+    const timer = window.setTimeout(() => {
+      apiClient.listMaterials(activeType, { page: 1, per_page: 100, search: term })
+        // 与 `loadMaterials` 同一份投影，只是多了 `search`：类型断言只为对齐 `Material`。
+        .then((page) => { if (!cancelled) { setServerRows(pageItems(page) as unknown as Material[]); setServerSearching(false); } })
+        .catch(() => { if (!cancelled) { setServerRows(null); setServerSearching(false); } });
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [apiClient, activeType, canRead, search]);
+
+  const serverSearchActive = serverRows !== null;
+  const visibleRecords = serverRows ?? localVisibleRecords;
 
   const loadMaterials = async (keepSelection = true) => {
     if (!canRead) {
@@ -625,6 +654,15 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                     className="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 py-0 pl-8 pr-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
                   />
                 </div>
+                {search.trim() !== '' && (
+                  <span className="text-[12px] text-slate-500">
+                    {serverSearching
+                      ? (lang === 'zh' ? '正在全库搜索…' : 'Searching all records…')
+                      : serverSearchActive
+                        ? (lang === 'zh' ? `全库命中 ${visibleRecords.length} 条` : `${visibleRecords.length} matched`)
+                        : ''}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => void loadMaterials(true)}
@@ -680,7 +718,7 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 compact
                 icon={search ? Search : labels[activeType].icon}
                 title={search ? (lang === 'zh' ? '没有匹配结果' : 'No matching results') : emptyCopy(activeType, lang).title}
-                description={search ? (lang === 'zh' ? '换个关键词，或清空搜索框看全部。' : 'Try another keyword, or clear the search.') : emptyCopy(activeType, lang).hint}
+                description={search ? (lang === 'zh' ? '已在全部记录里搜索（不只是当前页），换个关键词试试，或清空搜索框看全部。' : 'Searched all records (not just this page); try another keyword or clear the search.') : emptyCopy(activeType, lang).hint}
                 action={!search && canWrite ? (
                   <Button variant="secondary" icon={Plus} onClick={beginCreate}>
                     {lang === 'zh' ? `新建${label}` : `New ${label}`}
@@ -903,6 +941,10 @@ function recordBadge(type: MaterialType, record: ApiRecord, lang: 'zh' | 'en'): 
       return `${number(record, 'item_count') || number(record, 'title_count')} ${zh ? '条' : 'items'}`;
     case 'knowledge-bases':
       return `${number(record, 'chunk_count')} ${zh ? '切片' : 'chunks'}`;
+    case 'image-libraries':
+      // 后端投影早就给了 `image_count` / `item_count`，这里却一直返回空串——
+      // 「这库有多少图」在库切换条上完全看不到。
+      return `${number(record, 'image_count') || number(record, 'item_count')} ${zh ? '张' : 'images'}`;
     default:
       return '';
   }

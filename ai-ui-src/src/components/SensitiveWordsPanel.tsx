@@ -126,11 +126,15 @@ const SensitiveWordsPanel: React.FC<SensitiveWordsPanelProps> = ({
     if (busy || editingId === '') return;
     setBusy(`save-${editingId}`); setError(''); setNotice('');
     try {
+      // PATCH 是全量更新，必须把 `is_enabled` 原样带上。以前这里**硬编码 true**：
+      // 运营编辑一条已停用的规则（比如某词在特定语境误拦）改完保存，规则就静默复活，
+      // 而编辑表单里没有启用开关、列表上的「已停用」徽标也会消失——看不出是自己打开的。
+      const current = rules.find((rule) => String(rule.id) === editingId);
       await apiClient.updateSensitiveWord(editingId, {
         word: editDraft.words.trim(),
         severity: editDraft.severity,
         category: editDraft.category,
-        is_enabled: true,
+        is_enabled: current?.is_enabled === true,
         suggestion: editDraft.suggestion,
         applies_to: editDraft.applies_to,
       }, { idempotencyKey: key(`sensitive-word-save-${editingId}`) });

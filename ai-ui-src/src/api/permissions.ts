@@ -51,6 +51,30 @@ export function isForbiddenError(error: unknown): error is GeoFlowApiError {
 }
 
 /**
+ * 422 的字段级原因。
+ *
+ * 后端的校验失败信封里，`error.message` 恒为「参数校验失败」，真正的原因
+ * （哪个字段、为什么不合法）在 `details.field_errors` 里。以前这里只取 message，
+ * 于是运营上传一个 PDF 也只能看到「参数校验失败」，看不出是格式还是大小的问题。
+ */
+function fieldErrorSummary(details: Record<string, unknown>, lang: 'zh' | 'en'): string {
+  const raw = details.field_errors ?? details.fieldErrors;
+  if (!raw || typeof raw !== 'object') return '';
+  const messages: string[] = [];
+  for (const value of Object.values(raw as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim() !== '') {
+      messages.push(value.trim());
+    } else if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (typeof entry === 'string' && entry.trim() !== '') messages.push(entry.trim());
+      }
+    }
+    if (messages.length >= 3) break;
+  }
+  return [...new Set(messages)].slice(0, 3).join(lang === 'en' ? '; ' : '；');
+}
+
+/**
  * Turn a backend error into a useful UI message.  In particular, 403s should
  * tell an operator which scope is missing instead of only saying “操作失败”.
  */
@@ -74,6 +98,12 @@ export function describeApiError(
       return requiredScope
         ? `权限不足（403）：此操作需要「${requiredScope}」权限。`
         : '权限不足（403）：当前 Token 无权执行此操作。';
+    }
+    // 字段级原因优先拼在后面：只有「参数校验失败」这一句等于没说。
+    const fields = fieldErrorSummary(error.details, lang);
+    if (fields !== '') {
+      const head = error.message && error.message !== fields ? error.message : (lang === 'en' ? 'Invalid input' : '参数校验未通过');
+      return `${head}：${fields}`;
     }
     if (error.message) return error.message;
   }

@@ -618,6 +618,10 @@ class MaterialLibraryService
                     ? 'content'
                     : 'SUBSTR(content, 1, 4000) AS content')
                 ->withCount('chunks as chunk_count')
+                // 「已就绪」只说明切片跑完了，不代表向量算出来了：历史上有整库 0 向量、
+                // 状态仍是 ready 的（切完片时 embedding 模型还没配好，之后再没重建）。
+                // 列表把真实向量数一并给出，前端据此显示「N 向量」，并在一个都没有时降级徽标。
+                ->withCount(['chunks as vectorized_chunk_count' => fn (Builder $q) => $q->whereNotNull('embedding_vector')])
                 ->orderByDesc('created_at'),
         };
     }
@@ -781,6 +785,9 @@ class MaterialLibraryService
                 'usage_count' => (int) ($row->usage_count ?? 0),
                 'used_task_count' => (int) ($row->used_task_count ?? 0),
                 'chunk_count' => (int) ($row->chunk_count ?? 0),
+                // 仅在查询真的 withCount 过时才给这个键——详情接口没算它，
+                // 硬写 0 会让前端把「不知道」显示成「一个向量都没有」。
+                ...(isset($row->vectorized_chunk_count) ? ['vectorized_chunk_count' => (int) $row->vectorized_chunk_count] : []),
                 'chunk_sync_status' => (string) ($row->chunk_sync_status ?? 'idle'),
                 'chunk_sync_error' => (string) ($row->chunk_sync_error ?? ''),
                 'task_count' => (int) ($row->task_count ?? 0),
@@ -1208,12 +1215,54 @@ class MaterialLibraryService
     private function deleteImageItems(int $parentId, array $ids, array &$filePaths): int
     {
         ImageLibrary::query()->whereKey($parentId)->lockForUpdate()->firstOrFail();
+
+        // 图片此前是唯一「在用也照样删」的素材类型：删除时连同文章-图片关系（`ArticleImage`）
+        // 一起清掉，门禁开启时磁盘文件也跟着删——已发布文章正文里的配图就 404 了，而界面上
+        // 只显示「已删除 N 张」。其它素材（分类/作者/知识库…）一律 409，这里与它们对齐。
+        $this->assertImagesNotUsedByArticles($ids);
+
         $filePaths = Image::query()->where('library_id', $parentId)->whereIn('id', $ids)->pluck('file_path')->filter()->values()->all();
-        ArticleImage::query()->whereIn('image_id', $ids)->delete();
         $deleted = Image::query()->where('library_id', $parentId)->whereIn('id', $ids)->delete();
         $this->refreshImageLibraryCount($parentId);
 
         return $deleted;
+    }
+
+    /**
+     * 被文章引用的图片不允许删（与分类/作者的 `material_in_use` 同口径）。
+     *
+     * @param  list<int>  $ids
+     */
+    private function assertImagesNotUsedByArticles(array $ids): void
+    {
+        if ($ids === []) {
+            return;
+        }
+
+        $usedIds = ArticleImage::query()
+            ->whereIn('image_id', $ids)
+            ->distinct()
+            ->orderBy('image_id')
+            ->pluck('image_id')
+            ->all();
+        if ($usedIds === []) {
+            return;
+        }
+
+        $labels = Image::query()
+            ->whereIn('id', $usedIds)
+            ->orderBy('id')
+            ->limit(5)
+            ->get(['id', 'original_name'])
+            ->map(static fn (Image $image): string => trim('#'.$image->id.' '.((string) $image->original_name)))
+            ->implode('、');
+
+        throw new ApiException(
+            'material_in_use',
+            '选中的图片仍被文章使用，无法删除（先从文章里移除配图）：'.$labels,
+            409,
+            ['image_ids' => array_values($usedIds)],
+        );
     }
 
     private function deleteCategory(int $id): void
@@ -1282,6 +1331,8 @@ class MaterialLibraryService
         }
         $filePaths = Image::query()->where('library_id', $id)->pluck('file_path')->filter()->values()->all();
         $imageIds = Image::query()->where('library_id', $id)->pluck('id')->all();
+        // 整库删除同样要挡住「图还在文章里用着」——否则一次误删会让多篇文章的配图 404。
+        $this->assertImagesNotUsedByArticles($imageIds);
         ArticleImage::query()->whereIn('image_id', $imageIds)->delete();
         Image::query()->where('library_id', $id)->delete();
         $library->delete();

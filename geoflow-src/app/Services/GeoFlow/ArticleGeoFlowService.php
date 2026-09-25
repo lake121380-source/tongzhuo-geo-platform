@@ -210,6 +210,10 @@ class ArticleGeoFlowService
     public function getArticle(int $articleId): array
     {
         $article = Article::query()
+            // 回收站里的文章也要能读：列表投影会显示它们（status 映射成 'trash'），
+            // 运营点开却拿到 404「文章不存在」——看上去就像文章被彻底删了。
+            // 详情与列表必须同一口径。
+            ->withTrashed()
             ->with([
                 'task:id,name,ai_quality_enabled,ai_quality_retrieval_mode',
                 'author:id,name',
@@ -245,8 +249,12 @@ class ArticleGeoFlowService
             'excerpt' => $article->excerpt,
             'keywords' => $article->keywords,
             'meta_description' => $article->meta_description,
-            'status' => $article->status,
+            'status' => $article->trashed() ? 'trash' : (string) $article->status,
             'review_status' => $article->review_status,
+            // 与列表投影同一口径：`status` 给界面看（回收站 = 'trash'），
+            // `workflow_status` 保留落库的真实状态，`trashed` 给界面判「该不该出现发布按钮」。
+            'workflow_status' => (string) $article->status,
+            'trashed' => $article->trashed(),
             'task_id' => $this->nullableInt($article->task_id),
             'task_name' => $article->task->name ?? null,
             'author_id' => $this->nullableInt($article->author_id),
@@ -264,7 +272,9 @@ class ArticleGeoFlowService
     /** @return array<string, mixed> */
     public function getAiQualityStatus(int $articleId): array
     {
-        $article = Article::query()->with('latestAiQualityCheck')->find($articleId);
+        // 与 `getArticle()` 同一口径：回收站里的文章详情能打开，质检面板就会来查它的
+        // 质检状态——默认作用域取不到软删行，面板会拿到 404 并在控制台留下一条噪音。
+        $article = Article::query()->withTrashed()->with('latestAiQualityCheck')->find($articleId);
         if (! $article) {
             throw new ApiException('article_not_found', '文章不存在', 404);
         }
@@ -305,9 +315,26 @@ class ArticleGeoFlowService
         } catch (Throwable $exception) {
             report($exception);
 
-            throw new ApiException('article_ai_quality_failed', 'AI 质检无法重新排队', 409, [
-                'article_id' => $articleId,
-            ]);
+            // 质检策略解析器抛的是**原因码**（`ai_quality_prompt_unavailable` /
+            // `ai_quality_model_unavailable` / `ai_quality_knowledge_unavailable`），
+            // 以前一律被吞成一句「AI 质检无法重新排队」——运营既不知道缺什么，也不知道去哪里补。
+            // 注意：对照发布路径（`ArticleAiQualityGate`）那边是有像样说明的，这里对齐它。
+            $reasonCode = trim($exception->getMessage());
+            $actionable = [
+                'ai_quality_prompt_unavailable' => '这条任务没有可用的质检提示词——去「AI 模型与提示词」新建/启用一个质检提示词，再到任务的编辑里选中它',
+                'ai_quality_model_unavailable' => '没有可用的质检模型——去「AI 模型与提示词」确认有启用中的对话模型，且该任务的模型访问权限没有被收回',
+                'ai_quality_knowledge_unavailable' => '质检要用的知识库不可用——检查任务挂载的知识库是否已同步完成（切片就绪）',
+            ][$reasonCode] ?? null;
+
+            throw new ApiException(
+                $actionable !== null ? $reasonCode : 'article_ai_quality_failed',
+                $actionable ?? 'AI 质检无法重新排队',
+                409,
+                array_filter([
+                    'article_id' => $articleId,
+                    'reason_code' => $reasonCode !== '' ? $reasonCode : null,
+                ]),
+            );
         }
 
         return $this->getArticle($articleId);

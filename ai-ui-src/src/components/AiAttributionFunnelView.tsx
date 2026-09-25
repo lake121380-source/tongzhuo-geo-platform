@@ -26,6 +26,8 @@ interface AiAttributionFunnelViewProps {
   apiClient?: GeoFlowApiClient;
   canRead?: boolean;
   canWrite?: boolean;
+  /** 跳到其它页签（用在「AI 可见性明细已并入 AI 可见度栏目」那句提示上）。 */
+  onNavigate?: (tab: string) => void;
 }
 
 interface RealAttributionViewProps {
@@ -37,6 +39,8 @@ interface RealAttributionViewProps {
   onRetry: () => void;
   /** 合并入口的内层 Tab 渲染：隐藏自身页面标题（由外层 TabbedShell 统一画）。 */
   embedded?: boolean;
+  /** 同上：把「去 AI 可见度栏目」变成可点的。 */
+  onNavigate?: (tab: string) => void;
 }
 
 const record = (value: unknown): ApiRecord => value && typeof value === 'object' && !Array.isArray(value) ? value as ApiRecord : {};
@@ -68,19 +72,16 @@ const funnelAvailabilityText = (availability: string, lang: 'zh' | 'en'): string
 const displayPercentOrUnavailable = (value: unknown, lang: 'zh' | 'en'): string =>
   (value === null || value === undefined ? (lang === 'zh' ? '不可计算' : 'Unavailable') : displayPercent(value));
 
-const RealAttributionView: React.FC<RealAttributionViewProps> = ({ lang, data, funnel, loading, error, onRetry, embedded = false }) => {
+const RealAttributionView: React.FC<RealAttributionViewProps> = ({ lang, data, funnel, loading, error, onRetry, embedded = false, onNavigate }) => {
   const funnelStages = list(funnel?.stages);
   const funnelAvailability = String(funnel?.availability || '');
   const funnelDefinitions = record(funnel?.definitions);
   const visibility = record(data?.ai_visibility);
   const visibilityKpis = record(visibility.kpis);
-  const visibilityPolling = record(visibility.polling);
   const traffic = record(record(data?.traffic).summary);
   const trafficKpis = record(traffic.kpis);
   const leads = record(data?.leads);
   const leadKpis = record(leads.kpis);
-  const attentionSources = list(visibility.attention_sources);
-  const visibilityKeywords = list(visibility.keywords);
   const trafficTrend = list(traffic.traffic_trend);
   const leadSources = list(leads.sources);
   const botBreakdown = list(traffic.bot_breakdown);
@@ -88,11 +89,17 @@ const RealAttributionView: React.FC<RealAttributionViewProps> = ({ lang, data, f
 
   const cards = [
     { label: lang === 'zh' ? '品牌 AI 可见度' : 'Brand AI visibility', value: displayPercentOrUnavailable(visibilityKpis.brand_visibility, lang), icon: Eye, tone: 'text-indigo-400' },
-    { label: lang === 'zh' ? 'Top 1 率' : 'Top 1 rate', value: displayPercentOrUnavailable(visibilityKpis.top1_rate, lang), icon: TrendingUp, tone: 'text-indigo-400' },
-    { label: lang === 'zh' ? '已采样运行' : 'Sampled runs', value: displayNumber(visibilityPolling.sampled_runs), icon: Database, tone: 'text-indigo-400' },
+    // 「Top 1 率」与「已采样运行」两张卡删掉了：它们读的是 `ai_visibility.polling.sampled_runs`
+    // 与 `kpis.top1_rate`，而 2026-09-20「整体切换为见度数据」之后后端只在这些位置给
+    // `kpis.brand_visibility`（其余键永远不存在）——摆在那里就是恒 0 / 恒「不可计算」，
+    // 而同一页的「品牌 AI 可见度」拿的是见度真实数据，两者并列只会让人更困惑。
+    // 见度的样本数/推荐率在「数据分析 → AI 可见度」栏目，页内已给跳转提示。
     { label: lang === 'zh' ? '网站 PV' : 'Site PV', value: displayNumber(trafficKpis.pv), icon: MousePointerClick, tone: 'text-amber-400' },
     { label: lang === 'zh' ? 'AI 爬虫 PV' : 'AI crawler PV', value: displayNumber(trafficKpis.ai_bot_pv), icon: Bot, tone: 'text-rose-400' },
-    { label: lang === 'zh' ? '线索转化率' : 'Lead conversion', value: displayPercent(leadKpis.conversion_rate), icon: Users, tone: 'text-emerald-400' },
+    // 零样本时后端给 null，这里必须用 OrUnavailable：同页其它卡都是这么做的，
+    // 而 displayPercent 会把 null 折成 0 → 屏幕上出现「线索转化率 0.0%」，
+    // 把「没有线索数据」说成「转化率是零」。
+    { label: lang === 'zh' ? '线索转化率' : 'Lead conversion', value: displayPercentOrUnavailable(leadKpis.conversion_rate, lang), icon: Users, tone: 'text-emerald-400' },
   ];
 
   return (
@@ -158,14 +165,29 @@ const RealAttributionView: React.FC<RealAttributionViewProps> = ({ lang, data, f
         </div>
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <section className="rounded-2xl bg-slate-900/80 p-5">
-            <h2 className="mb-3 text-section-title">{lang === 'zh' ? 'AI 可见性关键词' : 'AI visibility keywords'}</h2>
-            {visibilityKeywords.length === 0 ? <p className="text-[13px] text-slate-400">{lang === 'zh' ? '暂无 AI 可见性采样。' : 'No AI visibility samples.'}</p> : <div className="overflow-x-auto"><table className="w-full text-left text-[13px] text-slate-300"><thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400"><tr><th className="px-3 py-3">{lang === 'zh' ? '关键词' : 'Keyword'}</th><th className="px-3 py-3">{lang === 'zh' ? '采样' : 'Samples'}</th><th className="px-3 py-3">{lang === 'zh' ? '可见度' : 'Visibility'}</th><th className="px-3 py-3">Top 3</th></tr></thead><tbody>{visibilityKeywords.map((row, index) => <tr key={`${String(row.keyword)}-${index}`} className="border-t border-slate-800 hover:bg-slate-800/40"><td className="px-3 py-4 text-white">{String(row.keyword || '—')}</td><td className="px-3 py-4">{displayNumber(row.samples)}</td><td className="px-3 py-4">{displayPercentOrUnavailable(row.brand_visibility, lang)}</td><td className="px-3 py-4">{displayPercentOrUnavailable(row.top3_rate, lang)}</td></tr>)}</tbody></table></div>}
-          </section>
-
-          <section className="rounded-2xl bg-slate-900/80 p-5">
-            <h2 className="mb-3 text-section-title">{lang === 'zh' ? 'AI 可见性关注来源' : 'AI visibility attention sources'}</h2>
-            {attentionSources.length === 0 ? <p className="text-[13px] text-slate-400">{lang === 'zh' ? '暂无需要关注的已采样来源。' : 'No sampled sources require attention.'}</p> : <div className="space-y-2">{attentionSources.map((row, index) => <div key={`${String(row.domain)}-${index}`} className="rounded-xl bg-slate-950/40 px-4 py-3 text-[13px]"><div className="flex items-center justify-between gap-3"><span className="font-medium text-white">{String(row.domain || '—')}</span><span className="text-slate-400">{displayNumber(row.mentions)} {lang === 'zh' ? '次引用' : 'mentions'}</span></div><div className="mt-1 text-slate-500">{String(row.action || '')} · {lang === 'zh' ? 'Top 3' : 'Top 3'} {displayPercent(row.top3_rate)}</div></div>)}</div>}
+          <section className="rounded-2xl bg-slate-900/80 p-5 lg:col-span-2">
+            {/*
+              「AI 可见性关键词」与「AI 可见性关注来源」两块整段删掉了：
+              它们渲染的是 `ai_visibility.keywords[]` / `ai_visibility.attention_sources[]`，
+              而 2026-09-20「整体切换为见度数据」之后 `/analytics/overview` 的 ai_visibility
+              只给 `kpis`（且只可能含 brand_visibility）——这两块永远是「暂无…」，
+              让运营以为「采集没跑」，实际上数据在另一个栏目里。
+            */}
+            <h2 className="mb-3 text-section-title">{lang === 'zh' ? 'AI 可见性明细' : 'AI visibility detail'}</h2>
+            <p className="text-[13px] leading-relaxed text-slate-400">
+              {lang === 'zh'
+                ? '关键词、平台分布、批次与报告这些明细已并入「数据分析 → AI 可见度」栏目（数据源为见度检测、每天 01:10 自动跑）。本页只保留归因相关的指标。'
+                : 'Keyword, platform, batch and report detail moved to Analytics → AI visibility (sourced from Jiandu, running daily at 01:10). This page keeps attribution metrics only.'}
+            </p>
+            {onNavigate && (
+              <button
+                type="button"
+                onClick={() => onNavigate('analytics')}
+                className="mt-3 inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-[12.5px] font-semibold text-slate-200 transition hover:bg-slate-800"
+              >
+                {lang === 'zh' ? '去 AI 可见度栏目 →' : 'Open AI visibility →'}
+              </button>
+            )}
           </section>
         </div>
 
@@ -178,7 +200,7 @@ const RealAttributionView: React.FC<RealAttributionViewProps> = ({ lang, data, f
   );
 };
 
-export const AiAttributionFunnelView: React.FC<AiAttributionFunnelViewProps> = ({ lang, apiClient, canRead = true, canWrite = true, embedded = false }) => {
+export const AiAttributionFunnelView: React.FC<AiAttributionFunnelViewProps> = ({ lang, apiClient, canRead = true, canWrite = true, embedded = false, onNavigate }) => {
   const [sources, setSources] = useState<AiReferralSourceMetric[]>([]);
   const [funnel, setFunnel] = useState<AiTrafficFunnelStage[]>([]);
   const [utmPresets, setUtmPresets] = useState<UtmCampaignPreset[]>([]);
@@ -242,6 +264,7 @@ export const AiAttributionFunnelView: React.FC<AiAttributionFunnelViewProps> = (
         funnel={apiFunnel}
         loading={apiLoading}
         error={apiError}
+        onNavigate={onNavigate}
         onRetry={() => {
           setApiData(null);
           setApiLoading(true);

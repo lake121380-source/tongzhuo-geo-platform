@@ -28,6 +28,16 @@ class DistributionChannelController extends BaseApiController
     public function store(Request $request, ApiKeyCrypto $apiKeyCrypto, DatabaseManager $database): JsonResponse
     {
         $this->requireIdempotencyKey($request);
+        // 新建渠道会**签发一枚与「轮换密钥」同权限的密钥**（scopes 完全相同，含
+        // article.publish/update/delete、site.settings.update…）并一次性返回明文。
+        // 轮换要超管、新建却只要 distribution:write，等于把那条边界绕过去了——
+        // 这里与 rotateSecret / destroy 对齐。
+        $admin = $this->executionAdmin($request);
+        if (! $admin->isSuperAdmin()) {
+            throw new ApiException('forbidden', '只有超级管理员可以新建分发渠道（会签发渠道密钥）', 403, [
+                'required_role' => 'super_admin',
+            ]);
+        }
         $payload = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'domain' => ['nullable', 'string', 'max:255'],
@@ -502,15 +512,33 @@ class DistributionChannelController extends BaseApiController
                 'health' => $result,
             ]);
         } catch (Throwable $exception) {
+            $reason = mb_substr(trim($exception->getMessage()), 0, 1000);
             $record->forceFill([
                 'last_health_status' => 'failed',
                 'last_health_checked_at' => now(),
-                'last_error_message' => mb_substr($exception->getMessage(), 0, 1000),
+                'last_error_message' => mb_substr($reason, 0, 1000),
             ])->save();
 
-            throw new ApiException('distribution_health_failed', '分发渠道健康检查失败', 502, [
-                'channel_id' => (int) $record->id,
-            ]);
+            // 原因写进库了，响应里**也要给**：前端只渲染这个响应、失败时也不回读渠道，
+            // 于是运营永远看不到「目标站 Agent 接口未找到，请先部署 Agent」这类可操作的话，
+            // 只能对着「健康检查失败」猜是该去部署包还是该查网络。
+            // 透出策略同手动发布：自述型中文原样给，内部异常文本（SQL/堆栈/路径）挡住。
+            $internals = '/(SQLSTATE|Illuminate\\\\|Symfony\\\\|\.php\b|\/var\/|Stack trace|QueryException|PDOException)/i';
+            $exposable = $reason !== ''
+                && preg_match($internals, $reason) !== 1
+                && preg_match('/\p{Han}/u', $reason) === 1;
+
+            throw new ApiException(
+                'distribution_health_failed',
+                $exposable
+                    ? mb_substr($reason, 0, 200)
+                    : '分发渠道健康检查失败',
+                502,
+                array_filter([
+                    'channel_id' => (int) $record->id,
+                    'last_error_message' => $exposable ? $reason : null,
+                ]),
+            );
         }
     }
 

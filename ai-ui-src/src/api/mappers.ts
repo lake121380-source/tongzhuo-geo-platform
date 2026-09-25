@@ -380,6 +380,10 @@ export function mapArticle(item: ApiRecord): Article {
     aiQualityPassScore: optionalNumberValue(quality, 'pass_score'),
     aiQualityOverrideMinScore: optionalNumberValue(quality, 'manual_override_min_score'),
     aiQualityIsOverridden: booleanValue(quality, 'is_overridden') ?? undefined,
+    // 这次质检是不是**抽样**跑的（没覆盖全文）：抽样结果不能授权发布，
+    // 徽标必须据此降级，否则会显示成绿色「质检通过」。
+    aiQualityDegraded: booleanValue(quality, 'degraded') ?? undefined,
+    aiQualityInspectionScope: text(quality, 'inspection_scope') || undefined,
     aiQualityReason: text(quality, 'summary') || undefined,
     ...(quality ? { aiQuality: quality } : {}),
     ...(qualityConfigVersion > 0 ? { aiQualityConfigVersion: qualityConfigVersion } : {}),

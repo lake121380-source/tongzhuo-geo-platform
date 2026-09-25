@@ -13,6 +13,8 @@ import { EmptyState } from './ui';
 
 interface TasksViewProps {
   tasks: Task[];
+  /** 服务端报告的任务总数（列表一次只加载 100 条）。 */
+  totalTasks?: number;
   categories: Category[];
   onCreateTask: (task: Partial<Task> & Record<string, unknown>) => void | Promise<void>;
   onRunTask: (taskId: string) => Promise<void>;
@@ -47,6 +49,7 @@ interface TasksViewProps {
 
 export const TasksView: React.FC<TasksViewProps> = ({
   tasks,
+  totalTasks,
   categories,
   onCreateTask,
   onRunTask,
@@ -111,6 +114,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
   const [taskActionErrors, setTaskActionErrors] = useState<Record<string, string>>({});
   const [trashedTasks, setTrashedTasks] = useState<ApiRecord[]>([]);
   const [trashPagination, setTrashPagination] = useState<ApiRecord>({});
+  /** 回收站的当前页。后端支持 page/per_page（并按快照保证翻页稳定）。 */
+  const [trashPage, setTrashPage] = useState(1);
   const [trashOpen, setTrashOpen] = useState(false);
   const [trashLoading, setTrashLoading] = useState(false);
   const [trashError, setTrashError] = useState('');
@@ -187,15 +192,18 @@ export const TasksView: React.FC<TasksViewProps> = ({
     return () => window.clearInterval(timer);
   }, [apiMode, canReadTasks, lang]);
 
-  const refreshTrash = async () => {
+  const refreshTrash = async (targetPage = 1) => {
     const loader = trashLoaderRef.current;
     if (!apiMode || !canReadTasks || !loader) return;
     setTrashLoading(true);
     setTrashError('');
     try {
-      const result = await loader({ page: 1, per_page: 50 });
+      // 以前这里写死 `{ page: 1, per_page: 50 }` 且没有翻页控件：徽标写着「共 60 条」、
+      // 列表只有 50 条，第 51 条之后**在界面上没有任何办法恢复**（90 天后还会被物理清理）。
+      const result = await loader({ page: targetPage, per_page: 50 });
       const rows = Array.isArray(result.items) ? result.items.map((item) => item && typeof item === 'object' ? item as ApiRecord : {}) : [];
       setTrashedTasks(rows);
+      setTrashPage(targetPage);
       setTrashPagination((result.pagination && typeof result.pagination === 'object') ? result.pagination as ApiRecord : {});
     } catch (error) {
       setTrashError(error instanceof Error ? error.message : (lang === 'zh' ? '读取任务回收站失败' : 'Unable to load task trash'));
@@ -223,7 +231,8 @@ export const TasksView: React.FC<TasksViewProps> = ({
     setTrashError('');
     try {
       await onRestoreTask(id, sequence);
-      await refreshTrash();
+      // 恢复后留在当前页（回到第 1 页会让人以为是分页坏了）。
+      await refreshTrash(trashPage);
     } catch (error) {
       setTrashError(error instanceof Error ? error.message : (lang === 'zh' ? '恢复任务失败' : 'Unable to restore task'));
     } finally {
@@ -770,6 +779,38 @@ export const TasksView: React.FC<TasksViewProps> = ({
                   {requiresSuperAdmin ? <span className="inline-flex items-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[12px] font-semibold text-amber-200">{lang === 'zh' ? '需超级管理员恢复' : 'Super admin required'}</span> : <button type="button" onClick={() => void handleRestoreTrash(item)} disabled={restoring || !onRestoreTask} className="inline-flex h-9 items-center justify-center gap-1.5 self-start rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 text-[12.5px] font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:opacity-50 sm:self-auto"><RefreshCw className={`h-3.5 w-3.5 ${restoring ? 'animate-spin' : ''}`} />{restoring ? (lang === 'zh' ? '恢复中…' : 'Restoring…') : (lang === 'zh' ? '恢复任务' : 'Restore')}</button>}
                 </div>;
               })}</div>}
+              {/* 回收站分页：徽标写「共 N 条」就要让每一页都可达，否则第 51 条之后无法恢复。 */}
+              {(() => {
+                const totalPages = Math.max(1, Number(trashPagination.total_pages || 1));
+                if (totalPages <= 1) return null;
+                return (
+                  <div className="mt-3 flex items-center justify-between gap-3 text-[12px] text-slate-400">
+                    <span>
+                      {lang === 'zh'
+                        ? `第 ${trashPage} / ${totalPages} 页（共 ${Number(trashPagination.total || trashedTasks.length)} 条）`
+                        : `Page ${trashPage} / ${totalPages} (${Number(trashPagination.total || trashedTasks.length)} total)`}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={trashPage <= 1 || trashLoading}
+                        onClick={() => void refreshTrash(trashPage - 1)}
+                        className="inline-flex h-8 items-center rounded-lg border border-slate-700 bg-slate-800/60 px-3 font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-40"
+                      >
+                        {lang === 'zh' ? '上一页' : 'Prev'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={trashPage >= totalPages || trashLoading}
+                        onClick={() => void refreshTrash(trashPage + 1)}
+                        className="inline-flex h-8 items-center rounded-lg border border-slate-700 bg-slate-800/60 px-3 font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-40"
+                      >
+                        {lang === 'zh' ? '下一页' : 'Next'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </section>
@@ -790,6 +831,15 @@ export const TasksView: React.FC<TasksViewProps> = ({
           </p>
         </div>
       </div>
+
+      {/* 列表一次只加载 100 条：超出时明说，否则「第 101 条之后的任务」就是静默消失。 */}
+      {typeof totalTasks === 'number' && totalTasks > tasks.length && (
+        <p className="text-[12px] text-amber-300/80">
+          {lang === 'zh'
+            ? `共 ${totalTasks} 个任务，当前只加载了最新 ${tasks.length} 个。`
+            : `${totalTasks} tasks total; only the latest ${tasks.length} are loaded.`}
+        </p>
+      )}
 
       {/* Task Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -831,6 +881,10 @@ export const TasksView: React.FC<TasksViewProps> = ({
            * 否则就是一个「点了白跑」的假按钮（2026-09-14 哥哥指出的问题）。
            */
           const atGenerationLimit = jobStatus === 'limit_reached';
+          /** 草稿池已满：后端会直接短路（一条都不产），点「立即生成」等于白跑。 */
+          const draftPoolFull = jobStatus === 'draft_pool_full';
+          /** 这两种状态下「立即生成」都不会产出任何东西——按钮必须禁用并说明原因。 */
+          const runBlocked = atGenerationLimit || draftPoolFull;
           const statusLabel = jobBusy
             ? (lang === 'zh' ? '作业运行中' : 'Job running')
               : taskLifecycleActive
@@ -897,6 +951,13 @@ export const TasksView: React.FC<TasksViewProps> = ({
                         : `Generation limit reached. Raise “per run” or switch to loop mode to keep writing.`}
                     </div>
                   )}
+                  {draftPoolFull && (
+                    <div className="text-[12.5px] leading-relaxed text-amber-600">
+                      {lang === 'zh'
+                        ? '草稿池已满：待审核/待发布的草稿还没处理，现在点「立即生成」后端会直接跳过（一条都不产）。先审核或发布已有草稿，或点「编辑」把「每次生成」调大。'
+                        : 'The draft pool is full — approval/publishing must catch up first; “Run now” would short-circuit and produce nothing.'}
+                    </div>
+                  )}
                   {apiMode && task.batchErrorMessage && (
                     <div role="status" className="text-[12.5px] text-rose-300 break-words">
                       {task.batchErrorMessage}
@@ -920,10 +981,12 @@ export const TasksView: React.FC<TasksViewProps> = ({
                       已合并为一个；入队语义由后端在 startTask 内部处理。 */}
                   <button
                     onClick={() => void handleRun(task.id)}
-                     disabled={isRunning || isActioning || atGenerationLimit || (apiMode && !canWriteTasks)}
+                     disabled={isRunning || isActioning || runBlocked || (apiMode && !canWriteTasks)}
                     title={atGenerationLimit
                       ? (lang === 'zh' ? '已达生成上限：先编辑把「每次生成」调大，或改成循环任务' : 'Generation limit reached — edit the task first')
-                      : undefined}
+                      : draftPoolFull
+                        ? (lang === 'zh' ? '草稿池已满：先审核或发布已有草稿，再生成' : 'Draft pool full — review or publish existing drafts first')
+                        : undefined}
                     className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white disabled:cursor-not-allowed disabled:opacity-50 transition hover:bg-indigo-500"
                   >
                   {isRunning ? (
@@ -938,7 +1001,9 @@ export const TasksView: React.FC<TasksViewProps> = ({
                          ? (lang === 'zh' ? '只读' : 'Read-only')
                          : atGenerationLimit
                            ? (lang === 'zh' ? '已达上限' : 'Limit reached')
-                           : (lang === 'zh' ? '立即生成' : 'Run Now')}</span>
+                           : draftPoolFull
+                             ? (lang === 'zh' ? '草稿池已满' : 'Draft pool full')
+                             : (lang === 'zh' ? '立即生成' : 'Run Now')}</span>
                     </>
                   )}
                   </button>

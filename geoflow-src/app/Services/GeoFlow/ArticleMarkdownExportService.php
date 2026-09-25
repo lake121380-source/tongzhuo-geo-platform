@@ -97,7 +97,10 @@ class ArticleMarkdownExportService
             $totalBytes = 0;
             $sequence = 0;
             foreach (array_chunk($articleIds, self::ARTICLE_CHUNK_SIZE) as $chunk) {
-                $articles = Article::query()
+                // 回收站里的文章**也要能导出**：回收站工具栏就有「导出 Markdown」，
+                // 而永久删除是不可逆的——先导出留档、再删，是最常见的用法。
+                // 以前这两处用默认作用域，软删文章一律被当成「无效或已删除的数据」而整批失败。
+                $articles = Article::withTrashed()
                     ->select([
                         'id', 'title', 'slug', 'excerpt', 'content', 'category_id', 'author_id',
                         'original_keyword', 'keywords', 'meta_description', 'status', 'review_status',
@@ -332,7 +335,7 @@ class ArticleMarkdownExportService
     /** @param list<int> $articleIds */
     private function assertArticlesAvailable(array $articleIds): void
     {
-        $availableIds = Article::query()
+        $availableIds = Article::withTrashed()
             ->whereIn('id', $articleIds)
             ->pluck('id')
             ->map(static fn (mixed $id): int => (int) $id)

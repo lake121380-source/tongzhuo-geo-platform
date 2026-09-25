@@ -137,9 +137,21 @@ export const AiGenerateModal: React.FC<AiGenerateModalProps> = ({
     if (catalogQualityPrompts.length === 0) setQualityEnabled(false);
   }, [apiCatalog, catalogQualityPrompts.length]);
 
-  const availableOf = (libraryId: string | number): number => titleReadiness[String(libraryId)]?.available ?? 0;
+  /**
+   * 某个标题库的可用条数。**取不到就是「未知」，不是 0。**
+   *
+   * `probeTitleReadiness` 的契约写明：单个库探测失败就跳过它，调用方读到的 `undefined`
+   * 表示「不知道」（`titleReadiness.ts`）。以前这里 `?? 0`，探测一失败每个库都标成
+   * 「可用 0」、下面写「共 0 条标题」——运营会跑去补一批并不需要的标题。
+   */
+  const availableOf = (libraryId: string | number): number | null =>
+    typeof titleReadiness[String(libraryId)]?.available === 'number'
+      ? (titleReadiness[String(libraryId)]?.available as number)
+      : null;
   const activeReadiness = selectedLibraryId ? titleReadiness[selectedLibraryId] : undefined;
-  const readinessTotal = activeReadiness?.total ?? 0;
+  /** 同上：探测没回来时不谎报「共 0 条」。 */
+  const readinessKnown = typeof activeReadiness?.total === 'number';
+  const readinessTotal = readinessKnown ? (activeReadiness?.total as number) : null;
   const readinessBlocked = activeReadiness?.blocked ?? false;
 
   const handleGenerate = async () => {
@@ -280,13 +292,19 @@ export const AiGenerateModal: React.FC<AiGenerateModalProps> = ({
                   {titleLibraries.map((library) => (
                     <option key={String(library.id)} value={String(library.id)}>
                       {library.name}
-                      {zh ? `（可用 ${availableOf(library.id)}）` : ` (${availableOf(library.id)} available)`}
+                      {(() => {
+                        const available = availableOf(library.id);
+                        if (available === null) return zh ? '（可用数未知）' : ' (availability unknown)';
+                        return zh ? `（可用 ${available}）` : ` (${available} available)`;
+                      })()}
                     </option>
                   ))}
                 </select>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] text-slate-500 tabular-nums">
-                    {zh ? `共 ${readinessTotal} 条标题` : `${readinessTotal} titles`}
+                    {readinessTotal === null
+                      ? (zh ? '可用标题数未知（探测失败，可点「检查就绪度」重试）' : 'Title availability unknown (retry readiness check)')
+                      : (zh ? `共 ${readinessTotal} 条标题` : `${readinessTotal} titles`)}
                   </span>
                   {readinessBlocked && onNavigate && (
                     <button

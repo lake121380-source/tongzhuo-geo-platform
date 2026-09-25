@@ -103,6 +103,14 @@ final class KnowledgeAssetApiController extends BaseApiController
             'knowledge_file' => ['nullable', 'file', 'max:8192', 'mimes:txt,md,markdown,docx'],
             'knowledge_files' => ['nullable', 'array', 'max:10'],
             'knowledge_files.*' => ['file', 'max:8192', 'mimes:txt,md,markdown,docx'],
+        ], [
+            // 这几条以前没配中文：被拒时运营看到的是英文的
+            // "The knowledge file field must be a file of type: txt, md, markdown, docx."，
+            // 而前端只渲染 message（不展示 field_errors），于是界面上只剩「参数校验失败」。
+            'knowledge_file.mimes' => '只支持 TXT / Markdown / DOCX 文件（PDF、Excel、CSV 等请先转成 Markdown 或 TXT）',
+            'knowledge_file.max' => '单个文件不能超过 8 MB',
+            'knowledge_files.*.mimes' => '只支持 TXT / Markdown / DOCX 文件（PDF、Excel、CSV 等请先转成 Markdown 或 TXT）',
+            'knowledge_files.*.max' => '单个文件不能超过 8 MB',
         ]);
 
         $files = $parser->uploadedKnowledgeFiles($request);
@@ -159,6 +167,20 @@ final class KnowledgeAssetApiController extends BaseApiController
         } catch (ValidationException|ApiException $exception) {
             $parser->cleanupKnowledgeFiles($storedPaths);
             throw $exception;
+        } catch (\RuntimeException $exception) {
+            // 解析器抛的 RuntimeException 都是**写给用户看的中文**（例：「不支持的文件格式，
+            // 请上传 TXT、MD 或 DOCX 文件」「知识库名称不能为空」）。以前没人接，直接落进
+            // bootstrap 的 500 兜底 → 运营看到「服务器内部错误」，既不知道原因、也以为系统坏了。
+            // 这里翻成 422，把原话交给用户。
+            $parser->cleanupKnowledgeFiles($storedPaths);
+            $message = trim($exception->getMessage());
+
+            throw new ApiException(
+                'knowledge_source_invalid',
+                $message !== '' ? $message : '知识文件无法解析，请检查文件格式',
+                422,
+                ['field_errors' => ['knowledge_file' => $message !== '' ? $message : '知识文件无法解析']],
+            );
         } catch (Throwable $exception) {
             $parser->cleanupKnowledgeFiles($storedPaths);
             throw $exception;

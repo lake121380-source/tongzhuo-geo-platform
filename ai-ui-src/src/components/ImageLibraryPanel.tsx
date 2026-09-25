@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Image as ImageIcon, Loader2, Search, Trash2, Upload } from 'lucide-react';
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
+import { getPaginationMeta } from '../api/mappers';
 
 interface ImageLibraryPanelProps {
   apiClient: GeoFlowApiClient;
@@ -9,6 +10,15 @@ interface ImageLibraryPanelProps {
   libraryId: string | number;
   canWrite: boolean;
 }
+
+/**
+ * 上传预检阈值，**镜像后端** `ImageLibraryUploadPolicy`（`GEOFLOW_MAX_UPLOAD_BYTES`，默认 10MB）。
+ * 这里只为「请求发出去之前就说清楚」；真超限时后端也会回中文原因，前端照常展示。
+ */
+const MAX_IMAGE_MB = 10;
+const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024;
+/** 一次提交的总量上限：低于 PHP post_max_size（64M），避免整个请求体被丢掉后只能回「请选择图片」。 */
+const MAX_BATCH_BYTES = 40 * 1024 * 1024;
 
 function idempotencyKey(prefix: string): string {
   const uuid = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -52,6 +62,8 @@ const ImageLibraryPanel: React.FC<ImageLibraryPanelProps> = ({ apiClient, lang, 
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** 服务端报告的图片总数（列表一次只取 100 张）。 */
+  const [total, setTotal] = useState<number | undefined>(undefined);
 
   const load = useCallback(async (keyword: string) => {
     setLoading(true);
@@ -64,6 +76,8 @@ const ImageLibraryPanel: React.FC<ImageLibraryPanelProps> = ({ apiClient, lang, 
       });
       const items = (result as { items?: ApiRecord[] }).items ?? [];
       setImages(items);
+      // 服务端总数（一次只取 100 张，超出的部分以前既不显示也删不掉）。
+      setTotal(typeof getPaginationMeta(result)?.total === 'number' ? Number(getPaginationMeta(result)?.total) : items.length);
       setSelected(new Set());
     } catch (loadError) {
       setError(describeApiError(loadError, zh ? '读取图片失败' : 'Unable to load images', lang));
@@ -76,11 +90,31 @@ const ImageLibraryPanel: React.FC<ImageLibraryPanelProps> = ({ apiClient, lang, 
 
   const upload = async (files: FileList | null) => {
     if (!files || files.length === 0 || busy) return;
+    const picked = Array.from(files);
+
+    // 上传前的预检。以前这里什么都不查：一张手机拍的 5MB 照片会被后端以「参数校验
+    // 失败」（那会儿后端还没配中文原因）挡回来，运营看不出是尺寸问题。现在后端上限
+    // 已与图片编辑器对齐到 10MB、且会回中文原因，这里只为了**在发出请求之前**就说清楚。
+    const tooLarge = picked.filter((file) => file.size > MAX_IMAGE_BYTES);
+    if (tooLarge.length > 0) {
+      setError(zh
+        ? `这些图片超过 ${MAX_IMAGE_MB} MB，没有上传：${tooLarge.map((file) => file.name).join('、')}`
+        : `${tooLarge.map((file) => file.name).join(', ')} exceed ${MAX_IMAGE_MB} MB and were not uploaded.`);
+      return;
+    }
+    const totalBytes = picked.reduce((sum, file) => sum + file.size, 0);
+    if (totalBytes > MAX_BATCH_BYTES) {
+      setError(zh
+        ? `一次选中的图片总量约 ${Math.round(totalBytes / 1048576)} MB，请分批上传（每次不超过 ${Math.round(MAX_BATCH_BYTES / 1048576)} MB）`
+        : `The selection is about ${Math.round(totalBytes / 1048576)} MB; please upload in smaller batches.`);
+      return;
+    }
+
     setBusy('upload');
     setError('');
     setNotice('');
     try {
-      const data = await apiClient.uploadMaterialImages(libraryId, Array.from(files), {
+      const data = await apiClient.uploadMaterialImages(libraryId, picked, {
         idempotencyKey: idempotencyKey(`image-upload-${libraryId}`),
       });
       const uploaded = Number(data.uploaded ?? 0);
@@ -123,7 +157,13 @@ const ImageLibraryPanel: React.FC<ImageLibraryPanelProps> = ({ apiClient, lang, 
     <div className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-xs font-semibold text-slate-300">
-          {zh ? '图片' : 'Images'} <span className="text-slate-500">({images.length})</span>
+          {zh ? '图片' : 'Images'} <span className="text-slate-500">({total ?? images.length})</span>
+          {/* 一次只取 100 张：超过就在表头说明，别让「图片 (100)」冒充全部。 */}
+          {typeof total === 'number' && images.length < total && (
+            <span className="ml-1 text-slate-500">
+              {zh ? `· 已显示前 ${images.length} 张` : `· showing first ${images.length}`}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {canWrite && selected.size > 0 && (
@@ -134,7 +174,7 @@ const ImageLibraryPanel: React.FC<ImageLibraryPanelProps> = ({ apiClient, lang, 
           {canWrite && (
             <label className="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-indigo-500">
               {busy === 'upload' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-              {zh ? '上传图片（可多选）' : 'Upload images'}
+              {zh ? `上传图片（可多选，单张 ≤ ${MAX_IMAGE_MB} MB）` : `Upload images (each ≤ ${MAX_IMAGE_MB} MB)`}
               <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple className="hidden" onChange={(event) => { void upload(event.target.files); event.target.value = ''; }} />
             </label>
           )}

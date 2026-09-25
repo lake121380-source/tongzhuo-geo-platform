@@ -2664,9 +2664,29 @@ class KnowledgeChunkSyncService
     /**
      * 估算 token 数，用于展示与后续检索排序。
      */
+    /**
+     * 估算 token 数——**只用于界面展示**（切片卡上的「N tokens」）。
+     *
+     * 旧实现把「2–32 个连续汉字」算作一个 token，于是 900 字的中文段落只报 60 出头，
+     * 比真实值低约一个数量级：运营看到 150 字的切片写着「8 tokens」，会当成坏数据。
+     * 这里按「汉字 ÷ 1.5 + 拉丁词」估，与真实分词器同量级。
+     *
+     * 刻意不复用 extractTokens()：那个函数同时给词法兜底向量（buildFallbackVector）用，
+     * 改它会动到检索行为。历史切片的 token_count 不会自动重算，重建切片后才会刷新。
+     */
     private function estimateTokenCount(string $content): int
     {
-        return count($this->extractTokens($content));
+        $normalized = $this->normalizeText($content);
+        if ($normalized === '') {
+            return 0;
+        }
+
+        $han = preg_match_all('/\p{Han}/u', $normalized);
+        $latin = preg_match_all('/[A-Za-z0-9][A-Za-z0-9._+#-]*/u', $normalized);
+        // 其余字符（标点、空白）按 4 个约合 1 token 粗算。
+        $others = max(0, mb_strlen($normalized, 'UTF-8') - $han - $latin);
+
+        return (int) max(1, (int) ceil($han / 1.5) + $latin + (int) ceil($others / 4));
     }
 
     /**

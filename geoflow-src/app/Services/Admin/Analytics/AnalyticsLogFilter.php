@@ -76,7 +76,10 @@ class AnalyticsLogFilter
 
     private static function normalizePreset(string $preset): string
     {
-        return in_array($preset, ['7d', '30d', '60d', 'custom'], true) ? $preset : '7d';
+        // `90d` 必须在这里和下面 `$presetDays` 里都有：内容侧（AnalyticsFilter）一直支持 90 天，
+        // 流量侧没有它 → 运营在数据分析页选「90 天」时，同一屏里内容卡片按 90 天算、
+        // 流量卡片与趋势表悄悄退回 **7 天**（响应里 `log_preset` 会如实回显 7d，但界面不渲染 range）。
+        return in_array($preset, ['7d', '30d', '60d', '90d', 'custom'], true) ? $preset : '7d';
     }
 
     /**
@@ -86,7 +89,7 @@ class AnalyticsLogFilter
     private static function resolveDates(array $input, string &$preset): array
     {
         $today = Carbon::today();
-        $presetDays = ['7d' => 7, '30d' => 30, '60d' => 60];
+        $presetDays = ['7d' => 7, '30d' => 30, '60d' => 60, '90d' => 90];
 
         if (isset($presetDays[$preset])) {
             return [$today->copy()->subDays($presetDays[$preset] - 1), $today->copy()];

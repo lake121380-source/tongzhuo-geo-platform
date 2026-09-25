@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { UrlScanReport, UrlScanItem } from '../types';
 import { GeoFlowApiClient, GeoFlowApiError, UrlScanSummary } from '../api/geoflowClient';
+import { getPaginationMeta } from '../api/mappers';
 import { LoadingState } from './LoadingState';
 import { EmptyState } from './ui';
 
@@ -64,6 +65,8 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
   const [report, setReport] = useState<UrlScanReport | null>(null);
   const [scanId, setScanId] = useState<number | null>(null);
   const [history, setHistory] = useState<UrlScanSummary[]>([]);
+  /** 服务端报告的扫描记录总数（列表一次取 20 条）。 */
+  const [historyTotal, setHistoryTotal] = useState<number | undefined>(undefined);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -73,6 +76,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
     try {
       const result = await apiClient.listUrlScans({ page: 1, per_page: 20 });
       setHistory(result.items || []);
+      setHistoryTotal(getPaginationMeta(result)?.total ?? (result.items || []).length);
     } catch (reason) {
       setError(reason instanceof GeoFlowApiError || reason instanceof Error ? reason.message : '扫描记录加载失败');
     } finally {
@@ -109,6 +113,9 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
       const failedId = apiError ? Number(apiError.details.scan_id || 0) : 0;
       if (failedId) setScanId(failedId);
       setError(reason instanceof Error ? reason.message : '扫描失败，请稍后重试');
+      // 失败的那次**后端已经落库了**（status=failed，并回传 scan_id）。以前这里不刷新历史，
+      // 刚失败的那条就不在「最近扫描记录」里，用户以为什么都没存下，整页刷新后才冒出来。
+      await loadHistory();
     } finally {
       setIsScanning(false);
     }
@@ -303,7 +310,19 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
 
       {apiClient && canRead && (
         <div className="rounded-2xl bg-slate-900/80 p-4">
-          <div className="mb-3 flex items-center justify-between"><h3 className="text-section-title">{lang === 'zh' ? '最近扫描记录' : 'Recent scans'}</h3><button type="button" onClick={() => void loadHistory()} className="text-[12.5px] text-indigo-400 hover:underline">{lang === 'zh' ? '刷新' : 'Refresh'}</button></div>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-section-title">
+              {lang === 'zh' ? '最近扫描记录' : 'Recent scans'}
+              {/* 以前这里取 20 条却只渲染 6 条、总数直接丢掉：扫过 30 个网址的人只能看到 6 条，
+                  还以为历史就这么多。现在全部列出，并把服务端总数写清楚。 */}
+              {typeof historyTotal === 'number' && historyTotal > 0 && (
+                <span className="ml-2 text-[12px] font-normal text-slate-500">
+                  {historyTotal > history.length
+                    ? (lang === 'zh' ? `共 ${historyTotal} 次，显示最近 ${history.length} 次` : `${historyTotal} total, showing latest ${history.length}`)
+                    : (lang === 'zh' ? `共 ${historyTotal} 次` : `${historyTotal} total`)}
+                </span>
+              )}
+            </h3><button type="button" onClick={() => void loadHistory()} className="text-[12.5px] text-indigo-400 hover:underline">{lang === 'zh' ? '刷新' : 'Refresh'}</button></div>
           {loading && history.length === 0 ? <LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取扫描记录…' : 'Loading scan history…'} /> : history.length === 0 ? (
             <EmptyState
               compact
@@ -313,7 +332,7 @@ export const UrlScannerView: React.FC<UrlScannerViewProps> = ({ lang, apiClient,
             />
           ) : (
             <div className="grid gap-2 md:grid-cols-2">
-              {history.slice(0, 6).map((item) => <button type="button" key={item.id} onClick={() => void handleOpenHistory(item)} className="flex items-center justify-between rounded-xl bg-slate-950/40 px-4 py-3 text-left transition hover:bg-slate-800/40"><span className="min-w-0"><span className="block truncate text-[13px] font-medium text-slate-200">{item.url}</span><span className="text-[12px] text-slate-500">{item.scanned_at || item.created_at || '—'}</span></span><span className={`ml-3 text-[13px] font-bold ${item.status === 'failed' ? 'text-rose-400' : 'text-indigo-300'}`}>{item.status === 'failed' ? (lang === 'zh' ? '失败' : 'Failed') : `${item.overall_score} · ${item.grade}`}</span></button>)}
+              {history.map((item) => <button type="button" key={item.id} onClick={() => void handleOpenHistory(item)} className="flex items-center justify-between rounded-xl bg-slate-950/40 px-4 py-3 text-left transition hover:bg-slate-800/40"><span className="min-w-0"><span className="block truncate text-[13px] font-medium text-slate-200">{item.url}</span><span className="text-[12px] text-slate-500">{item.scanned_at || item.created_at || '—'}</span></span><span className={`ml-3 text-[13px] font-bold ${item.status === 'failed' ? 'text-rose-400' : 'text-indigo-300'}`}>{item.status === 'failed' ? (lang === 'zh' ? '失败' : 'Failed') : `${item.overall_score} · ${item.grade}`}</span></button>)}
             </div>
           )}
         </div>

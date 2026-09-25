@@ -726,7 +726,10 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                   <div className="space-y-2 border-t border-slate-800 pt-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-caption">
-                        {lang === 'zh' ? '最后同步' : 'Last sync'}: {channel.lastSyncedAt ? channel.lastSyncedAt.split(' ')[0] : '—'}
+                        {/* 这里渲染的是 `last_health_checked_at`（mappers 把它映射成 lastSyncedAt）：
+                            健康检查会刷新它，而「推送站点设置」不会——所以叫「最后同步」会让运营
+                            误以为设置已经推下去了。等后端补一个真的同步时间戳再改回「同步」。 */}
+                        {lang === 'zh' ? '最后检查' : 'Last checked'}: {channel.lastSyncedAt ? channel.lastSyncedAt.split(' ')[0] : '—'}
                       </span>
                       <button
                         onClick={() => void handleSync(channel.id)}

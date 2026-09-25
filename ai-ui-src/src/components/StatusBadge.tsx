@@ -49,7 +49,19 @@ export function articleStatusSpec(status: string | undefined): BadgeSpec {
  * 以为通过了，点发布却被门禁拦下（2026-09-14 哥哥报的 bug）。
  * 所以：跑完以后一律按 decision 显示；只有「还没跑完」才显示进行中/排队。
  */
-export function qualityStatusSpec(status: string | undefined, decision?: string): BadgeSpec {
+/**
+ * 质检状态徽标。
+ *
+ * `options.degraded` = 这次质检是**抽样**跑的（`inspection_scope=fallback_sampled`），
+ * 没有覆盖全文。抽样结果**不能授权发布**（后端 `ArticleAiQualityGate` 会强制转 stale 并
+ * 排队全文质检），所以它绝不能显示成绿色的「质检通过」——否则审核人信了绿灯点
+ * 「通过终审并上线」，只会在原地吃一个 409。
+ */
+export function qualityStatusSpec(
+  status: string | undefined,
+  decision?: string,
+  options: { degraded?: boolean } = {},
+): BadgeSpec {
   const run = String(status || '').toLowerCase();
   const verdict = String(decision || '').toLowerCase();
   switch (run) {
@@ -64,7 +76,9 @@ export function qualityStatusSpec(status: string | undefined, decision?: string)
     case 'completed':
       switch (verdict) {
         case 'passed':
-          return { label: { zh: '质检通过', en: 'Passed' }, tone: 'success' };
+          return options.degraded
+            ? { label: { zh: '抽样质检通过（未覆盖全文）', en: 'Sampled pass (partial coverage)' }, tone: 'warning' }
+            : { label: { zh: '质检通过', en: 'Passed' }, tone: 'success' };
         case 'needs_review':
           return { label: { zh: '待人工复核', en: 'Needs review' }, tone: 'warning' };
         case 'blocked':

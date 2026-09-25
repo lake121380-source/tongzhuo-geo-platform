@@ -136,6 +136,11 @@ class MaterialController extends BaseApiController
         ], [
             'images.required' => '请选择要上传的图片',
             'images.array' => '请选择要上传的图片',
+            // 这两条以前没配中文：超限时运营看到的是英文的
+            // "The images.0 field must not be greater than 10240 kilobytes."，
+            // 而前端以前只渲染 message，界面上就只剩「参数校验失败」。
+            'images.*.max' => '单张图片不能超过 :max KB（约 '.round(ImageLibraryUploadPolicy::maxKilobytes() / 1024).' MB）',
+            'images.*.image' => '只支持 JPG / PNG / GIF / WebP 图片',
         ]);
 
         $images = array_values(array_filter(
@@ -145,6 +150,17 @@ class MaterialController extends BaseApiController
         if ($images === []) {
             throw new ApiException('validation_failed', '请选择要上传的图片', 422, [
                 'field_errors' => ['images' => '请选择要上传的图片'],
+            ]);
+        }
+
+        // 多选一次提交时，PHP 的 post_max_size（本机 64M）一旦被超过，**整个请求体都会被丢掉**，
+        // 到这里的 $request->file() 直接是空数组——接口只能回「请选择要上传的图片」，运营完全
+        // 看不出是「一次选得太多」。这里按收到的文件先算总量，给一句能看懂的话。
+        $totalBytes = array_sum(array_map(static fn (UploadedFile $file): int => (int) $file->getSize(), $images));
+        $postLimit = self::postMaxBytes();
+        if ($postLimit > 0 && $totalBytes > $postLimit) {
+            throw new ApiException('image_upload_too_large', '一次上传的图片总量过大，请分批上传', 422, [
+                'field_errors' => ['images' => '一次上传的图片总量过大（约 '.round($totalBytes / 1048576).' MB），请分批上传'],
             ]);
         }
 
@@ -203,5 +219,31 @@ class MaterialController extends BaseApiController
     public function destroyItems(Request $request, string $type, int $id, MaterialLibraryService $materials): JsonResponse
     {
         return $this->success($request, $materials->deleteItems($type, $id, $request->all()));
+    }
+
+    /**
+     * PHP `post_max_size` 的字节数（0 表示取不到/无限制）。
+     *
+     * 超过它时 PHP 会丢掉整个请求体，Laravel 连 `$request->file()` 都拿不到——
+     * 所以只能拿**已经收到**的文件总量去判，给运营一句能看懂的话。
+     * 同时留 1MB 余量：multipart 的分隔符与其它字段也占体积。
+     */
+    private static function postMaxBytes(): int
+    {
+        $raw = trim((string) ini_get('post_max_size'));
+        if ($raw === '' || $raw === '0') {
+            return 0;
+        }
+
+        $unit = strtolower(substr($raw, -1));
+        $value = (int) $raw;
+        $bytes = match ($unit) {
+            'g' => $value * 1024 * 1024 * 1024,
+            'm' => $value * 1024 * 1024,
+            'k' => $value * 1024,
+            default => $value,
+        };
+
+        return max(0, $bytes - 1024 * 1024);
     }
 }

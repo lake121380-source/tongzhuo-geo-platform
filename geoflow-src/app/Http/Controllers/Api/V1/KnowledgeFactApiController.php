@@ -85,10 +85,16 @@ final class KnowledgeFactApiController extends BaseApiController
             ];
         }
 
-        $revisions = $library instanceof KnowledgeFactLibrary
-            ? $library->revisions()->with('publisher')->limit(self::MAX_REVISION_PAGE_SIZE)->get()
-                ->map(fn (KnowledgeFactLibraryRevision $revision): array => $this->serializeRevision($revision, false))->values()->all()
-            : [];
+        // 版本历史只回最近 50 个，但要**同时报总数**：否则发布次数一多，运营想回滚到
+        // 某个早期版本时，下拉里根本没有那一项、界面上也不说被截断了——看起来就像
+        // 「版本历史被清了」。（关系本身是有序的，所以缺的是「最近 50 个」而不是乱序。）
+        $revisionTotal = 0;
+        $revisions = [];
+        if ($library instanceof KnowledgeFactLibrary) {
+            $revisionTotal = (int) $library->revisions()->count();
+            $revisions = $library->revisions()->with('publisher')->limit(self::MAX_REVISION_PAGE_SIZE)->get()
+                ->map(fn (KnowledgeFactLibraryRevision $revision): array => $this->serializeRevision($revision, false))->values()->all();
+        }
         $runs = $library instanceof KnowledgeFactLibrary
             ? $library->generationRuns()->latest('id')->limit(10)->get()
                 ->map(fn (KnowledgeFactGenerationRun $run): array => $this->serializeRun($run))->values()->all()
@@ -121,6 +127,7 @@ final class KnowledgeFactApiController extends BaseApiController
             'items' => $items,
             'pagination' => $pagination,
             'revisions' => $revisions,
+            'revision_total' => $revisionTotal,
             'generation_runs' => $runs,
             'can_manage_protected' => $admin->canManageProtectedWorkflows(),
         ]);

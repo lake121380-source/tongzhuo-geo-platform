@@ -22,10 +22,13 @@ const TERMINAL_RUN_STATUS = new Set(['completed', 'succeeded', 'success', 'faile
 
 const RUN_STATUS: Record<string, { zh: string; en: string }> = {
   queued: { zh: '排队', en: 'Queued' },
+  // 后端实际会发 `pending`（本地枚举以前没有它 → 中文界面直接露出英文）。
+  pending: { zh: '排队中', en: 'Pending' },
   running: { zh: '运行中', en: 'Running' },
   completed: { zh: '完成', en: 'Completed' },
   failed: { zh: '失败', en: 'Failed' },
   cancelled: { zh: '取消', en: 'Cancelled' },
+  skipped: { zh: '已跳过', en: 'Skipped' },
 };
 
 /**
@@ -152,18 +155,27 @@ const TaskMonitoringPanel: React.FC<TaskMonitoringPanelProps> = ({ onLoadHealth,
             ) : (
               <div className="max-h-56 space-y-1 overflow-y-auto pr-1">
                 {runs.map((run) => {
-                  const status = text(run.status);
-                  const task = record(run.task);
-                  const article = record(run.article);
+                  const status = text(run.status).toLowerCase();
+                  /**
+                   * 后端 `/tasks/jobs` 与 `health.recent_runs` 给的是**扁平**字段：
+                   * `task_name` / `article_title` / `started_at` / `finished_at` / `updated_at`
+                   * / `status_label`（已本地化）。
+                   *
+                   * 这里以前读嵌套的 `run.task.name`、`run.article.title` 和 `run.created_at`
+                   * ——三个都取不到：任务名退化成 `#ID`、**时间列恒为空**、状态还得靠本地枚举兜
+                   * （于是 `pending` 在中文界面露出英文）。
+                   */
+                  const label = text(run.status_label) || RUN_STATUS[status]?.[lang] || status || '—';
+                  const timestamp = text(run.started_at) || text(run.finished_at) || text(run.updated_at) || '';
                   return (
                     <div key={text(run.id)} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2 text-[11px]">
                       <span className="min-w-0 flex-1 truncate text-slate-300">
-                        {text(task.name) || text(article.title) || `#${text(run.task_id)}`}
+                        {text(run.task_name) || text(run.article_title) || `#${text(run.task_id)}`}
                       </span>
                       <span className={status === 'failed' ? 'shrink-0 text-rose-300' : status === 'completed' ? 'shrink-0 text-emerald-300' : 'shrink-0 text-amber-300'}>
-                        {RUN_STATUS[status]?.[lang] ?? status}
+                        {label}
                       </span>
-                      <span className="shrink-0 text-slate-600">{text(run.created_at).slice(5, 16)}</span>
+                      <span className="shrink-0 text-slate-600">{timestamp ? timestamp.slice(5, 16) : '—'}</span>
                     </div>
                   );
                 })}

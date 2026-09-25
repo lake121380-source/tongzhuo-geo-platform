@@ -49,6 +49,15 @@ const qualityScoreText = (score: number, passScore?: number): string => ({
 interface ArticlesViewProps {
   articles: Article[];
   trashedArticles?: Article[];
+  /**
+   * 服务端搜索（后端支持 `search` 参数）。列表一次只取 100 篇，本地过滤会让
+   * 「三个月前写的文章」搜不到却回「没有符合条件的文章」——所以搜索必须走服务端。
+   */
+  onSearchArticles?: (term: string) => Promise<Article[]>;
+  /** 服务端报告的文章总数（列表可能只加载了前 100 篇）。 */
+  totalArticles?: number;
+  /** 服务端报告的回收站总数。 */
+  trashedTotal?: number;
   categories: Category[];
   channels: DistributionChannel[];
   onSelectArticle: (article: Article) => void;
@@ -95,6 +104,9 @@ interface ArticlesViewProps {
 export const ArticlesView: React.FC<ArticlesViewProps> = ({
   articles,
   trashedArticles = [],
+  onSearchArticles,
+  totalArticles,
+  trashedTotal,
   categories,
   channels,
   onSelectArticle,
@@ -158,12 +170,42 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   const [tagError, setTagError] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  /** 服务端搜索结果；为 null 表示「没在搜索」，列表用 props 里的那份。 */
+  const [serverResults, setServerResults] = useState<Article[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
-  const sourceArticles = showTrash ? trashedArticles : articles;
+  /**
+   * 搜索走服务端（输入停顿 350ms 再发）。
+   *
+   * 列表只加载前 100 篇，原先的搜索是在这 100 篇里本地过滤：更早的文章搜不到，
+   * 界面却回「没有符合条件的文章」——运营会以为文章丢了。后端一直支持 `search`。
+   */
+  useEffect(() => {
+    if (!apiMode || !onSearchArticles) return undefined;
+    const term = searchTerm.trim();
+    if (term === '') {
+      setServerResults(null);
+      setSearching(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      onSearchArticles(term)
+        .then((rows) => { if (!cancelled) { setServerResults(rows); setSearching(false); } })
+        .catch(() => { if (!cancelled) { setServerResults(null); setSearching(false); } });
+    }, 350);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [apiMode, onSearchArticles, searchTerm]);
+
+  const searchActive = serverResults !== null;
+
+  const sourceArticles = showTrash ? trashedArticles : (serverResults ?? articles);
   const filteredArticles = sourceArticles.filter((art) => {
     if (selectedStatus !== 'all' && art.status !== selectedStatus) return false;
     if (selectedCategory !== 'all' && art.category !== selectedCategory) return false;
-    if (searchTerm) {
+    // 服务端搜索的结果不再本地二次过滤：后端已按标题/摘要匹配过，而本地字段来自截断投影。
+    if (searchTerm && !searchActive) {
       const q = searchTerm.toLowerCase();
       return (
         art.title.toLowerCase().includes(q) ||
@@ -398,10 +440,10 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
       <div className="flex flex-col gap-3 border-b border-slate-800 p-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-1 overflow-x-auto rounded-lg bg-slate-800 p-1">
           {([
-            { key: 'all' as const, label: lang === 'zh' ? '全部' : 'All', count: articles.length },
-            { key: 'review' as const, label: lang === 'zh' ? '待审核' : 'Review', count: articles.filter((a) => a.status === 'review').length },
-            { key: 'published' as const, label: lang === 'zh' ? '已发布' : 'Published', count: articles.filter((a) => a.status === 'published').length },
-            { key: 'draft' as const, label: lang === 'zh' ? '草稿' : 'Drafts', count: articles.filter((a) => a.status === 'draft').length },
+            { key: 'all' as const, label: lang === 'zh' ? '全部' : 'All', count: sourceArticles.length },
+            { key: 'review' as const, label: lang === 'zh' ? '待审核' : 'Review', count: sourceArticles.filter((a) => a.status === 'review').length },
+            { key: 'published' as const, label: lang === 'zh' ? '已发布' : 'Published', count: sourceArticles.filter((a) => a.status === 'published').length },
+            { key: 'draft' as const, label: lang === 'zh' ? '草稿' : 'Drafts', count: sourceArticles.filter((a) => a.status === 'draft').length },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -423,7 +465,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
               onClick={() => { setShowTrash(true); setSelectedIds(new Set()); }}
               className={`whitespace-nowrap rounded-md px-3.5 py-2 text-[13px] font-semibold transition ${showTrash ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
             >
-              {lang === 'zh' ? '回收站' : 'Trash'} ({countLabel(trashedArticles.length)})
+              {lang === 'zh' ? '回收站' : 'Trash'} ({countLabel(trashedTotal ?? trashedArticles.length)})
             </button>
           )}
         </div>
@@ -453,6 +495,16 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
             />
           </div>
         </div>
+
+        {/* 列表一次只加载 100 篇：超出时明说，别让「全部 (100)」冒充全部。 */}
+        {!showTrash && typeof totalArticles === 'number' && totalArticles > sourceArticles.length && (
+          <p className="text-[12px] text-amber-300/80">
+            {lang === 'zh'
+              ? `共 ${totalArticles} 篇，当前只加载了最新 ${sourceArticles.length} 篇——用上面的搜索可以找到更早的文章。`
+              : `${totalArticles} total; only the latest ${sourceArticles.length} are loaded — use search for older ones.`}
+          </p>
+        )}
+        {searching && <p className="text-[12px] text-slate-500">{lang === 'zh' ? '正在搜索…' : 'Searching…'}</p>}
       </div>
 
       {apiMode && showTrash && canManageTrash && (
@@ -627,7 +679,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                               </span>
                             </>
                           ) : (
-                            <StatusBadge spec={qualityStatusSpec(art.aiQualityStatus, art.aiQualityDecision)} lang={lang} icon={<ShieldCheck className="w-3 h-3" />} />
+                            <StatusBadge spec={qualityStatusSpec(art.aiQualityStatus, art.aiQualityDecision, { degraded: art.aiQualityDegraded === true })} lang={lang} icon={<ShieldCheck className="w-3 h-3" />} />
                           )}
                         </button>
                       </td>

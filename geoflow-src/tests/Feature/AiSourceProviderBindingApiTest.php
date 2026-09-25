@@ -199,6 +199,51 @@ final class AiSourceProviderBindingApiTest extends TestCase
         );
     }
 
+    /**
+     * 保存 API 配置时，**没有传上来的额度字段必须保留原值**。
+     *
+     * 面板以前只回传 binding_type/name/model_id/api_url(/api_key)，而后端对缺失键一律
+     * `daily_limit ?? 0`、`normalizeMaxTokens($payload['max_tokens'] ?? null)`——而
+     * `daily_limit > 0` 才限流（**0 等于不限量**），于是「点一次保存」就把给模型设的
+     * 日额度抹掉了，界面上还看不出来。
+     */
+    public function test_saving_the_binding_api_config_keeps_quota_fields_it_did_not_send(): void
+    {
+        $super = $this->superAdmin();
+
+        $this->withToken($this->tokenFor($super))
+            ->withHeader('X-Idempotency-Key', 'binding-quota-1')
+            ->postJson('/api/v1/source-providers/model-api', [
+                'binding_type' => 'deepseek',
+                'name' => 'DeepSeek 二次分析',
+                'model_id' => 'deepseek-v4-flash',
+                'api_url' => 'https://api.deepseek.com',
+                'api_key' => 'binding-secret-key',
+                'daily_limit' => 200,
+                'max_tokens' => 8192,
+            ])
+            ->assertOk();
+
+        $modelId = (int) $this->setting(AiVisibilityConfigurationResolver::DEEPSEEK_MODEL_SETTING_KEY);
+        $this->assertGreaterThan(0, $modelId);
+        $this->assertSame(200, (int) AiModel::query()->whereKey($modelId)->value('daily_limit'));
+
+        // 再保存一次，但**不带**这两个字段——旧版面板就是这么发的。
+        $this->withToken($this->tokenFor($super))
+            ->withHeader('X-Idempotency-Key', 'binding-quota-2')
+            ->postJson('/api/v1/source-providers/model-api', [
+                'binding_type' => 'deepseek',
+                'name' => 'DeepSeek 二次分析',
+                'model_id' => 'deepseek-v4-flash',
+                'api_url' => 'https://api.deepseek.com',
+            ])
+            ->assertOk();
+
+        $row = AiModel::query()->whereKey($modelId)->firstOrFail();
+        $this->assertSame(200, (int) $row->daily_limit, '日额度被一次不带该字段的保存抹成了 0（0 = 不限量）');
+        $this->assertSame(8192, (int) $row->max_tokens, 'max_tokens 被一次不带该字段的保存抹成了 null');
+    }
+
     private function setting(string $key): ?string
     {
         $value = DB::table('site_settings')->where('setting_key', $key)->value('setting_value');

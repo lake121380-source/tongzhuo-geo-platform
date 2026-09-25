@@ -367,11 +367,41 @@ final class ManualPublicationController extends BaseApiController
         }
     }
 
+    /**
+     * 业务失败原因的透出策略。
+     *
+     * 服务层抛的是**写得能看懂的中文**（例：「已被领取/已完成的工单不能编辑，请先释放」
+     * 「工单已在别处变更，请刷新重试」）。以前这里只放行形如机器码的短串，中文一律被替换成
+     * `manual_publication_operation_failed` —— 而前端是把 `message` 直接展示的，红色横幅上
+     * 就是一串英文，运营既不知道是被别人领走了还是状态不对，也不知道该释放还是该刷新。
+     *
+     * 仍然挡住真正的内部异常文本（SQL、命名空间、路径、堆栈）——那些不该出现在界面上。
+     */
     private function publicFailure(Throwable $exception): string
     {
         $message = trim($exception->getMessage());
+        if ($message === '') {
+            return 'manual_publication_operation_failed';
+        }
 
-        return preg_match('/\A[a-z0-9_.:-]{1,100}\z/', $message) === 1 ? $message : 'manual_publication_operation_failed';
+        if (preg_match('/\A[a-z0-9_.:-]{1,100}\z/', $message) === 1) {
+            return $message;
+        }
+
+        $looksInternal = preg_match(
+            '/(SQLSTATE|Illuminate\\\\|Symfony\\\\|\.php\b|\/var\/|Stack trace|QueryException|PDOException)/i',
+            $message,
+        ) === 1;
+        if ($looksInternal) {
+            return 'manual_publication_operation_failed';
+        }
+
+        // 自述型业务文案：含中文、长度可控 → 原样透出。
+        if (preg_match('/\p{Han}/u', $message) === 1 && mb_strlen($message) <= 200) {
+            return $message;
+        }
+
+        return 'manual_publication_operation_failed';
     }
 
     /** @return array<string,mixed> */

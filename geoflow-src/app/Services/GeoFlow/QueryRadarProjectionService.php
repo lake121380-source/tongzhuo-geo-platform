@@ -116,6 +116,13 @@ final class QueryRadarProjectionService
             ];
         })->values();
 
+        // 站点级提及率：把所有问题合起来算，而不是挑某一个问题的数当站点数。
+        // 前端原先拿 `items[0].mentions.mention_rate_percent` 当「品牌提及率」——
+        // 第一个问题恰好没跑出回答就整卡「不可计算」（哪怕其余 99 个问题都有数据），
+        // 而且第一个问题换了、站点数字就跟着跳。分子分母这里本来就有，直接算出来给他们。
+        $observedAnswers = (int) $items->sum('mentions.observed_answer_count');
+        $mentionedAnswers = $brandNames === [] ? null : (int) $items->sum('mentions.mentioned_answer_count');
+
         return [
             'items' => $items->all(),
             'summary' => [
@@ -125,8 +132,16 @@ final class QueryRadarProjectionService
                 'completed_run_count' => $runs->where('status', AiVisibilityRun::STATUS_COMPLETED)->count(),
                 'failed_run_count' => $runs->where('status', AiVisibilityRun::STATUS_FAILED)->count(),
                 'citation_observation_count' => $items->sum('citations.observation_count'),
-                'observed_answer_count' => $items->sum('mentions.observed_answer_count'),
-                'mentioned_answer_count' => $brandNames === [] ? null : $items->sum('mentions.mentioned_answer_count'),
+                'observed_answer_count' => $observedAnswers,
+                'mentioned_answer_count' => $mentionedAnswers,
+                'mention_rate_percent' => $mentionedAnswers !== null && $observedAnswers > 0
+                    ? round($mentionedAnswers / $observedAnswers * 100, 1)
+                    : null,
+                'mention_availability' => match (true) {
+                    $brandNames === [] => 'brand_not_configured',
+                    $observedAnswers === 0 => 'no_completed_answers',
+                    default => 'available',
+                },
             ],
             'window' => [
                 'days' => $days,

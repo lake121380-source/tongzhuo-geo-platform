@@ -31,6 +31,10 @@ export interface Article {
   /** 人工放行的最低分（低于它只能优化/改写，不能放行）。 */
   aiQualityOverrideMinScore?: number;
   aiQualityIsOverridden?: boolean;
+  /** 这次质检是抽样跑的（未覆盖全文）：抽样结果不能授权发布。 */
+  aiQualityDegraded?: boolean;
+  /** 质检覆盖范围（full / fallback_sampled …）。 */
+  aiQualityInspectionScope?: string;
   aiQualityReason?: string;
   /** Authoritative 桐灼GEO quality projection (scores, gate reasons, progress). */
   aiQuality?: Record<string, unknown>;

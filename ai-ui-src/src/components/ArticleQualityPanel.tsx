@@ -52,6 +52,23 @@ function bool(value: unknown): boolean {
   return ['true', '1', 'yes', 'on'].includes(text(value).trim().toLowerCase());
 }
 
+/**
+ * 渲染一条候选修改（「修改前 / 修改后」）。
+ *
+ * 抽成模块级函数是为了**前 5 条与「展开其余」两处共用**：原先这里写死 `slice(0, 5)`，
+ * 而标题写着「N 处修改」——运营看到「12 处修改」、实际只审了 5 处就点了「应用」，
+ * 剩下 7 处正文改动从未被看过。
+ */
+function CandidateChange({ item, lang }: { item: unknown; lang: 'zh' | 'en' }) {
+  const modification = record(item);
+  return (
+    <details className="rounded-lg border border-slate-800 bg-slate-950/70 p-2 text-[10px] text-slate-300">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-semibold text-slate-200"><span>{text(modification.field) || 'content'} · {text(modification.reason) || (lang === 'zh' ? '服务端候选修改' : 'Server candidate change')}</span><ChevronDown className="h-3 w-3 text-slate-500" /></summary>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2"><div className="rounded bg-rose-950/30 p-2 text-rose-200"><div className="mb-1 text-[9px] uppercase text-rose-400">{lang === 'zh' ? '修改前' : 'Before'}</div>{text(modification.before_text) || '—'}</div><div className="rounded bg-emerald-950/30 p-2 text-emerald-200"><div className="mb-1 text-[9px] uppercase text-emerald-400">{lang === 'zh' ? '修改后' : 'After'}</div>{text(modification.after_text) || '—'}</div></div>
+    </details>
+  );
+}
+
 function qualityFrom(value: unknown): ApiRecord {
   const root = record(value);
   const nested = record(root.ai_quality);
@@ -488,9 +505,12 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
 
   const scoreTone = qualityScore === null
     ? 'text-slate-300 border-slate-700 bg-slate-800/60'
-    : qualityScore >= 85
+    // 用这篇自己的线判色（`passScore` 上面已经读出来了）：以前写死 85/70，而文章列表按真实
+    // 通过线判、连续审核又写死 80/60——同一篇分数在三处三种颜色。取不到通过线时退到
+    // 人工放行线，再退到中性色。
+    : typeof passScore === 'number' && qualityScore >= passScore
       ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10'
-      : qualityScore >= 70
+      : qualityScore >= overrideMinScore
         ? 'text-amber-300 border-amber-500/30 bg-amber-500/10'
         : 'text-rose-300 border-rose-500/30 bg-rose-500/10';
   const qualityIcon = ['failed', 'stale'].includes(qualityStatus)
@@ -630,19 +650,28 @@ export const ArticleQualityPanel: React.FC<ArticleQualityPanelProps> = ({
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-xs font-bold text-blue-200"><Sparkles className="h-3.5 w-3.5" />{lang === 'zh' ? '候选修改预览' : 'Candidate preview'}</div>
-            <span className="text-[10px] text-slate-400">{modifications.length} {lang === 'zh' ? '处修改' : 'changes'}</span>
+            <span className="text-[10px] text-slate-400">
+              {modifications.length > 5
+                ? (lang === 'zh' ? `共 ${modifications.length} 处修改（下面先列 5 处）` : `${modifications.length} changes (first 5 shown)`)
+                : `${modifications.length} ${lang === 'zh' ? '处修改' : 'changes'}`}
+            </span>
           </div>
           {modifications.length > 0 ? (
             <div className="mt-3 space-y-2">
-              {modifications.slice(0, 5).map((item, index) => {
-                const modification = record(item);
-                return (
-                  <details key={`${text(modification.field)}-${index}`} className="rounded-lg border border-slate-800 bg-slate-950/70 p-2 text-[10px] text-slate-300">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-semibold text-slate-200"><span>{text(modification.field) || 'content'} · {text(modification.reason) || (lang === 'zh' ? '服务端候选修改' : 'Server candidate change')}</span><ChevronDown className="h-3 w-3 text-slate-500" /></summary>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2"><div className="rounded bg-rose-950/30 p-2 text-rose-200"><div className="mb-1 text-[9px] uppercase text-rose-400">{lang === 'zh' ? '修改前' : 'Before'}</div>{text(modification.before_text) || '—'}</div><div className="rounded bg-emerald-950/30 p-2 text-emerald-200"><div className="mb-1 text-[9px] uppercase text-emerald-400">{lang === 'zh' ? '修改后' : 'After'}</div>{text(modification.after_text) || '—'}</div></div>
-                  </details>
-                );
-              })}
+              {modifications.slice(0, 5).map((item, index) => <CandidateChange key={`m-${index}`} item={item} lang={lang} />)}
+              {/* 超过 5 处时把其余收在「展开」里——不能让运营以为标题上的数字就是全部。 */}
+              {modifications.length > 5 && (
+                <details className="rounded-lg border border-slate-800 bg-slate-950/70 p-2 text-[10px]">
+                  <summary className="cursor-pointer list-none font-semibold text-slate-300">
+                    {lang === 'zh'
+                      ? `还有 ${modifications.length - 5} 处未显示，点开查看`
+                      : `${modifications.length - 5} more — click to expand`}
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {modifications.slice(5).map((item, index) => <CandidateChange key={`m-rest-${index}`} item={item} lang={lang} />)}
+                  </div>
+                </details>
+              )}
             </div>
           ) : <p className="mt-2 text-[11px] text-slate-400">{lang === 'zh' ? '服务端没有返回可展示的修改明细。' : 'The server returned no displayable change details.'}</p>}
         </div>

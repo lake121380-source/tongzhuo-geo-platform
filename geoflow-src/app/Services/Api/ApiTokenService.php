@@ -319,7 +319,10 @@ class ApiTokenService
             'name' => $row->name,
             'token_hash' => '',
             'scopes' => $scopes,
-            'status' => 'active',
+            // 以前这里写死 `active`：为外部脚本签发的 30 天令牌早就过期了，列表里照样显示
+            // 为有效凭据（撤销走的是物理删除，所以「已撤销」这个值永远不会出现）。
+            // 现在按 `expires_at` 如实给出 expired —— 运营盘点凭据时才有得看。
+            'status' => $row->expires_at !== null && $row->expires_at->isPast() ? 'expired' : 'active',
             'created_by_admin_id' => $row->tokenable_id !== null ? (int) $row->tokenable_id : null,
             'last_used_at' => $row->last_used_at?->format('Y-m-d H:i:s'),
             'expires_at' => $row->expires_at?->format('Y-m-d H:i:s'),

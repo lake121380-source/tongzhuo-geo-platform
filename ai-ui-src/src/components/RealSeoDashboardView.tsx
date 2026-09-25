@@ -81,7 +81,23 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
 
   const brand = record(radar?.brand);
   const radarItems = list(radar?.items);
-  const mentionAvailability = String(record(radarItems[0]).mentions ? record(record(radarItems[0]).mentions).availability : '');
+  const radarSummary = record(radar?.summary);
+  /**
+   * 站点级「品牌提及率」。
+   *
+   * 后端 `summary` 已经把**所有问题合起来**的分子分母算成 `mention_rate_percent` /
+   * `mention_availability`（2026-09-25 起）。以前这里拿 `items[0]` 的提及率当站点数：
+   * 第一个问题恰好没跑出回答就整张卡「不可计算」（哪怕其余 99 个问题都有数据），
+   * 而且第一个问题一变、站点数字就跟着跳。后端没给才退回旧来源。
+   */
+  const siteMentionRate = radarSummary.mention_rate_percent;
+  const mentionAvailability = String(
+    radarSummary.mention_availability
+      ?? (record(radarItems[0]).mentions ? record(record(radarItems[0]).mentions).availability : ''),
+  );
+  const siteMentionPercent = siteMentionRate === null || siteMentionRate === undefined
+    ? num(record(record(radarItems[0]).mentions).mention_rate_percent)
+    : Number(siteMentionRate);
   const competitorSummary = record(competitor?.summary);
   const funnelStages = list(funnel?.stages);
 
@@ -154,7 +170,7 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
           <div className="text-xs text-slate-400">{zh ? '品牌提及率' : 'Mention rate'}</div>
           <div className={`mt-1 text-2xl font-extrabold ${mentionReady ? 'text-white' : 'text-slate-500'}`}>
-            {mentionReady ? `${num(record(record(radarItems[0]).mentions).mention_rate_percent)}%` : (zh ? '不可计算' : 'Unavailable')}
+            {mentionReady ? `${siteMentionPercent}%` : (zh ? '不可计算' : 'Unavailable')}
           </div>
           <div className="mt-1 text-[11px] text-slate-500">
             {brand.configured === true
@@ -286,7 +302,7 @@ export const RealSeoDashboardView: React.FC<RealSeoDashboardViewProps> = ({ lang
           <div className={subCard}>
             <div className="text-[12px] text-slate-400">{zh ? '品牌提及率' : 'Mention rate'}</div>
             <div className={`mt-1 text-xl font-black ${mentionReady ? 'text-white' : 'text-slate-500'}`}>
-              {mentionReady ? `${num(record(record(radarItems[0]).mentions).mention_rate_percent)}%` : (zh ? '不可计算' : 'Unavailable')}
+              {mentionReady ? `${siteMentionPercent}%` : (zh ? '不可计算' : 'Unavailable')}
             </div>
             <div className="text-[12px] text-slate-500">
               {brand.configured === true ? (zh ? `品牌：${text(brand.names && (brand.names as unknown[])[0])}` : `Brand: ${text(brand.names && (brand.names as unknown[])[0])}`) : (zh ? '尚未声明品牌' : 'No brand declared')}

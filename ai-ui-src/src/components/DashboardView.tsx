@@ -72,6 +72,7 @@ interface DashboardViewProps {
  * `data-todo` 保留：冒烟测试靠它断言「待审磁贴能跳到文章页」。
  */
 export const DashboardView: React.FC<DashboardViewProps> = ({
+  stats,
   articles,
   tasks,
   onNavigate,
@@ -130,6 +131,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
     .slice(0, 6);
   const activeTasks = tasks.filter((t) => t.status === 'running' || t.status === 'paused').slice(0, 6);
+  /** 与上面同源但**不截断**：用来告诉运营「还有多少个没显示」。 */
+  const activeTaskTotal = tasks.filter((t) => t.status === 'running' || t.status === 'paused').length;
 
   const formatMetric = (value: number | null, suffix = '') =>
     value === null ? (zh ? '暂无数据' : 'No data') : `${value}${suffix}`;
@@ -218,7 +221,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               /* 别用 indigo：主色刻度已改成中性灰，画出来是一条灰线 */
               tone: 'text-emerald-500',
             },
-            { label: zh ? '内容资产（已发布/总数）' : 'Published / total', value: null, text: `${publishedCount} / ${totalArticles ?? articles.length}` },
+            {
+              // 分子分母必须同源、同口径：两者都用**全量**计数（服务端返回的 total），
+              // 并标明是「全部时间」。以前分子是最新 100 篇里的已发布数、分母是 30 天窗口
+              // 的总数，文章一多就会显示成「80 / 20」这种分子大于分母的假比率。
+              label: zh ? '内容资产（已发布/总数，全部时间）' : 'Published / total (all time)',
+              value: null,
+              text: `${Number(stats?.published_articles ?? publishedCount)} / ${Number(stats?.total_articles ?? totalArticles ?? articles.length)}`,
+            },
           ].map((tile: { label: string; value: number | null; suffix?: string; text?: string; series?: number[]; tone?: string }) => (
             <div key={tile.label} className="rounded-xl border border-slate-800 bg-slate-900 p-5 transition hover:border-slate-700">
               <div className="text-caption">{tile.label}</div>
@@ -341,16 +351,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {activeTasks.map((task) => (
                 <li key={task.id} className="flex items-center justify-between gap-3 py-2.5">
                   <span className="truncate text-[13.5px] font-medium text-slate-200">{task.name}</span>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${
-                      task.status === 'paused' ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'
-                    }`}
-                  >
-                    {task.status === 'paused' ? (zh ? '已暂停' : 'Paused') : zh ? '运行中' : 'Running'}
-                  </span>
+                  {(() => {
+                    /**
+                     * 徽标看的是**还能不能产出**，不只是任务的生命周期状态。
+                     *
+                     * `status=active` 但已达生成上限（`batchStatus=limit_reached`）或草稿池满
+                     * （`draft_pool_full`）的任务，再也不会产出任何东西——以前一律显示绿色
+                     * 「运行中」，运营会以为它还在工作。
+                     */
+                    const batch = String(task.batchStatus || '').toLowerCase();
+                    const spec = task.status === 'paused'
+                      ? { text: zh ? '已暂停' : 'Paused', cls: 'bg-amber-500/10 text-amber-600' }
+                      : batch === 'limit_reached'
+                        ? { text: zh ? '已达生成上限' : 'Limit reached', cls: 'bg-slate-500/10 text-slate-400' }
+                        : batch === 'draft_pool_full'
+                          ? { text: zh ? '草稿池已满' : 'Draft pool full', cls: 'bg-amber-500/10 text-amber-600' }
+                          : batch === 'failed'
+                            ? { text: zh ? '最近一次失败' : 'Last run failed', cls: 'bg-rose-500/10 text-rose-600' }
+                            : { text: zh ? '运行中' : 'Running', cls: 'bg-emerald-500/10 text-emerald-600' };
+                    return (
+                      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${spec.cls}`}>
+                        {spec.text}
+                      </span>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>
+          )}
+          {/* 这里只列 6 条：还有更多就明说，否则「任务」这块看上去就是全部。 */}
+          {!loading && activeTaskTotal > 6 && (
+            <button
+              type="button"
+              onClick={() => onNavigate?.('tasks')}
+              className="mt-2 text-[12.5px] font-semibold text-indigo-600 hover:underline"
+            >
+              {zh ? `还有 ${activeTaskTotal - 6} 个任务，去任务页查看 →` : `${activeTaskTotal - 6} more tasks →`}
+            </button>
           )}
           {!loading && generatingCount > 0 && (
             <p className="mt-4 text-caption">

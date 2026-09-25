@@ -73,7 +73,8 @@ final class AdminAiSourceProviderService
         return DB::transaction(function () use ($actor, $providerId, $payload): AiSourceProvider {
             $this->lockActiveSuperAdmin($actor);
             $provider = AiSourceProvider::query()->whereKey($providerId)->lockForUpdate()->firstOrFail();
-            $attributes = $this->providerAttributes($payload);
+            // 带上 existing：未在载荷里出现的字段沿用原值（见 providerAttributes 的注释）。
+            $attributes = $this->providerAttributes($payload, $provider);
             $attributes['status'] = $this->normalizeStatus((string) ($payload['status'] ?? 'active'));
             $this->assertSearchEndpoint((string) $attributes['endpoint_url']);
 
@@ -291,7 +292,11 @@ final class AdminAiSourceProviderService
                 'model_type' => 'chat',
                 'api_url' => trim((string) $payload['api_url']),
                 'failover_priority' => $bindingType === 'ark' ? 40 : 45,
-                'daily_limit' => max(0, (int) ($payload['daily_limit'] ?? 0)),
+                'daily_limit' => array_key_exists('daily_limit', $payload)
+                    ? max(0, (int) $payload['daily_limit'])
+                    // 载荷里没有就沿用原值：`daily_limit > 0` 才限流，**0 等于不限量**，
+                    // 旧写法 `?? 0` 会让「面板没渲染这个字段 → 保存一次 → 额度没了」。
+                    : (int) ($model instanceof AiModel ? $model->daily_limit : 0),
                 'status' => 'active',
                 'ai_workspace_structured_output_status' => null,
                 'ai_workspace_structured_output_verified_at' => null,
@@ -302,7 +307,9 @@ final class AdminAiSourceProviderService
                 'ai_workspace_readiness_failure_code' => null,
             ];
             if (Schema::hasColumn('ai_models', 'max_tokens')) {
-                $attributes['max_tokens'] = $this->normalizeMaxTokens($payload['max_tokens'] ?? null);
+                $attributes['max_tokens'] = array_key_exists('max_tokens', $payload)
+                    ? $this->normalizeMaxTokens($payload['max_tokens'])
+                    : ($model instanceof AiModel ? $model->max_tokens : null);
             }
             if ($apiKey !== '') {
                 try {
@@ -471,22 +478,39 @@ final class AdminAiSourceProviderService
     }
 
     /** @param array<string, mixed> $payload @return array<string, mixed> */
-    private function providerAttributes(array $payload): array
+    /**
+     * 组装 Provider 属性。
+     *
+     * **只有载荷里真的出现过的键才覆盖**，没出现的沿用 `$existing` 的原值（新建时才落到默认值）。
+     * 旧实现一律 `?? 默认值`，而后台面板只渲染了 `count` 一项、保存时只回传
+     * `name/endpoint_url/daily_limit/count/status` —— 于是每次「保存」都会把
+     * `need_content` 抹成 **false**（可见度检索请求就不再要正文，二次分析质量静默下降）、
+     * 把 `sites`/`block_hosts`/`auth_info_level` 清空、把 `need_url` 重置。
+     * 这些字段在界面上没有任何编辑入口，一旦被抹掉只能用裸 API 改回来。
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function providerAttributes(array $payload, ?AiSourceProvider $existing = null): array
     {
+        $current = is_array($existing?->metadata_json) ? $existing->metadata_json : [];
+        $pick = static fn (string $key, mixed $default): mixed => array_key_exists($key, $payload) ? $payload[$key] : $default;
+        $fromMetadata = static fn (string $key, mixed $default): mixed => $current[$key] ?? $default;
+
         return [
             'name' => trim((string) $payload['name']),
             'endpoint_url' => $this->providerEndpoint((string) ($payload['endpoint_url'] ?? '')),
-            'daily_limit' => max(0, (int) ($payload['daily_limit'] ?? 0)),
+            'daily_limit' => max(0, (int) $pick('daily_limit', (int) ($existing?->daily_limit ?? 0))),
             'metadata_json' => [
-                'count' => max(1, min(20, (int) ($payload['count'] ?? config('geoflow.ai_visibility.default_search_count', 10)))),
-                'search_type' => (string) ($payload['search_type'] ?? 'web'),
-                'need_summary' => (bool) ($payload['need_summary'] ?? false),
-                'need_content' => (bool) ($payload['need_content'] ?? false),
-                'need_url' => (bool) ($payload['need_url'] ?? true),
-                'content_formats' => (string) ($payload['content_formats'] ?? 'Markdown'),
-                'auth_info_level' => trim((string) ($payload['auth_info_level'] ?? '')),
-                'sites' => $this->parseList((string) ($payload['sites'] ?? '')),
-                'block_hosts' => $this->parseList((string) ($payload['block_hosts'] ?? '')),
+                'count' => max(1, min(20, (int) $pick('count', $fromMetadata('count', config('geoflow.ai_visibility.default_search_count', 10))))),
+                'search_type' => (string) $pick('search_type', $fromMetadata('search_type', 'web')),
+                'need_summary' => (bool) $pick('need_summary', $fromMetadata('need_summary', false)),
+                'need_content' => (bool) $pick('need_content', $fromMetadata('need_content', false)),
+                'need_url' => (bool) $pick('need_url', $fromMetadata('need_url', true)),
+                'content_formats' => (string) $pick('content_formats', $fromMetadata('content_formats', 'Markdown')),
+                'auth_info_level' => trim((string) $pick('auth_info_level', $fromMetadata('auth_info_level', ''))),
+                'sites' => $this->parseList((string) $pick('sites', implode(',', (array) $fromMetadata('sites', [])))),
+                'block_hosts' => $this->parseList((string) $pick('block_hosts', implode(',', (array) $fromMetadata('block_hosts', [])))),
             ],
         ];
     }

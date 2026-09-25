@@ -310,8 +310,12 @@ return [
     'upload_path' => env('GEOFLOW_UPLOAD_PATH', public_path('assets/images')),
     // 上传资源对外访问 URL 前缀
     'upload_url' => env('GEOFLOW_UPLOAD_URL', '/assets/images/'),
-    // 单文件上传最大字节数
-    'max_upload_bytes' => (int) env('GEOFLOW_MAX_UPLOAD_BYTES', 2 * 1024 * 1024),
+    // 单文件上传最大字节数。
+    // 10MB 与「文章编辑器插图 / 企业知识插图」的校验上限对齐（那两处写死 `max(10 * 1024)`），
+    // 也与 nginx `client_max_body_size 64m`、PHP `upload_max_filesize 12M` 相容。
+    // 旧默认 2MB 会让运营上传手机拍的素材照片（常见 3–8MB）必然失败，而界面上不写这个限制、
+    // 报错也只有「参数校验失败」；docker/php 里那句「约 10MB」的注释其实描述的是本意。
+    'max_upload_bytes' => (int) env('GEOFLOW_MAX_UPLOAD_BYTES', 10 * 1024 * 1024),
     // 兼容旧客户端直接提交已存在图片路径；默认关闭，建议使用 multipart 上传。
     'legacy_image_path_input' => filter_var(env('GEOFLOW_LEGACY_IMAGE_PATH_INPUT', false), FILTER_VALIDATE_BOOLEAN),
     // 升级门禁：确认旧 worker 已全部退出且图片路径哈希回填完成后，才允许物理文件删除。

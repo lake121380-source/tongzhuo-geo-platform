@@ -185,6 +185,16 @@ export default function App() {
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [chunks, setChunks] = useState<KnowledgeChunk[]>([]);
   const [chunkLoadErrors, setChunkLoadErrors] = useState<Record<string, string>>({});
+  /**
+   * 每个知识库的**服务端切片总数**（`pagination.total`）。
+   *
+   * 为什么需要它：切片是按 100 段一页加载的，而知识库页的列表卡片显示的是数据库里的
+   * `chunk_count`。一旦某个库超过 100 段，就会出现「列表说 376 段、点进去说 100 段」
+   * ——两个数来自不同数据源。把真实总数交给知识库页，两处口径就一致了。
+   */
+  const [chunkTotals, setChunkTotals] = useState<Record<string, number>>({});
+  /** 每个知识库已经拉过几页切片（第 1 页在启动批次里）。 */
+  const chunkPagesLoadedRef = useRef<Record<string, number>>({});
   const [channels, setChannels] = useState<DistributionChannel[]>([]);
   const [hostedSites, setHostedSites] = useState<ApiRecord[]>([]);
   const [distributionJobs, setDistributionJobs] = useState<ApiRecord[]>([]);
@@ -329,11 +339,15 @@ export default function App() {
    */
   useEffect(() => {
     if (currentTab !== 'distribution' || !apiSession) return;
-    if (!hasScope(apiSession, 'distribution:read') || apiSession.admin.role !== 'super_admin') return;
+    if (!hasScope(apiSession, 'distribution:read') || !isSuperAdminRole(apiSession.admin.role)) return;
     // 目录已明确告知 Hosted Site 关闭时不请求：后端路由按设计返回 404，
     // 而浏览器会把这条 HTTP 404 记进控制台（catch 拦不住），每次进分发页都留一条噪音。
-    // 目录尚未返回（features 为 undefined）时保持原行为，不改变已启用该功能的实例。
-    if (apiCatalog?.features?.hosted_sites === false) return;
+    //
+    // ⚠️ 必须写成「明确开着才请求」而不是「明确关着才不请求」：深链直达 / 刷新分发页时，
+    // 这个 effect 在 catalog 还没回来（features 为 undefined）时就会跑一次，那时
+    // `!== false` 是成立的 → 照样发一条 404（实测：hosted-sites 请求比 catalog 请求还早 2ms 发出，
+    // catalog 8.3 秒后才回来）。catalog 到达后本 effect 会因 apiCatalog 变化重跑。
+    if (apiCatalog?.features?.hosted_sites !== true) return;
     let cancelled = false;
     void apiClient.listHostedSites({ page: 1, per_page: 100 })
       .then((page) => { if (!cancelled) setHostedSites(page.items || []); })
@@ -386,7 +400,7 @@ export default function App() {
         const canReadDistribution = hasScope(apiSession, 'distribution:read');
         const canReadModels = hasScope(apiSession, 'models:read');
         const canReadAnalytics = hasScope(apiSession, 'analytics:read');
-        const [catalog, articlePage, trashArticlePage, taskPage, knowledgePage, distributionPage, distributionJobsPage, hostedSitesPage, aiModelsPage, promptsPage, analyticsOverviewData] = await Promise.all([
+        const [catalog, articlePage, trashArticlePage, taskPage, knowledgePage, distributionPage, distributionJobsPage, hostedSitesPage, aiModelsPage, promptsPage, analyticsOverviewData, publishedArticlePage] = await Promise.all([
           canReadCatalog ? apiClient.catalog() : Promise.resolve(emptyCatalog()),
           canReadArticles ? apiClient.listArticles({ page: 1, per_page: 100 }) : Promise.resolve(emptyApiPage()),
           canReadArticles ? apiClient.listArticles({ page: 1, per_page: 100, trash: 'only' }) : Promise.resolve(emptyApiPage()),
@@ -405,6 +419,11 @@ export default function App() {
           canReadModels ? apiClient.listPrompts() : Promise.resolve(emptyApiPage()),
           // 「概览大盘」的真实数字来源；取不到就保持 null，界面显示「—」。
           canReadAnalytics ? apiClient.getAnalyticsOverview({ preset: '30d' }) : Promise.resolve(null),
+          // **全量**已发布篇数。工作台「内容资产（已发布/总数）」以前用第一页（≤100 篇）里
+          // 已发布的条数当分子、拿后端 30 天窗口的总数当分母 —— 文章一多就会出现
+          // 「80 / 20」这种分子大于分母的假比率。这里按服务端过滤取真实总数（只取 1 条，
+          // 拿的是 `pagination.total`）。
+          canReadArticles ? apiClient.listArticles({ page: 1, per_page: 1, status: 'published' }) : Promise.resolve(emptyApiPage()),
         ]);
         if (cancelled) return;
 
@@ -465,6 +484,18 @@ export default function App() {
         })) : [];
         if (!cancelled) {
           setChunks(chunkPages.flatMap(({ id, page }) => mapKnowledgeChunks(page, id)));
+          // 记下每个库的切片总数与已拉页数：总数用于让「列表 / 详情」两处口径一致，
+          // 页数用于选中某个库时接着往下拉（见 loadRemainingChunks）。
+          const totals: Record<string, number> = {};
+          const loadedPages: Record<string, number> = {};
+          for (const { id, page } of chunkPages) {
+            if (page === undefined) continue;
+            const total = getPaginationMeta(page)?.total;
+            if (typeof total === 'number') totals[id] = total;
+            loadedPages[id] = 1;
+          }
+          setChunkTotals(totals);
+          chunkPagesLoadedRef.current = loadedPages;
           const errors = Object.fromEntries(
             chunkPages
               .filter((entry) => Boolean(entry.error))
@@ -483,7 +514,10 @@ export default function App() {
 
         setStats({
           total_articles: Number(articlePage.pagination?.total ?? mappedArticles.length),
-          published_articles: mappedArticles.filter((article) => article.status === 'published').length,
+          // 全量已发布数（服务端过滤），不再拿第一页里的条数凑。
+          published_articles: Number(publishedArticlePage.pagination?.total ?? 0),
+          // 回收站的全量条数（列表一次只取 100 条）。
+          trashed_articles: Number(trashArticlePage.pagination?.total ?? mappedTrashedArticles.length),
           pending_review: mappedArticles.filter((article) => article.reviewStatus === 'pending').length,
           total_tasks: Number(taskPage.pagination?.total ?? mappedTasks.length),
           active_tasks: mappedTasks.filter((task) => task.status === 'running').length,
@@ -1310,6 +1344,18 @@ export default function App() {
     }
   };
 
+  /**
+   * 文章搜索**走服务端**。
+   *
+   * 列表一次只取 100 篇（启动批次），原来的搜索是在这 100 篇里本地过滤：三个月前写的
+   * 文章搜不到，界面却回「没有符合条件的文章」，运营会以为文章丢了。后端一直支持
+   * `search`/`status` 参数，这里直接透传。
+   */
+  const handleSearchArticles = async (term: string): Promise<Article[]> => {
+    const page = await apiClient.listArticles({ page: 1, per_page: 100, search: term.trim() });
+    return mapArticles(page);
+  };
+
   const handleSearchKnowledgeBase = async (knowledgeBaseId: string, query: string, limit = 8) => {
     try {
       const result = await apiClient.searchKnowledgeBase(knowledgeBaseId, query, limit);
@@ -1318,6 +1364,45 @@ export default function App() {
     } catch (error) {
       reportApiError(error, '知识库检索失败');
       throw error;
+    }
+  };
+
+  /**
+   * 补齐某个知识库剩余的切片页。
+   *
+   * 启动时每个库只拉第一页（100 段）——足够渲染左列表与详情，但超过 100 段的库在
+   * 「事实工作台 → 挂载切片证据」里就只能选到前 100 段，第 101 段之后的事实永远挂不上
+   * 证据、发不出去，界面也不提示。选中该库时把剩下的页拉完，两处一起解决。
+   */
+  const handleEnsureAllChunks = async (knowledgeBaseId: string) => {
+    if (!apiEnabled) return;
+    const total = chunkTotals[knowledgeBaseId];
+    if (typeof total !== 'number') return;
+    const pageSize = 100;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const already = chunkPagesLoadedRef.current[knowledgeBaseId] ?? 1;
+    if (already >= totalPages) return;
+
+    // 先把「已拉页数」推到最后一页，避免用户在列表里连点几次时发出重复请求。
+    chunkPagesLoadedRef.current = { ...chunkPagesLoadedRef.current, [knowledgeBaseId]: totalPages };
+
+    const fetched: KnowledgeChunk[] = [];
+    for (let page = already + 1; page <= totalPages; page += 1) {
+      try {
+        const response = await apiClient.listMaterialItems('knowledge-bases', knowledgeBaseId, {
+          page,
+          per_page: pageSize,
+        });
+        fetched.push(...mapKnowledgeChunks(response, knowledgeBaseId));
+      } catch (error) {
+        // 拉不满不是致命错误：已加载的部分照样可用，页面会继续显示「已 X / 共 Y」。
+        chunkPagesLoadedRef.current = { ...chunkPagesLoadedRef.current, [knowledgeBaseId]: page - 1 };
+        reportApiError(error, '读取知识库切片失败');
+        return;
+      }
+    }
+    if (fetched.length > 0) {
+      setChunks((prev) => [...prev, ...fetched]);
     }
   };
 
@@ -1807,7 +1892,18 @@ export default function App() {
   // 进行中的一次性生成任务：AI 生成弹窗建的任务（非循环、还没产够 article_limit 篇）。
   // 有它在跑，文章页顶部就显示「生成中」占位，并触发下面的轮询。
   const generatingTasks = useMemo(
-    () => tasks.filter((task) => task.status === 'running' && task.isLoop !== true && task.generatedCount < task.batchLimit),
+    () => tasks.filter((task) => {
+      if (task.status !== 'running' || task.isLoop === true || task.generatedCount >= task.batchLimit) return false;
+      /**
+       * 还要看后端的 `batchStatus`：任务的生命周期状态是 `active`，但这一次作业已经
+       * **失败/取消/已达上限/草稿池满**时，它不会再产出任何东西。
+       *
+       * 以前只判生命周期状态，于是一次性生成任务失败后，文章页的「正在生成 1 篇…」
+       * 横幅会**永远转圈**——而同一时刻任务页已经写着「失败」，两处互相打架。
+       */
+      const batch = String(task.batchStatus || '').toLowerCase();
+      return !['failed', 'cancelled', 'limit_reached', 'draft_pool_full', 'idle', 'completed'].includes(batch);
+    }),
     [tasks],
   );
 
@@ -2124,6 +2220,9 @@ export default function App() {
               <ArticlesView
                 articles={articles}
                 trashedArticles={trashedArticles}
+                onSearchArticles={apiEnabled && hasScope(apiSession, 'articles:read') ? handleSearchArticles : undefined}
+                totalArticles={apiEnabled ? Number(stats?.total_articles ?? 0) || undefined : undefined}
+                trashedTotal={apiEnabled ? Number(stats?.trashed_articles ?? 0) || undefined : undefined}
                 categories={categories}
                 channels={channels}
                 onSelectArticle={handleSelectArticle}
@@ -2158,6 +2257,7 @@ export default function App() {
             {currentTab === 'tasks' && (
               <TasksView
                 tasks={tasks}
+                totalTasks={apiEnabled ? Number(stats?.total_tasks ?? 0) || undefined : undefined}
                 categories={categories}
                 onCreateTask={handleCreateTask}
                 onRunTask={handleRunTask}
@@ -2192,6 +2292,8 @@ export default function App() {
                 totalCount={apiEnabled ? (stats?.knowledge_bases as number | undefined) : undefined}
                 onSearchKnowledgeBase={apiEnabled ? handleSearchKnowledgeBase : undefined}
                 chunkLoadErrors={chunkLoadErrors}
+                chunkTotals={chunkTotals}
+                onEnsureAllChunks={apiEnabled ? handleEnsureAllChunks : undefined}
                 canRead={hasScope(apiSession, 'materials:read')}
                 canWrite={hasScope(apiSession, 'materials:write')}
                 apiClient={apiEnabled ? apiClient : undefined}
@@ -2259,9 +2361,9 @@ export default function App() {
                 onAssignHostedArticle={apiEnabled ? async (id, articleId) => apiClient.assignHostedSiteArticle(id, articleId) : undefined}
                 canRead={hasScope(apiSession, 'distribution:read')}
                 canWrite={hasScope(apiSession, 'distribution:write')}
-                canManageSecrets={(hasScope(apiSession, 'distribution:write') && apiSession?.admin.role === 'super_admin')}
-                canManageDestructive={(hasScope(apiSession, 'distribution:write') && apiSession?.admin.role === 'super_admin')}
-                canManageHostedSites={(hasScope(apiSession, 'distribution:write') && apiSession?.admin.role === 'super_admin' && apiCatalog?.features?.hosted_sites !== false)}
+                canManageSecrets={(hasScope(apiSession, 'distribution:write') && isSuperAdminRole(apiSession?.admin.role))}
+                canManageDestructive={(hasScope(apiSession, 'distribution:write') && isSuperAdminRole(apiSession?.admin.role))}
+                canManageHostedSites={(hasScope(apiSession, 'distribution:write') && isSuperAdminRole(apiSession?.admin.role) && apiCatalog?.features?.hosted_sites !== false)}
                 lang={lang}
                 apiMode={apiEnabled}
               />
@@ -2404,6 +2506,7 @@ export default function App() {
                         apiClient={apiEnabled ? apiClient : undefined}
                         canRead={hasScope(apiSession, 'analytics:read')}
                         canWrite={hasScope(apiSession, 'analytics:write')}
+                        onNavigate={navigateToTab}
                       />
                     ),
                   },

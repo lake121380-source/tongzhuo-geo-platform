@@ -33,6 +33,8 @@ interface KnowledgeViewProps {
   totalCount?: number;
   /** Server-reported chunk totals keyed by knowledge-base id. */
   chunkTotals?: Record<string, number | undefined>;
+  /** Ask the shell to fetch the remaining chunk pages for a library (>100 chunks). */
+  onEnsureAllChunks?: (knowledgeBaseId: string) => void | Promise<void>;
   /** Authenticated 桐灼GEO client used by the atomic-fact governance workbench. */
   apiClient?: GeoFlowApiClient;
   /** Refresh the shell's authoritative knowledge-base projection after a mutation. */
@@ -51,6 +53,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
   canWrite = true,
   totalCount,
   chunkTotals,
+  onEnsureAllChunks,
   apiClient,
   onKnowledgeBasesChanged,
 }) => {
@@ -61,7 +64,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
   const [newContent, setNewContent] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [assetDetails, setAssetDetails] = useState<any>(null);
   const [assetError, setAssetError] = useState('');
   const [assetBusy, setAssetBusy] = useState('');
@@ -101,6 +104,20 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
 
   const formatCount = (count: number | undefined): string => count === undefined ? '—' : String(count);
 
+  /**
+   * 「已就绪」只说明切片跑完了，不代表向量算出来了。
+   *
+   * 真实例子：切完片那会儿 embedding 模型还没配好，之后又没重建 → 整库 0 向量、
+   * 状态仍是 ready。这时徽标必须说实话（检索只能走词法兜底），否则运营以为
+   * 语义检索可用。向量数为未知（后端没给）时保持原样，不误伤。
+   */
+  const kbBadgeSpec = (kb: KnowledgeBase): ReturnType<typeof kbStatusSpec> => {
+    if (kb.status === 'indexed' && (kb.chunkCount ?? 0) > 0 && kb.embeddedCount === 0) {
+      return { label: { zh: '已切片 · 无向量', en: 'Chunked · no vectors' }, tone: 'warning' };
+    }
+    return kbStatusSpec(kb.status);
+  };
+
   // Lists are loaded asynchronously in API mode; keep the selected item in
   // sync instead of leaving the right-hand pane permanently empty after the
   // initial render.
@@ -126,6 +143,17 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
       .catch((error) => { if (!cancelled) setAssetError(describeApiError(error, lang === 'zh' ? '无法读取知识资产详情' : 'Unable to load knowledge assets', lang)); });
     return () => { cancelled = true; };
   }, [activeKb?.id, apiClient, apiMode, canRead, lang]);
+
+  /**
+   * 选中某个知识库时，把它的切片拉全（启动批次只拉第一页 100 段）。
+   *
+   * 不拉全的后果不只是「详情少显示几段」：事实工作台的「挂载切片证据」下拉复用的就是
+   * 这份列表，超过 100 段之后的内容根本选不到，以它们为依据的事实永远发布不了。
+   */
+  useEffect(() => {
+    if (!apiMode || !canRead || !activeKb?.id || !onEnsureAllChunks) return;
+    void onEnsureAllChunks(activeKb.id);
+  }, [activeKb?.id, apiMode, canRead, onEnsureAllChunks]);
 
   /**
    * 「重建切片」只 reload 一次，状态会停在 processing，文案却是「请稍后刷新」——
@@ -207,16 +235,26 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
       return;
     }
     if (!newName.trim()) return;
-    if (apiMode && !newContent.trim() && !selectedFile) return;
+    if (apiMode && !newContent.trim() && selectedFiles.length === 0) return;
     setIsCreating(true);
     setCreateError('');
     try {
-      if (apiMode && apiClient && selectedFile) {
+      if (apiMode && apiClient && selectedFiles.length > 0) {
         const formData = new FormData();
         formData.set('name', newName.trim());
         formData.set('description', newDesc.trim());
         formData.set('content', newContent.trim());
-        formData.set('knowledge_file', selectedFile);
+        // 后端 `uploadedKnowledgeFiles()` 同时收 `knowledge_file` 与 `knowledge_files`
+        // （数组，最多 10 个），并把它们**合并进同一个知识库**。以前前端只传前者，
+        // 于是「把一批资料放进一个库」在界面上根本做不到——每传一次就新建一个库，
+        // 线上就出现过 16 个各三五段的小库。这里改成多选一起提交。
+        if (selectedFiles.length === 1) {
+          formData.set('knowledge_file', selectedFiles[0]);
+        } else {
+          for (const file of selectedFiles) {
+            formData.append('knowledge_files[]', file);
+          }
+        }
         await apiClient.uploadKnowledgeBase(formData, { idempotencyKey: `knowledge-upload-${Date.now()}` });
         await onKnowledgeBasesChanged?.();
       } else {
@@ -225,7 +263,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
       setNewName('');
       setNewDesc('');
       setNewContent('');
-      setSelectedFile(null);
+      setSelectedFiles([]);
       setIsModalOpen(false);
     } catch (error) {
       setCreateError(describeApiError(error, lang === 'zh' ? '创建知识库失败' : 'Unable to create knowledge base', lang));
@@ -371,7 +409,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   <div className="flex items-start justify-between gap-2">
                     <h3 className="text-card-title line-clamp-1">{kb.name}</h3>
                     {/* 后端枚举（indexed / processing / failed / ready）翻成中文语义。 */}
-                    <StatusBadge spec={kbStatusSpec(kb.status)} lang={lang} className="!text-[12px] shrink-0" />
+                    <StatusBadge spec={kbBadgeSpec(kb)} lang={lang} className="!text-[12px] shrink-0" />
                   </div>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-slate-400 line-clamp-2">
                     {kb.description || (lang === 'zh' ? '暂无描述' : 'No description')}
@@ -410,6 +448,16 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                 </h3>
                 <span className="text-caption">
                   {lang === 'zh' ? '包含切片' : 'Chunks'}: {formatCount(activeChunkTotal)} {lang === 'zh' ? '段' : 'items'}
+                  {typeof activeChunkTotal === 'number' && activeChunks.length < activeChunkTotal && (
+                    lang === 'zh'
+                      ? `（已加载 ${activeChunks.length} 段，其余正在载入）`
+                      : ` (${activeChunks.length} loaded, fetching the rest)`
+                  )}
+                  {activeKb?.embeddedCount !== undefined && (
+                    lang === 'zh'
+                      ? ` · 已向量化 ${formatCount(activeKb.embeddedCount)} 段`
+                      : ` · ${formatCount(activeKb.embeddedCount)} vectorized`
+                  )}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -635,9 +683,29 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
 
               {apiMode && (
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-300">{lang === 'zh' ? '或上传知识文件（TXT / Markdown / DOCX）' : 'Or upload a knowledge file (TXT / Markdown / DOCX)'}</label>
-                  <input type="file" accept=".txt,.md,.markdown,.docx" onChange={(event) => setSelectedFile(event.target.files?.[0] || null)} className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-[12px] file:text-slate-200" />
-                  {selectedFile && <p className="text-[12px] text-emerald-300">{selectedFile.name}</p>}
+                  <label className="text-xs font-semibold text-slate-300">{lang === 'zh' ? '或上传知识文件（TXT / Markdown / DOCX，可多选，一次最多 10 个）' : 'Or upload knowledge files (TXT / Markdown / DOCX, up to 10 at once)'}</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept=".txt,.md,.markdown,.docx"
+                    onChange={(event) => {
+                      const picked = Array.from(event.target.files || []);
+                      if (picked.length > 10) {
+                        setCreateError(lang === 'zh' ? '一次最多上传 10 个文件，多余的部分没有选中' : 'Up to 10 files per upload; extra files were ignored');
+                      } else {
+                        setCreateError('');
+                      }
+                      setSelectedFiles(picked.slice(0, 10));
+                    }}
+                    className="block w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-slate-300 file:mr-2 file:rounded file:border-0 file:bg-slate-700 file:px-2 file:py-1 file:text-[12px] file:text-slate-200"
+                  />
+                  {selectedFiles.length > 0 && (
+                    <p className="text-[12px] text-emerald-300">
+                      {lang === 'zh'
+                        ? `已选 ${selectedFiles.length} 个文件：${selectedFiles.map((file) => file.name).join('、')}（会合并进这一个知识库）`
+                        : `${selectedFiles.length} file(s): ${selectedFiles.map((file) => file.name).join(', ')}`}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -649,7 +717,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                 </label>
                 <textarea
                   rows={6}
-                  required={apiMode && !selectedFile}
+                  required={apiMode && selectedFiles.length === 0}
                   value={newContent}
                   onChange={(e) => setNewContent(e.target.value)}
                   className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500 resize-y"

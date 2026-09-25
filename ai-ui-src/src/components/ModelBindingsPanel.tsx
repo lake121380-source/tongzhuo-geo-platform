@@ -44,7 +44,7 @@ const ModelBindingsPanel: React.FC<ModelBindingsPanelProps> = ({ apiClient, lang
   const [bindings, setBindings] = useState<Record<string, number>>({ ark: 0, deepseek: 0 });
   const [candidates, setCandidates] = useState<ApiRecord[]>([]);
   const [apiConfig, setApiConfig] = useState<Record<string, ApiRecord>>({});
-  const [drafts, setDrafts] = useState<Record<string, { model_id: string; name: string; api_url: string; api_key: string; model_row_id: string }>>({});
+  const [drafts, setDrafts] = useState<Record<string, { model_id: string; name: string; api_url: string; api_key: string; model_row_id: string; daily_limit: string; max_tokens: string }>>({});
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -68,6 +68,10 @@ const ModelBindingsPanel: React.FC<ModelBindingsPanelProps> = ({ apiClient, lang
           model_id: text(record(api.ark).model_id),
           api_url: text(record(api.ark).api_url),
           api_key: '',
+          // 日额度与 max_tokens 以前既不上屏也不回传，保存一次就被后端写成 0 / null；
+          // 而 `daily_limit > 0` 才限流——**0 等于不限量**，等于把给模型设的额度抹掉了却看不见。
+          daily_limit: text(record(api.ark).daily_limit) || '0',
+          max_tokens: text(record(api.ark).max_tokens),
         },
         deepseek: {
           model_row_id: text(record(api.deepseek).model_row_id),
@@ -75,6 +79,8 @@ const ModelBindingsPanel: React.FC<ModelBindingsPanelProps> = ({ apiClient, lang
           model_id: text(record(api.deepseek).model_id),
           api_url: text(record(api.deepseek).api_url),
           api_key: '',
+          daily_limit: text(record(api.deepseek).daily_limit) || '0',
+          max_tokens: text(record(api.deepseek).max_tokens),
         },
       });
     } catch (cause) {
@@ -122,7 +128,7 @@ const ModelBindingsPanel: React.FC<ModelBindingsPanelProps> = ({ apiClient, lang
       {loading ? (
         <div className="flex min-h-20 items-center justify-center text-xs text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" />{zh ? '读取绑定…' : 'Loading bindings…'}</div>
       ) : BINDINGS.map((type) => {
-        const draft = drafts[type] ?? { model_row_id: '', name: '', model_id: '', api_url: '', api_key: '' };
+        const draft = drafts[type] ?? { model_row_id: '', name: '', model_id: '', api_url: '', api_key: '', daily_limit: '0', max_tokens: '' };
         const bound = bindings[type] ?? 0;
         const config = apiConfig[type] ?? {};
         const probes = probe[type];
@@ -162,6 +168,14 @@ const ModelBindingsPanel: React.FC<ModelBindingsPanelProps> = ({ apiClient, lang
                   <input value={draft.model_id} onChange={(event) => setDrafts((previous) => ({ ...previous, [type]: { ...draft, model_id: event.target.value } }))} placeholder={zh ? '模型 ID' : 'Model id'} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
                   <input value={draft.api_url} onChange={(event) => setDrafts((previous) => ({ ...previous, [type]: { ...draft, api_url: event.target.value } }))} placeholder={zh ? 'API 地址' : 'API URL'} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white sm:col-span-2" />
                   <input type="password" value={draft.api_key} onChange={(event) => setDrafts((previous) => ({ ...previous, [type]: { ...draft, api_key: event.target.value } }))} placeholder={config.api_key_configured === true ? (zh ? '留空保留原密钥' : 'Leave blank to keep the key') : (zh ? 'API Key（必填）' : 'API key (required)')} className="rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white sm:col-span-2" />
+                  <label className="text-[11px] text-slate-400">
+                    {zh ? '日额度（0 = 不限量）' : 'Daily limit (0 = unlimited)'}
+                    <input type="number" min="0" value={draft.daily_limit} onChange={(event) => setDrafts((previous) => ({ ...previous, [type]: { ...draft, daily_limit: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
+                  </label>
+                  <label className="text-[11px] text-slate-400">
+                    {zh ? 'max_tokens（留空不限制）' : 'max_tokens (blank = unset)'}
+                    <input type="number" min="1" value={draft.max_tokens} onChange={(event) => setDrafts((previous) => ({ ...previous, [type]: { ...draft, max_tokens: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
+                  </label>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -171,6 +185,10 @@ const ModelBindingsPanel: React.FC<ModelBindingsPanelProps> = ({ apiClient, lang
                       name: draft.name,
                       model_id: draft.model_id,
                       api_url: draft.api_url,
+                      // 0 在这里是「不限量」而不是「没有额度」，所以必须显式回传（后端也只覆盖传上来的键）。
+                      daily_limit: Number(draft.daily_limit || 0),
+                      // 留空 = 不设上限；显式传 null 才能把已有值清掉。
+                      max_tokens: draft.max_tokens.trim() === '' ? null : Number(draft.max_tokens),
                       // 留空表示沿用已有密钥，不要把空串发上去。
                       ...(draft.api_key === '' ? {} : { api_key: draft.api_key }),
                     }, { idempotencyKey: key(`binding-api-${type}`) }), zh ? 'API 配置已保存。' : 'API configuration saved.', zh ? '保存 API 配置失败' : 'Unable to save API configuration')}

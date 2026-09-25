@@ -300,8 +300,35 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     if (!onRiskRecheck || actionBusy) return;
     setActionBusy('risk'); setActionNotice('');
     try {
-      await onRiskRecheck(article.id);
-      setActionNotice(lang === 'zh' ? '风险扫描已完成。' : 'Risk scan completed.');
+      const result = await onRiskRecheck(article.id);
+      /**
+       * 后端已经把「命中什么、命中几处、文章有没有被降级」都返回来（`scan.matches[]`
+       * 里有 word/field/count/severity/snippet），只是这里以前固定只说一句「风险扫描已完成」。
+       *
+       * 后果很具体：命中敏感词时后端会**把已发布文章降级成草稿**，而运营只看到「已完成」，
+       * 回头发现文章状态莫名其妙变成了草稿——不知道是谁、也不知道为什么。
+       */
+      const payload = (result && typeof result === 'object') ? result as Record<string, unknown> : {};
+      const scan = (payload.scan && typeof payload.scan === 'object') ? payload.scan as Record<string, unknown> : {};
+      const matchCount = Number(scan.match_count ?? 0);
+      const matches = Array.isArray(scan.matches) ? scan.matches as Array<Record<string, unknown>> : [];
+      const words = [...new Set(matches.map((row) => String(row.word ?? '')).filter(Boolean))].slice(0, 6);
+      const sealed = payload.downgraded === true;
+
+      const parts: string[] = [];
+      if (matchCount > 0) {
+        parts.push(lang === 'zh'
+          ? `命中 ${matchCount} 处风险${words.length ? `：${words.join('、')}` : ''}`
+          : `${matchCount} risk hit(s)${words.length ? `: ${words.join(', ')}` : ''}`);
+      } else {
+        parts.push(lang === 'zh' ? '未发现风险内容。' : 'No risky content found.');
+      }
+      if (sealed) {
+        parts.push(lang === 'zh'
+          ? '文章已被降级为草稿——改掉命中内容后重新扫描，再过质检才能重新发布。'
+          : 'The article was downgraded to draft: fix the hits, re-scan and re-check before publishing.');
+      }
+      setActionNotice(parts.join(lang === 'zh' ? ' ' : ' '));
     } catch (error) {
       setEditError(error instanceof Error ? error.message : (lang === 'zh' ? '风险扫描失败。' : 'Risk scan failed.'));
     } finally { setActionBusy(null); }
@@ -367,7 +394,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               {/* 质检徽标必须按「判定」显示：原来直接渲染 status（`completed`），
                   用户看到英文枚举，也分不清"跑完了"与"通过了"（2026-09-14）。 */}
               <StatusBadge
-                spec={qualityStatusSpec(article.aiQualityStatus, article.aiQualityDecision)}
+                spec={qualityStatusSpec(article.aiQualityStatus, article.aiQualityDecision, { degraded: article.aiQualityDegraded === true })}
                 lang={lang}
                 icon={<ShieldCheck className="w-3.5 h-3.5" />}
                 className="!text-[11px]"
@@ -581,7 +608,15 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                 </>
               ) : (
                 <>
-                  {apiMode && onUpdateArticle && (
+                  {/* 回收站里的文章只读：先恢复，再谈编辑/发布。 */}
+                  {article.status === 'trash' && (
+                    <span className="self-center text-[12px] font-semibold text-amber-300">
+                      {lang === 'zh'
+                        ? '这篇文章在回收站里——先恢复它，才能编辑或发布。'
+                        : 'This article is in the trash — restore it first.'}
+                    </span>
+                  )}
+                  {apiMode && onUpdateArticle && article.status !== 'trash' && (
                     <button
                       onClick={beginEditing}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
@@ -590,7 +625,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                       <span>{lang === 'zh' ? '编辑文章' : 'Edit article'}</span>
                     </button>
                   )}
-                  {article.status !== 'published' && (
+                  {article.status !== 'published' && article.status !== 'trash' && (
                     <>
                       <button
                         onClick={() => void handlePublish()}
