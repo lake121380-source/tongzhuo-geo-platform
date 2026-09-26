@@ -746,8 +746,10 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
             {loading && activeRecords.length === 0 ? (
               <div className="flex min-h-64 items-center justify-center text-[13px] text-slate-500"><Loader2 className="mr-2 h-4 w-4 animate-spin" />{lang === 'zh' ? '加载中…' : 'Loading…'}</div>
             ) : visibleRecords.length === 0 ? (
+              /* 整栏级空态：这一块占满内容区，用 lg（大图标 + 虚线框）——
+                 紧凑版在这么大的容器里，看着像"没加载出来"而不是"确实还没有"。 */
               <EmptyState
-                compact
+                size="lg"
                 icon={search ? Search : labels[activeType].icon}
                 title={search ? (lang === 'zh' ? '没有匹配结果' : 'No matching results') : emptyCopy(activeType, lang).title}
                 description={search ? (lang === 'zh' ? '已在全部记录里搜索（不只是当前页），换个关键词试试，或清空搜索框看全部。' : 'Searched all records (not just this page); try another keyword or clear the search.') : emptyCopy(activeType, lang).hint}

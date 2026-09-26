@@ -18,6 +18,11 @@ interface EmptyStateProps {
   action?: React.ReactNode;
   /** 紧凑版（表格空行、卡片内侧）。 */
   compact?: boolean;
+  /**
+   * 整栏级空态（占满内容区的那种）用 `lg`：更大的图标与留白、虚线框。
+   * 卡片内侧的小空态维持默认/compact——把卡片里的空态也放大，只会让卡片显得空。
+   */
+  size?: 'default' | 'lg';
   className?: string;
 }
 
@@ -27,23 +32,31 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   description,
   action,
   compact = false,
+  size = 'default',
   className = '',
-}) => (
+}) => {
+  const lg = size === 'lg' && !compact;
+  return (
   <div
     role="status"
     className={[
       'flex flex-col items-center justify-center text-center',
-      compact ? 'gap-1.5 px-4 py-8' : 'gap-2 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-6 py-12',
+      compact
+        ? 'gap-1.5 px-4 py-8'
+        : lg
+          ? 'gap-3 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-8 py-16'
+          : 'gap-2 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-6 py-12',
       className,
     ].filter(Boolean).join(' ')}
   >
     {Icon && (
-      <span className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl bg-slate-800 text-slate-400">
-        <Icon className="h-5 w-5" />
+      <span className={`mb-1 flex items-center justify-center bg-slate-800 text-slate-400 ${lg ? 'h-14 w-14 rounded-2xl' : 'h-10 w-10 rounded-xl'}`}>
+        <Icon className={lg ? 'h-7 w-7' : 'h-5 w-5'} />
       </span>
     )}
-    <p className="text-sm font-semibold text-slate-200">{title}</p>
-    {description && <p className="text-caption max-w-md">{description}</p>}
-    {action && <div className="mt-2">{action}</div>}
+    <p className={`font-semibold text-slate-200 ${lg ? 'text-base' : 'text-sm'}`}>{title}</p>
+    {description && <p className={`text-caption ${lg ? 'max-w-lg' : 'max-w-md'}`}>{description}</p>}
+    {action && <div className={lg ? 'mt-3' : 'mt-2'}>{action}</div>}
   </div>
-);
+  );
+};
