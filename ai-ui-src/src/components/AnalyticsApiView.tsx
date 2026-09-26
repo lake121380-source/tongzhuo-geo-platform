@@ -483,8 +483,10 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
             {cards.map(({ label, value, icon: Icon, tone }) => <div key={label} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md"><div className="flex items-center justify-between text-caption"><span>{label}</span><Icon className={`h-[18px] w-[18px] ${tone}`} /></div><div className="mt-2 text-[30px] font-black leading-none tabular-nums text-white">{value}</div></div>)}
           </div>
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-            <section className="rounded-2xl bg-slate-900/80 p-5">
+          {/* 2:1（对齐设计稿「主图表 + 侧榜」）：访问趋势是 7 行四列的宽表、爬虫分类是窄列表，
+              1:1 时表格被挤、右侧列表留着大片空。 */}
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+            <section className="rounded-2xl bg-slate-900/80 p-5 lg:col-span-2">
               <div className="mb-4 flex items-center justify-between"><h2 className="text-section-title">{lang === 'zh' ? '访问趋势' : 'Traffic trend'}</h2><span className="text-caption">{dataSourceLabel(source, lang)}</span></div>
               {trend.length === 0 ? <EmptyState compact icon={TrendingUp} title={lang === 'zh' ? '该时间范围暂无访问日志' : 'No traffic logs in this range'} description={lang === 'zh' ? '换个时间范围（7 / 30 / 90 天），或清空筛选后再看。' : 'Try another range (7 / 30 / 90 days) or clear the filters.'} /> : <div className="overflow-x-auto"><table className="w-full text-left text-[13px] text-slate-300"><thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400"><tr><th className="px-3 py-3.5">{lang === 'zh' ? '日期' : 'Date'}</th><th className="px-3 py-3.5">PV</th><th className="px-3 py-3.5">UV</th><th className="px-3 py-3.5">AI Bot</th></tr></thead><tbody className="divide-y divide-slate-800/60">{trend.map((row) => <tr key={String(row.date)} className="transition hover:bg-slate-800/40"><td className="px-3 py-4">{String(row.date || '')}</td><td className="px-3 py-4">{displayNumber(row.pv)}</td><td className="px-3 py-4">{displayNumber(row.unique_ip)}</td><td className="px-3 py-4 text-rose-300">{displayNumber(row.ai_bot_pv)}</td></tr>)}</tbody></table></div>}
             </section>

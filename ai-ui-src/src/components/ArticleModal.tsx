@@ -437,7 +437,10 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
 
           {/* 2 栏：左正文 / 右质检面板 */}
           <div className="flex flex-1 overflow-hidden">
-            <div className="flex-1 space-y-6 overflow-y-auto p-6 text-slate-200">
+            <div className="flex-1 overflow-y-auto p-6 text-slate-200">
+            {/* 阅读列：标题/标签/正文/元信息收进同一条 768px 居中列（设计稿的「纸面」）。
+                正文原来是 max-w-none 横铺满栏——通栏一行 60+ 字，读起来是论坛帖不是文档。 */}
+            <div className="mx-auto max-w-3xl space-y-6">
             <div>
               <div className="flex items-start justify-between gap-4">
                 {isEditing ? (
@@ -534,6 +537,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               )}
             </div>
 
+            </div>
             </div>
 
             {/* 右栏：质检面板常驻。`apiMode` 关掉时整栏不渲染（而不是留一条空白列）。 */}
