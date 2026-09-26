@@ -24,6 +24,12 @@ server {
     listen 80;
     server_name ${GEOFLOW_NGINX_PRIMARY_HOST} ${GEOFLOW_NGINX_PRIMARY_ALIASES};
 
+    # server 级兜底：`add_header` 只在子级**没有任何 add_header** 时才继承，
+    # 而本文件里好些 location 自带 add_header（Cache-Control 等）。
+    # 放在这里，是为了让「将来新加的 location 忘了写 HSTS」也能有；
+    # 已经自带的那些不受影响（子级覆盖父级）。本地 local.conf 一直是这么写的。
+    add_header Strict-Transport-Security "max-age=15552000" always;
+
     include /etc/nginx/snippets/geoflow-app.conf;
 
     # 退役拉闸：旧 Blade 后台已由 React 后台 `/geo_admin` 取代。
@@ -112,16 +118,19 @@ server {
     # their original Laravel paths.
     location = /geo_admin {
         add_header Cache-Control "no-store" always;
+        add_header Strict-Transport-Security "max-age=15552000" always;
         try_files /ai-ui/index.html =404;
     }
 
     location ^~ /geo_admin/ {
         add_header Cache-Control "no-store" always;
+        add_header Strict-Transport-Security "max-age=15552000" always;
         try_files /ai-ui/index.html =404;
     }
 
     location / {
         add_header Cache-Control "no-store" always;
+        add_header Strict-Transport-Security "max-age=15552000" always;
         try_files $uri $uri/ /index.php?$query_string;
     }
 
