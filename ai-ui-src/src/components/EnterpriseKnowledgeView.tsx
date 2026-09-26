@@ -3,6 +3,7 @@ import { BrainCircuit, CheckCircle2, FilePlus2, History, ImagePlus, Save, Send, 
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import { LoadingState } from './LoadingState';
+import { useConfirm } from './ui';
 
 interface EnterpriseKnowledgeViewProps {
   apiClient: GeoFlowApiClient;
@@ -26,6 +27,7 @@ export const EnterpriseKnowledgeView: React.FC<EnterpriseKnowledgeViewProps> = (
   const [content, setContent] = useState('');
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [busy, setBusy] = useState('');
+  const confirmDialog = useConfirm();
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -149,6 +151,34 @@ export const EnterpriseKnowledgeView: React.FC<EnterpriseKnowledgeViewProps> = (
     });
   };
 
+
+  /**
+   * 「删除项目」（连版本链一起没）与「点历史版本即恢复」（覆盖当前草稿）原本都是点一下就走，
+   * 没有任何确认步骤。这两处在同一个面板里紧挨着，误点代价最大。
+   */
+  const confirmDeleteProject = async () => {
+    if (!selectedId) return;
+    const projectName = asString(detail?.name) || asString(projects.find((project) => asNumber(project.id) === selectedId)?.name);
+    if (!(await confirmDialog({
+      title: zh ? `删除项目「${projectName}」？` : `Delete project "${projectName}"?`,
+      description: zh ? '项目连同它的历史版本一起删除，不可恢复。' : 'The project and its whole revision history are deleted permanently.',
+      confirmLabel: zh ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
+    await run('delete', () => apiClient.deleteEnterpriseKnowledge(selectedId, { idempotencyKey: `enterprise-delete-${selectedId}-${Date.now()}` }));
+  };
+
+  const confirmRestoreRevision = async (revisionId: number) => {
+    if (!selectedId || !Number.isFinite(revisionId)) return;
+    if (!(await confirmDialog({
+      title: zh ? `恢复到版本 #${revisionId}？` : `Restore revision #${revisionId}?`,
+      description: zh ? '当前草稿会被这个版本覆盖。' : 'The current draft is overwritten by that revision.',
+      confirmLabel: zh ? '恢复' : 'Restore',
+      tone: 'danger',
+    }))) return;
+    await run(`restore-${revisionId}`, () => apiClient.restoreEnterpriseKnowledgeRevision(selectedId, revisionId, { idempotencyKey: `enterprise-restore-${revisionId}-${Date.now()}` }));
+  };
+
   if (!canRead) return <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 px-4 py-4 text-xs text-rose-200">{zh ? '当前 Token 没有 materials:read，企业知识工作台不可用。' : 'The current token lacks materials:read.'}</div>;
 
   return <section className="space-y-4 rounded-2xl border border-indigo-500/30 bg-slate-900/80 p-5">
@@ -170,8 +200,8 @@ export const EnterpriseKnowledgeView: React.FC<EnterpriseKnowledgeViewProps> = (
           {selectedId && detail && <span className="text-[11px] text-slate-500">状态：{asString(detail.status)} {asString(detail.error_message) && `· ${asString(detail.error_message)}`}</span>}
         </div>
         {selectedId && validationItems.length > 0 && <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-3 text-xs"><div className="mb-2 flex items-center gap-1 font-semibold text-amber-100"><ShieldCheck className="h-3.5 w-3.5" />{zh ? '服务端草稿校验结果' : 'Server-side draft validation'}</div><ul className="space-y-1.5 text-amber-100/80">{validationItems.map((item, index) => <li key={`${asString(item.code, 'validation')}-${index}`} className={asString(item.level) === 'danger' ? 'text-rose-200' : ''}><span className="mr-1 rounded border border-current/30 px-1 py-0.5 text-[10px] uppercase">{asString(item.level, 'info')}</span>{asString(item.message, asString(item.description, zh ? '需要人工确认' : 'Manual review required'))}</li>)}</ul>{requiresDangerConfirmation && canWrite && <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-amber-500/20 pt-3"><span className="text-[11px] text-rose-200">{zh ? '危险项不会自动忽略。确认后仍会保留在服务端记录中。' : 'Danger items are not ignored and remain recorded server-side.'}</span><button type="button" onClick={() => void publish(true)} disabled={busy !== ''} className="rounded bg-rose-600 px-2.5 py-1.5 text-[11px] font-semibold text-white hover:bg-rose-500 disabled:opacity-50">{zh ? '我已知晓风险，确认发布' : 'I understand the risks, publish'}</button></div>}</div>}
-        {selectedId && Array.isArray(detail?.revisions) && <div className="border-t border-slate-800 pt-3"><div className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-300"><History className="h-3.5 w-3.5 text-indigo-300" />{zh ? '历史版本' : 'Revisions'}</div><div className="flex flex-wrap gap-2">{(detail?.revisions as unknown[]).map((revision) => { const item = asRecord(revision); return <button type="button" key={String(item.id)} onClick={() => canWrite && void run(`restore-${item.id}`, () => apiClient.restoreEnterpriseKnowledgeRevision(selectedId, asNumber(item.id), { idempotencyKey: `enterprise-restore-${item.id}-${Date.now()}` }))} disabled={!canWrite || busy !== ''} className="rounded border border-slate-700 px-2 py-1 text-[10px] text-slate-400 hover:border-indigo-500 disabled:opacity-50">{asString(item.source)} · {asString(item.created_at)}</button>; })}</div></div>}
-        {selectedId && canWrite && <button type="button" onClick={() => void run('delete', () => apiClient.deleteEnterpriseKnowledge(selectedId, { idempotencyKey: `enterprise-delete-${selectedId}-${Date.now()}` }))} className="inline-flex items-center gap-1 text-[10px] text-rose-400 hover:text-rose-300"><Trash2 className="h-3 w-3" />{zh ? '删除项目' : 'Delete project'}</button>}
+        {selectedId && Array.isArray(detail?.revisions) && <div className="border-t border-slate-800 pt-3"><div className="mb-2 flex items-center gap-1 text-xs font-semibold text-slate-300"><History className="h-3.5 w-3.5 text-indigo-300" />{zh ? '历史版本' : 'Revisions'}</div><div className="flex flex-wrap gap-2">{(detail?.revisions as unknown[]).map((revision) => { const item = asRecord(revision); return <button type="button" key={String(item.id)} onClick={() => canWrite && void confirmRestoreRevision(asNumber(item.id))} disabled={!canWrite || busy !== ''} className="rounded border border-slate-700 px-2 py-1 text-[10px] text-slate-400 hover:border-indigo-500 disabled:opacity-50">{asString(item.source)} · {asString(item.created_at)}</button>; })}</div></div>}
+        {selectedId && canWrite && <button type="button" onClick={() => void confirmDeleteProject()} className="inline-flex items-center gap-1 text-[10px] text-rose-400 hover:text-rose-300"><Trash2 className="h-3 w-3" />{zh ? '删除项目' : 'Delete project'}</button>}
       </div>
     </div>
   </section>;

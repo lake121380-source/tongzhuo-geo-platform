@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Bot, Database, Filter, RefreshCw, TrendingUp, Users, Workflow, X } from 'lucide-react';
 import { ApiRecord, GeoFlowApiClient, GeoFlowApiError } from '../api/geoflowClient';
+import { dataSourceLabel } from '../api/labels';
 import { hasScope, normalizeScopes } from '../api/permissions';
 import { LoadingState } from './LoadingState';
 import { PageHeader } from './PageHeader';
@@ -484,7 +485,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
 
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <section className="rounded-2xl bg-slate-900/80 p-5">
-              <div className="mb-4 flex items-center justify-between"><h2 className="text-section-title">{lang === 'zh' ? '访问趋势' : 'Traffic trend'}</h2><span className="text-caption">{String(source.kind || 'geoflow_database')}</span></div>
+              <div className="mb-4 flex items-center justify-between"><h2 className="text-section-title">{lang === 'zh' ? '访问趋势' : 'Traffic trend'}</h2><span className="text-caption">{dataSourceLabel(source, lang)}</span></div>
               {trend.length === 0 ? <EmptyState compact icon={TrendingUp} title={lang === 'zh' ? '该时间范围暂无访问日志' : 'No traffic logs in this range'} description={lang === 'zh' ? '换个时间范围（7 / 30 / 90 天），或清空筛选后再看。' : 'Try another range (7 / 30 / 90 days) or clear the filters.'} /> : <div className="overflow-x-auto"><table className="w-full text-left text-[13px] text-slate-300"><thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400"><tr><th className="px-3 py-3.5">{lang === 'zh' ? '日期' : 'Date'}</th><th className="px-3 py-3.5">PV</th><th className="px-3 py-3.5">UV</th><th className="px-3 py-3.5">AI Bot</th></tr></thead><tbody className="divide-y divide-slate-800/60">{trend.map((row) => <tr key={String(row.date)} className="transition hover:bg-slate-800/40"><td className="px-3 py-4">{String(row.date || '')}</td><td className="px-3 py-4">{displayNumber(row.pv)}</td><td className="px-3 py-4">{displayNumber(row.unique_ip)}</td><td className="px-3 py-4 text-rose-300">{displayNumber(row.ai_bot_pv)}</td></tr>)}</tbody></table></div>}
             </section>
             <section className="rounded-2xl bg-slate-900/80 p-5">
@@ -501,7 +502,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
       {data && section !== 'overview' && section !== 'ai_visibility' && (
         <>
           <div className="flex flex-wrap items-center gap-2 text-caption">
-            <span className="rounded-lg bg-slate-800/60 px-2.5 py-1 text-slate-300">{String(record(data.source).kind || 'geoflow_database')}</span>
+            <span className="rounded-lg bg-slate-800/60 px-2.5 py-1 text-slate-300">{dataSourceLabel(data.source, lang)}</span>
             <span>{record(data.source).estimated === false ? (lang === 'zh' ? '非估算数据' : 'Not estimated') : (lang === 'zh' ? '来源状态未知' : 'Unknown source status')}</span>
             {detailRoot.ready === false && <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{lang === 'zh' ? '数据表或采集尚未就绪' : 'Data source is not ready'}</span>}
           </div>

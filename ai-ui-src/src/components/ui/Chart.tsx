@@ -106,7 +106,7 @@ export const TrendChart: React.FC<{
         );
       })}
       {tickIdx.map((i) => (
-        <text key={i} x={padL + i * stepX} y={H - 6} textAnchor={i === 0 ? 'start' : i === labels.length - 1 ? 'end' : 'middle'} className="fill-current text-slate-500" style={{ fontSize: 11 }}>
+        <text key={i} x={padL + i * stepX} y={H - 6} textAnchor={i === 0 ? 'start' : i === labels.length - 1 ? 'end' : 'middle'} className="fill-current text-slate-500" style={{ fontSize: 12.5 }}>
           {labels[i]}
         </text>
       ))}

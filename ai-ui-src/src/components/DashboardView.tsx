@@ -274,7 +274,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* ══ 待办清单 + 生成任务 ═══════════════════════════════════════════
           待办从「四张卡」改成「一份清单」：同一批数据，一屏能扫完。
           没有待办时给一条明确的「一切正常」，而不是空着让人猜。 */}
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 lg:col-span-2">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-section-title flex items-center gap-2">

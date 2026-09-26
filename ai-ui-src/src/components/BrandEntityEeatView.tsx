@@ -16,12 +16,19 @@ import {
 import { BrandEntityConfig, SameAsLink, EeatAuditReport } from '../types';
 import { GeoFlowApiClient } from '../api/geoflowClient';
 import { LoadingState } from './LoadingState';
+import PermissionNotice from './PermissionNotice';
 
 interface BrandEntityEeatViewProps {
   /** 合并入口的内层 Tab 渲染：隐藏自身页面标题（由外层 TabbedShell 统一画），只留操作区。 */
   embedded?: boolean;
   lang: 'zh' | 'en';
   apiClient?: GeoFlowApiClient;
+  /**
+   * 后端 `POST ai-research/brand-entity` 要 `seo:write`。**原来这个按钮一个 scope 都不判**，
+   * 只有 `seo:read`（甚至只有 analytics:read）的账号看得见、点下去 403。
+   * 缺省 true 保持既有行为。
+   */
+  canWrite?: boolean;
 }
 
 /**
@@ -43,7 +50,7 @@ const EMPTY_BRAND_ENTITY_CONFIG: BrandEntityConfig = {
   contactEmail: '',
 };
 
-export const BrandEntityEeatView: React.FC<BrandEntityEeatViewProps> = ({ lang, apiClient, embedded = false }) => {
+export const BrandEntityEeatView: React.FC<BrandEntityEeatViewProps> = ({ lang, apiClient, embedded = false, canWrite = true }) => {
   const [config, setConfig] = useState<BrandEntityConfig>(EMPTY_BRAND_ENTITY_CONFIG);
   const [eeatReport, setEeatReport] = useState<EeatAuditReport | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'failed'>('loading');
@@ -235,9 +242,10 @@ ${jsonLdScript}
         )}
 
         <div className="flex flex-col items-end gap-1.5">
+          {!canWrite && <PermissionNotice lang={lang} requiredScope="seo:write" />}
           <button
             onClick={handleSave}
-            disabled={isSaving || loadState !== 'ready'}
+            disabled={isSaving || loadState !== 'ready' || !canWrite}
             className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50"
           >
             <Save className="h-3.5 w-3.5" />

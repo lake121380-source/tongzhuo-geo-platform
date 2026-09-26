@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { describeApiError } from '../api/permissions';
 import {
   FileText,
   Search,
@@ -173,6 +174,12 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
   /** 服务端搜索结果；为 null 表示「没在搜索」，列表用 props 里的那份。 */
   const [serverResults, setServerResults] = useState<Article[] | null>(null);
   const [searching, setSearching] = useState(false);
+  /**
+   * 搜索失败的提示。**不能静默回落到本地过滤**——本地只加载了最新 100 篇，
+   * 搜「三个月前写的文章」时服务端请求一挂，界面就会一本正经地回「没有符合条件的文章」，
+   * 运营会以为文章丢了（这正是本组件上方注释反复强调要避免的那件事）。
+   */
+  const [searchError, setSearchError] = useState('');
 
   /**
    * 搜索走服务端（输入停顿 350ms 再发）。
@@ -185,15 +192,22 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
     const term = searchTerm.trim();
     if (term === '') {
       setServerResults(null);
+      setSearchError('');
       setSearching(false);
       return undefined;
     }
     let cancelled = false;
     setSearching(true);
+    setSearchError('');
     const timer = window.setTimeout(() => {
       onSearchArticles(term)
-        .then((rows) => { if (!cancelled) { setServerResults(rows); setSearching(false); } })
-        .catch(() => { if (!cancelled) { setServerResults(null); setSearching(false); } });
+        .then((rows) => { if (!cancelled) { setServerResults(rows); setSearchError(''); setSearching(false); } })
+        .catch((error) => {
+          if (cancelled) return;
+          setServerResults(null);
+          setSearchError(describeApiError(error, lang === 'zh' ? '搜索请求失败' : 'Search request failed', lang));
+          setSearching(false);
+        });
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [apiMode, onSearchArticles, searchTerm]);
@@ -496,6 +510,15 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
           </div>
         </div>
 
+        {/* 搜索没成功就别装作搜过了：明确说清「下面这份是本地那 100 篇」。 */}
+        {searchError && (
+          <p role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+            {lang === 'zh'
+              ? `${searchError}——下面显示的是本地已加载的 ${articles.length} 篇里筛出来的结果，不是全部文章。`
+              : `${searchError} — showing matches among the ${articles.length} locally loaded articles, not all of them.`}
+          </p>
+        )}
+
         {/* 列表一次只加载 100 篇：超出时明说，别让「全部 (100)」冒充全部。 */}
         {!showTrash && typeof totalArticles === 'number' && totalArticles > sourceArticles.length && (
           <p className="text-[12px] text-amber-300/80">
@@ -606,12 +629,18 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                     <EmptyState
                       compact
                       icon={FileText}
-                      title={sourceArticles.length === 0 && !showTrash
-                        ? (lang === 'zh' ? '还没有文章' : 'No articles yet')
-                        : (lang === 'zh' ? '没有符合条件的文章' : 'No matching articles')}
-                      description={sourceArticles.length === 0 && !showTrash
-                        ? (lang === 'zh' ? 'AI 生成一篇约 1 分钟：选好标题库与知识库即可。' : 'Generating one takes about a minute.')
-                        : (lang === 'zh' ? '试试清空搜索词或换一个状态/分类。' : 'Try clearing the search or changing filters.')}
+                      title={searchError
+                        ? (lang === 'zh' ? '搜索没成功' : 'Search did not succeed')
+                        : sourceArticles.length === 0 && !showTrash
+                          ? (lang === 'zh' ? '还没有文章' : 'No articles yet')
+                          : (lang === 'zh' ? '没有符合条件的文章' : 'No matching articles')}
+                      description={searchError
+                        ? (lang === 'zh'
+                          ? `请求失败了（${searchError}），本地这批里也没有匹配项——不代表全部文章里没有。`
+                          : `The request failed (${searchError}); nothing matched among the locally loaded articles either — this is not a full-library answer.`)
+                        : sourceArticles.length === 0 && !showTrash
+                          ? (lang === 'zh' ? 'AI 生成一篇约 1 分钟：选好标题库与知识库即可。' : 'Generating one takes about a minute.')
+                          : (lang === 'zh' ? '试试清空搜索词或换一个状态/分类。' : 'Try clearing the search or changing filters.')}
                       action={sourceArticles.length === 0 && !showTrash && canGenerate ? (
                         <Button variant="primary" icon={Sparkles} onClick={() => setIsAiGenerateOpen(true)}>
                           {lang === 'zh' ? 'AI 生成文章' : 'Generate with AI'}
@@ -894,7 +923,7 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
                   {apiMode && (
                     <span className="text-[11px] text-slate-500">
                       {lang === 'zh'
-                        ? '桐灼GEO API v1 未提供自动关键词建议，可手动添加标签'
+                        ? '这里需要手动添加关键词标签'
                         : 'Automatic keyword suggestions are not exposed; add tags manually'}
                     </span>
                   )}

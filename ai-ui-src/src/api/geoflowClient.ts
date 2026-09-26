@@ -2065,11 +2065,21 @@ export class GeoFlowApiClient {
    * `scope` 是 `all` / `selected`——**预览与执行必须用同一个 scope**，
    * 否则会出现「预览看的是 A、同步下去的是 B」。
    */
+  /**
+   * 同步预览。
+   *
+   * ⚠️ 这里原来是 `POST` + JSON body —— 而后端路由是 **`GET`**
+   * （`routes/api.php`：`Route::get('distribution/sync-settings/preview')`），
+   * 实测返回 **405**，「预览」按钮从来就没成功过。后端 `preview()` 用
+   * `$request->validate(['scope','channel_ids'...])` 读参数，GET 下即查询串，
+   * 所以这里改成 GET，并把 `channel_ids` 拼成 `channel_ids[]=1&channel_ids[]=2`
+   * （Laravel 才会解析成数组；`query()` 帮手只接标量，会把数组拼成 `1,2`）。
+   */
   async previewDistributionSettingsSync(scope: 'all' | 'selected', target: { channel_id?: number; channel_ids?: number[] } = {}): Promise<ApiRecord> {
-    return this.request<ApiRecord>('distribution/sync-settings/preview', {
-      method: 'POST',
-      body: { scope, ...target },
-    });
+    const search = new URLSearchParams({ scope });
+    if (target.channel_id) search.set('channel_id', String(target.channel_id));
+    (target.channel_ids || []).forEach((id) => search.append('channel_ids[]', String(id)));
+    return this.request<ApiRecord>(`distribution/sync-settings/preview?${search.toString()}`);
   }
 
 

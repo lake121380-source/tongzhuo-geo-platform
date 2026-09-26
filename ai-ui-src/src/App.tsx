@@ -1,6 +1,6 @@
 import { hasScope, isSuperAdminRole } from './api/permissions';
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Activity, Award, Compass, ContactRound, Flame, Globe, Inbox, Layers, Search, TrendingUp } from 'lucide-react';
+import { Activity, Award, Compass, ContactRound, Flame, Globe, Globe2, Inbox, KeyRound, Layers, Search, Shield, TrendingUp, UserRound } from 'lucide-react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { readTabFromUrl, readViewFromUrl, defaultViewOf, writeNavToUrl } from './tabs';
@@ -252,6 +252,8 @@ export default function App() {
   const taskPollTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const taskPollAttempts = useRef<Map<string, number>>(new Map());
   const taskPollFailures = useRef<Map<string, number>>(new Map());
+  /** 缺 jobs:read 时那条说明只提醒一次，别每次开轮询都弹。 */
+  const taskPollScopeWarned = useRef(false);
 
   // Restore only a session that was issued by 桐灼GEO.  A bare/stale token is
   // discarded instead of rendering an unaudited shell with unknown identity.
@@ -573,6 +575,28 @@ export default function App() {
    */
   const startTaskJobPolling = (taskId: string, jobId: string) => {
     if (!jobId) return;
+    /*
+     * 后端 `GET jobs/{job}` 要 `jobs:read`。**前端原来一个 scope 都不判**，
+     * 没有这个权限的 Token 去轮询必然每一跳都 403，连挂 3 次后弹一句
+     * 「无法读取任务作业状态」——既说不出真正原因，也没给出路。
+     * 这里直接不轮询，改成一句说得清的说明（任务照跑，刷新即见结果）。
+     */
+    if (!hasScope(apiSession, 'jobs:read')) {
+      if (!taskPollScopeWarned.current) {
+        taskPollScopeWarned.current = true;
+        reportApiError(
+          new GeoFlowApiError(
+            lang === 'zh'
+              ? '当前凭据没有「执行记录读取」权限，任务进度不会自动刷新；任务仍在后台运行，点刷新可看最新结果。'
+              : 'This credential cannot read job records, so task progress will not auto-refresh. The task still runs; refresh to see the latest result.',
+            0,
+            'job_poll_scope_missing',
+          ),
+          lang === 'zh' ? '无法自动刷新任务进度' : 'Task progress will not auto-refresh',
+        );
+      }
+      return;
+    }
     stopTaskJobPolling(taskId);
     taskPollAttempts.current.set(taskId, 0);
     taskPollFailures.current.set(taskId, 0);
@@ -2176,7 +2200,7 @@ export default function App() {
               <div className="mb-5 flex flex-col gap-2 rounded-lg border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-100 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p>{apiError.message}</p>
-                  {apiError.requestId && <p className="mt-1 break-all font-mono text-[10px] text-red-300/70">Request ID: {apiError.requestId}</p>}
+                  {apiError.requestId && <p className="mt-1 break-all text-[12px] text-red-200/80">{lang === 'zh' ? '故障编号（报障时提供给支持）：' : 'Incident id (quote it to support): '}<span className="font-mono">{apiError.requestId}</span></p>}
                 </div>
                 <button
                   type="button"
@@ -2239,7 +2263,7 @@ export default function App() {
                 onCreateArticle={handleSaveArticle}
                 lang={lang}
                 apiMode={apiEnabled}
-                distributionAvailable={channels.length > 0}
+                distributionAvailable={channels.length > 0 && hasScope(apiSession, 'articles:publish') && hasScope(apiSession, 'distribution:write')}
                 apiCatalog={apiTaskCatalog}
                 knowledgeBases={knowledgeBases}
                 onCreateTask={apiEnabled ? handleCreateTask : undefined}
@@ -2282,6 +2306,7 @@ export default function App() {
 
             {currentTab === 'knowledge' && (
               <KnowledgeView
+                loading={apiEnabled && bootDataLoading && knowledgeBases.length === 0}
                 knowledgeBases={knowledgeBases}
                 chunks={chunks}
                 onCreateKb={handleCreateKb}
@@ -2312,6 +2337,7 @@ export default function App() {
 
             {currentTab === 'distribution' && (
               <DistributionView
+                loading={apiEnabled && bootDataLoading && channels.length === 0 && (hostedSites?.length ?? 0) === 0}
                 channels={channels}
                 hostedSites={hostedSites}
                 distributionJobs={distributionJobs}
@@ -2358,9 +2384,10 @@ export default function App() {
                   setHostedSites((prev) => prev.map((item) => String(item.id) === String(id) ? { ...item, ...site } : item));
                   return result;
                 } : undefined}
-                onAssignHostedArticle={apiEnabled ? async (id, articleId) => apiClient.assignHostedSiteArticle(id, articleId) : undefined}
+                onAssignHostedArticle={apiEnabled && hasScope(apiSession, 'articles:publish') ? async (id, articleId) => apiClient.assignHostedSiteArticle(id, articleId) : undefined}
                 canRead={hasScope(apiSession, 'distribution:read')}
                 canWrite={hasScope(apiSession, 'distribution:write')}
+                canPublishArticle={hasScope(apiSession, 'articles:publish')}
                 canManageSecrets={(hasScope(apiSession, 'distribution:write') && isSuperAdminRole(apiSession?.admin.role))}
                 canManageDestructive={(hasScope(apiSession, 'distribution:write') && isSuperAdminRole(apiSession?.admin.role))}
                 canManageHostedSites={(hasScope(apiSession, 'distribution:write') && isSuperAdminRole(apiSession?.admin.role) && apiCatalog?.features?.hosted_sites !== false)}
@@ -2528,6 +2555,7 @@ export default function App() {
 
             {currentTab === 'ai-models' && (
               <AiModelsView
+                loading={apiEnabled && bootDataLoading && models.length === 0}
                 models={models}
                 prompts={prompts}
                 onSelectDefaultModel={handleSelectDefaultModel}
@@ -2544,18 +2572,70 @@ export default function App() {
                 canRead={hasScope(apiSession, 'models:read')}
                 canWrite={hasScope(apiSession, 'models:write')}
                 canManageSourceProviders={(hasScope(apiSession, 'models:read') && hasScope(apiSession, 'models:write') && isSuperAdminRole(apiSession?.admin.role))}
+                canManageJiandu={(hasScope(apiSession, 'jiandu:read') && hasScope(apiSession, 'jiandu:write') && isSuperAdminRole(apiSession?.admin.role))}
                 apiClient={apiEnabled ? apiClient : undefined}
               />
             )}
 
 
+            {/* ── 设置 · 系统设置：四块拆页签（2026-09-25）。
+                原来这四块竖着摞成一页 = 39,172px（其中 API Token 一块 33,007px）。
+                页签化后每屏只回答一个问题；深链 `?tab=admin-settings&view=tokens` 直达子块。 */}
             {apiEnabled && currentTab === 'admin-settings' && (
-              <div className="space-y-6"><AdminSettingsView
-                apiClient={apiClient} lang={lang}
-                canReadProfile={hasScope(apiSession, 'account:read')} canWriteProfile={hasScope(apiSession, 'account:write')}
-                onPasswordChanged={clearApiSession} canReadTokens={hasScope(apiSession, 'tokens:read')} canWriteTokens={hasScope(apiSession, 'tokens:write')}
-                canReadAudit={hasScope(apiSession, 'audit:read')} isSuperAdmin={isSuperAdminRole(apiSession?.admin.role)}
-              /><SiteSettingsPanel apiClient={apiClient} lang={lang} canRead={hasScope(apiSession, 'seo:read')} canWrite={hasScope(apiSession, 'seo:write')} isSuperAdmin={isSuperAdminRole(apiSession?.admin.role)} /></div>
+              <TabbedShell
+                icon={Shield}
+                group={lang === 'zh' ? '设置' : 'Settings'}
+                title={lang === 'zh' ? '系统设置' : 'Settings'}
+                description={lang === 'zh'
+                  ? '这个部署实例自己的东西：谁在用、密码与登录凭据、网站对外长什么样。'
+                  : 'Everything belonging to this deployment: people, credentials, and how the site looks.'}
+                view={currentView}
+                onViewChange={setCurrentView}
+                tabs={[
+                  {
+                    key: 'account', label: lang === 'zh' ? '账号与安全' : 'Accounts & security', icon: UserRound,
+                    render: () => (
+                      <AdminSettingsView
+                        embedded section="account"
+                        apiClient={apiClient} lang={lang}
+                        canReadProfile={hasScope(apiSession, 'account:read')} canWriteProfile={hasScope(apiSession, 'account:write')}
+                        onPasswordChanged={clearApiSession} canReadTokens={hasScope(apiSession, 'tokens:read')} canWriteTokens={hasScope(apiSession, 'tokens:write')}
+                        canReadAudit={hasScope(apiSession, 'audit:read')} isSuperAdmin={isSuperAdminRole(apiSession?.admin.role)}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'tokens', label: lang === 'zh' ? 'API Token' : 'API tokens', icon: KeyRound,
+                    render: () => (
+                      <AdminSettingsView
+                        embedded section="tokens"
+                        apiClient={apiClient} lang={lang}
+                        canReadProfile={hasScope(apiSession, 'account:read')} canWriteProfile={hasScope(apiSession, 'account:write')}
+                        onPasswordChanged={clearApiSession} canReadTokens={hasScope(apiSession, 'tokens:read')} canWriteTokens={hasScope(apiSession, 'tokens:write')}
+                        canReadAudit={hasScope(apiSession, 'audit:read')} isSuperAdmin={isSuperAdminRole(apiSession?.admin.role)}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'audit', label: lang === 'zh' ? '操作审计' : 'Audit trail', icon: Activity,
+                    render: () => (
+                      <AdminSettingsView
+                        embedded section="audit"
+                        apiClient={apiClient} lang={lang}
+                        canReadProfile={hasScope(apiSession, 'account:read')} canWriteProfile={hasScope(apiSession, 'account:write')}
+                        onPasswordChanged={clearApiSession} canReadTokens={hasScope(apiSession, 'tokens:read')} canWriteTokens={hasScope(apiSession, 'tokens:write')}
+                        canReadAudit={hasScope(apiSession, 'audit:read')} isSuperAdmin={isSuperAdminRole(apiSession?.admin.role)}
+                      />
+                    ),
+                  },
+                  {
+                    key: 'site', label: lang === 'zh' ? '站点与首页' : 'Site & homepage', icon: Globe2,
+                    render: () => (
+                      <SiteSettingsPanel apiClient={apiClient} lang={lang} canRead={hasScope(apiSession, 'seo:read')} canWrite={hasScope(apiSession, 'seo:write')} isSuperAdmin={isSuperAdminRole(apiSession?.admin.role)} />
+                    ),
+                  },
+                ]}
+              />
             )}
 
             {apiEnabled && currentTab === 'system-updates' && (
@@ -2600,7 +2680,7 @@ export default function App() {
                   {
                     key: 'brand', label: lang === 'zh' ? '品牌实体' : 'Brand entity', icon: Award,
                     render: () => (
-                      <BrandEntityEeatView embedded lang={lang} apiClient={apiEnabled ? apiClient : undefined} />
+                      <BrandEntityEeatView embedded lang={lang} apiClient={apiEnabled ? apiClient : undefined} canWrite={hasScope(apiSession, 'seo:write')} />
                     ),
                   },
                 ]}
@@ -2643,7 +2723,9 @@ export default function App() {
         onEditorGenerate={apiEnabled ? handleEditorGenerate : undefined}
         editorAssistantCatalog={editorAssistantCatalog}
         hasDistributionChannels={channels.length > 0}
-        onPublishAndDistribute={apiEnabled ? handlePublishAndDistributeArticle : undefined}
+        canPublish={hasScope(apiSession, 'articles:publish')}
+        canEdit={hasScope(apiSession, 'articles:write')}
+        onPublishAndDistribute={apiEnabled && hasScope(apiSession, 'articles:publish') ? handlePublishAndDistributeArticle : undefined}
         onArticleStateChange={apiEnabled ? ((updated) => {
           setArticles((prev) => prev.map((item) => item.id === updated.id ? updated : item));
           setActiveArticleModal(updated);

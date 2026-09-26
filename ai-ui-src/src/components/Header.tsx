@@ -1,4 +1,5 @@
 import React from 'react';
+import { adminRoleLabel } from '../api/labels';
 import {
   Globe,
   Sparkles,
@@ -104,7 +105,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div className="text-left text-xs">
             <div className="font-semibold text-slate-200">{adminName || 'Admin'}</div>
-            <div className="text-[10px] text-slate-400">{adminRole || 'Super Administrator'}</div>
+            <div className="text-[10px] text-slate-400">{adminRoleLabel(adminRole, lang)}</div>
           </div>
           {onLogout && (
             <button

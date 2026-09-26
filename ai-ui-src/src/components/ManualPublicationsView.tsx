@@ -78,6 +78,19 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
   const [items, setItems] = useState<ApiRecord[]>([]);
   const [stats, setStats] = useState<ApiRecord>({});
   const [pagination, setPagination] = useState<ApiRecord>({});
+  /**
+   * 表单内部的错误。原来保存失败只写页面顶部的 `error`，而表单是
+   * `fixed inset-0 z-50` 的全屏遮罩——错误被挡在后面，用户看到的就是「点保存没反应」。
+   */
+  const [formError, setFormError] = useState('');
+  /**
+   * 工单列表的当前页。
+   *
+   * ⚠️ 原来这里写死 `page: 1, per_page: 50` 且**没有翻页控件**，页脚只写「共 N 条，
+   * 当前显示前 50 条」——工单一超过 50 条，第 51 条起在界面上**根本无法打开/编辑/推进**。
+   * 后端本来就返回 `pagination.total_pages`，接上即可。
+   */
+  const [page, setPage] = useState(1);
   const [options, setOptions] = useState<ApiRecord>({});
   const [statusFilter, setStatusFilter] = useState('');
   // 与旧后台对齐的另外六个筛选维度（服务端的 filteredQuery 与导出共用同一组参数）。
@@ -155,7 +168,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
     try {
       const result = record(await apiClient.listManualPublications({
         ...filterParams(),
-        page: 1,
+        page,
         per_page: 50,
       }));
       setItems(Array.isArray(result.items) ? result.items.map(record) : []);
@@ -167,9 +180,12 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [apiClient, canRead, filterParams, lang, zh]);
+  }, [apiClient, canRead, filterParams, lang, page, zh]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // 筛选条件一变就回到第 1 页：否则「在第 7 页筛出 1 条结果」会让列表直接空掉。
+  useEffect(() => { setPage(1); }, [filterParams]);
 
   const openDetail = async (item: ApiRecord) => {
     setBusy(`detail-${item.id}`);
@@ -190,6 +206,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
     setSelected(null);
     setEditing(false);
     setForm(formFrom({ persona_id: personas[0]?.id, assigned_admin_id: admins[0]?.id }));
+    setFormError('');
     setShowForm(true);
     setError('');
   };
@@ -198,6 +215,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
     if (!selected || !canWrite) return;
     setForm(formFrom(selected));
     setEditing(true);
+    setFormError('');
     setShowForm(true);
   };
 
@@ -207,7 +225,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
     event.preventDefault();
     if (!canWrite || busy) return;
     if (!form.persona_id || !form.content.trim()) {
-      setError(zh ? '请选择身份并填写发布内容。' : 'Choose a persona and provide content.');
+      setFormError(zh ? '请选择身份并填写发布内容。' : 'Choose a persona and provide content.');
       return;
     }
     const payload: ApiRecord = {
@@ -227,6 +245,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
     if (editing && selected) payload.revision = Number(selected.revision || 0);
     setBusy('save');
     setError('');
+    setFormError('');
     try {
       const result = record(editing && selected
         ? await apiClient.updateManualPublication(text(selected.id), payload)
@@ -237,7 +256,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
       setEditing(false);
       await load();
     } catch (cause) {
-      setError(describeApiError(cause, zh ? '保存手动发布工单失败' : 'Unable to save work order', lang));
+      setFormError(describeApiError(cause, zh ? '保存手动发布工单失败' : 'Unable to save work order', lang));
     } finally {
       setBusy('');
     }
@@ -273,6 +292,8 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
 
   const allowedNext = Array.isArray(selected?.allowed_next_statuses) ? selected.allowed_next_statuses.map(text) : [];
   const selectedArticle = articles.find((article) => String(article.id) === String(form.article_id));
+  /** 后端 `pagination.total_pages`；接口没给回退 1，避免渲染出「1 / 0」。 */
+  const totalPages = Math.max(1, Number(pagination.total_pages || 1));
 
   return (
     <div className="space-y-8">
@@ -338,7 +359,16 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
               <div className="mt-2 line-clamp-2 text-[13px] text-slate-300">{text(item.content)}</div>
             </button>;
           })}</div>}
-          {Number(pagination.total || 0) > items.length && <div className="border-t border-slate-800 px-4 py-2 text-[12px] text-slate-500">{zh ? `共 ${pagination.total} 条，当前显示前 ${items.length} 条` : `${pagination.total} total; showing ${items.length}`}</div>}
+          <div className="flex items-center justify-between border-t border-slate-800 px-4 py-2.5 text-[12px] text-slate-500">
+            <span>{zh ? `共 ${Number(pagination.total ?? items.length)} 条` : `${Number(pagination.total ?? items.length)} total`}</span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1 || loading} aria-label={zh ? '上一页' : 'Previous page'} className="h-7 rounded-lg border border-slate-700 px-2.5 font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-40">‹</button>
+                <span className="tabular-nums">{page} / {totalPages}</span>
+                <button type="button" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages || loading} aria-label={zh ? '下一页' : 'Next page'} className="h-7 rounded-lg border border-slate-700 px-2.5 font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-40">›</button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="rounded-2xl bg-slate-900/80 p-5">
@@ -353,7 +383,7 @@ export const ManualPublicationsView: React.FC<ManualPublicationsViewProps> = ({
         </div>
       </div>
 
-      {showForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><form onSubmit={save} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-base font-bold text-white">{editing ? (zh ? '编辑手动发布工单' : 'Edit work order') : (zh ? '新建手动发布工单' : 'New work order')}</h2><button type="button" onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white"><X className="h-4 w-4" /></button></div><div className="grid gap-3 sm:grid-cols-2"><label className="text-[13px] text-slate-300">{zh ? '工单类型' : 'Type'}<select value={form.type} onChange={(event) => updateForm('type', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">{(Array.isArray(options.types) ? options.types.map(text) : ['post', 'comment']).map((type) => <option key={type} value={type}>{TYPE_LABELS[type] || type}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '文章（post 必选）' : 'Article (required for post)'}<select value={form.article_id} onChange={(event) => updateForm('article_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '选择文章' : 'Choose article'}</option>{articles.map((article) => <option key={article.id} value={article.id}>{article.title}{article.reviewStatus !== 'approved' ? ` (${article.reviewStatus || article.status})` : ''}</option>)}</select>{selectedArticle && selectedArticle.reviewStatus !== 'approved' && <span className="mt-1 block text-[12px] text-amber-300">{zh ? '文章需通过审核门禁后才能进入待执行状态。' : 'The article must pass the quality gate before execution.'}</span>}</label><label className="text-[13px] text-slate-300">{zh ? '身份 Persona' : 'Persona'}<select required value={form.persona_id} onChange={(event) => updateForm('persona_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '选择身份' : 'Choose persona'}</option>{personas.map((item) => <option key={String(item.id)} value={String(item.id)}>{optionLabel(item, 'Persona')}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '账号' : 'Account'}<select value={form.account_id} onChange={(event) => updateForm('account_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '不绑定账号' : 'No account'}</option>{accounts.map((item) => <option key={String(item.id)} value={String(item.id)}>{optionLabel(item, 'Account')} · {text(item.platform)}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '执行人' : 'Assignee'}<select value={form.assigned_admin_id} onChange={(event) => updateForm('assigned_admin_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '未指定（仅草稿）' : 'Unassigned (draft only)'}</option>{admins.map((item) => <option key={String(item.id)} value={String(item.id)}>{optionLabel(item, 'Admin')}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '平台' : 'Platform'}<select value={form.platform} onChange={(event) => updateForm('platform', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">{platforms.map((platform) => <option key={platform} value={platform}>{platform}</option>)}</select></label></div>{form.platform === 'custom' && <input value={form.custom_platform} onChange={(event) => updateForm('custom_platform', event.target.value)} placeholder={zh ? '自定义平台名称' : 'Custom platform name'} className="mt-3 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />}<div className="mt-3 grid gap-3 sm:grid-cols-2"><input value={form.target_url} onChange={(event) => updateForm('target_url', event.target.value)} placeholder={zh ? '目标 URL（评论类型必填）' : 'Target URL (required for comments)'} className="h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /><input value={form.scheduled_at} onChange={(event) => updateForm('scheduled_at', event.target.value)} type="datetime-local" className="h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /></div><textarea value={form.target_context} onChange={(event) => updateForm('target_context', event.target.value)} placeholder={zh ? '目标页面上下文（评论类型必填）' : 'Target context (required for comments)'} rows={3} className="mt-3 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /><textarea required value={form.content} onChange={(event) => updateForm('content', event.target.value)} placeholder={zh ? '发布内容' : 'Publication content'} rows={8} className="mt-3 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><label className="text-[13px] text-slate-300">{zh ? '初始状态' : 'Initial status'}<select disabled={editing} value={form.status} onChange={(event) => updateForm('status', event.target.value)} className="ml-2 h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="draft">{zh ? '草稿' : 'Draft'}</option><option value="ready">{zh ? '待执行' : 'Ready'}</option></select></label><div className="flex justify-end gap-2"><button type="button" onClick={() => setShowForm(false)} className="h-9 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">{zh ? '取消' : 'Cancel'}</button><button type="submit" disabled={busy === 'save'} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50"><Save className="h-3.5 w-3.5" />{busy === 'save' ? (zh ? '保存中…' : 'Saving…') : (zh ? '保存' : 'Save')}</button></div></div></form></div>}
+      {showForm && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><form onSubmit={save} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="text-base font-bold text-white">{editing ? (zh ? '编辑手动发布工单' : 'Edit work order') : (zh ? '新建手动发布工单' : 'New work order')}</h2><button type="button" onClick={() => setShowForm(false)} className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-white"><X className="h-4 w-4" /></button></div>{formError && <div role="alert" className="mb-4 rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-[13px] text-rose-200">{formError}</div>}<div className="grid gap-3 sm:grid-cols-2"><label className="text-[13px] text-slate-300">{zh ? '工单类型' : 'Type'}<select value={form.type} onChange={(event) => updateForm('type', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">{(Array.isArray(options.types) ? options.types.map(text) : ['post', 'comment']).map((type) => <option key={type} value={type}>{TYPE_LABELS[type] || type}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '文章（post 必选）' : 'Article (required for post)'}<select value={form.article_id} onChange={(event) => updateForm('article_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '选择文章' : 'Choose article'}</option>{articles.map((article) => <option key={article.id} value={article.id}>{article.title}{article.reviewStatus !== 'approved' ? ` (${article.reviewStatus || article.status})` : ''}</option>)}</select>{selectedArticle && selectedArticle.reviewStatus !== 'approved' && <span className="mt-1 block text-[12px] text-amber-300">{zh ? '文章需通过审核门禁后才能进入待执行状态。' : 'The article must pass the quality gate before execution.'}</span>}</label><label className="text-[13px] text-slate-300">{zh ? '身份 Persona' : 'Persona'}<select required value={form.persona_id} onChange={(event) => updateForm('persona_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '选择身份' : 'Choose persona'}</option>{personas.map((item) => <option key={String(item.id)} value={String(item.id)}>{optionLabel(item, 'Persona')}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '账号' : 'Account'}<select value={form.account_id} onChange={(event) => updateForm('account_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '不绑定账号' : 'No account'}</option>{accounts.map((item) => <option key={String(item.id)} value={String(item.id)}>{optionLabel(item, 'Account')} · {text(item.platform)}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '执行人' : 'Assignee'}<select value={form.assigned_admin_id} onChange={(event) => updateForm('assigned_admin_id', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="">{zh ? '未指定（仅草稿）' : 'Unassigned (draft only)'}</option>{admins.map((item) => <option key={String(item.id)} value={String(item.id)}>{optionLabel(item, 'Admin')}</option>)}</select></label><label className="text-[13px] text-slate-300">{zh ? '平台' : 'Platform'}<select value={form.platform} onChange={(event) => updateForm('platform', event.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">{platforms.map((platform) => <option key={platform} value={platform}>{platform}</option>)}</select></label></div>{form.platform === 'custom' && <input value={form.custom_platform} onChange={(event) => updateForm('custom_platform', event.target.value)} placeholder={zh ? '自定义平台名称' : 'Custom platform name'} className="mt-3 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />}<div className="mt-3 grid gap-3 sm:grid-cols-2"><input value={form.target_url} onChange={(event) => updateForm('target_url', event.target.value)} placeholder={zh ? '目标 URL（评论类型必填）' : 'Target URL (required for comments)'} className="h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /><input value={form.scheduled_at} onChange={(event) => updateForm('scheduled_at', event.target.value)} type="datetime-local" className="h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /></div><textarea value={form.target_context} onChange={(event) => updateForm('target_context', event.target.value)} placeholder={zh ? '目标页面上下文（评论类型必填）' : 'Target context (required for comments)'} rows={3} className="mt-3 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /><textarea required value={form.content} onChange={(event) => updateForm('content', event.target.value)} placeholder={zh ? '发布内容' : 'Publication content'} rows={8} className="mt-3 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-[13px] text-white outline-none transition focus:border-indigo-500" /><div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><label className="text-[13px] text-slate-300">{zh ? '初始状态' : 'Initial status'}<select disabled={editing} value={form.status} onChange={(event) => updateForm('status', event.target.value)} className="ml-2 h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"><option value="draft">{zh ? '草稿' : 'Draft'}</option><option value="ready">{zh ? '待执行' : 'Ready'}</option></select></label><div className="flex justify-end gap-2"><button type="button" onClick={() => setShowForm(false)} className="h-9 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800">{zh ? '取消' : 'Cancel'}</button><button type="submit" disabled={busy === 'save'} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-50"><Save className="h-3.5 w-3.5" />{busy === 'save' ? (zh ? '保存中…' : 'Saving…') : (zh ? '保存' : 'Save')}</button></div></div></form></div>}
 
       <div className="space-y-4">
         <BrowserConnectPanel apiClient={apiClient} lang={lang} canRead={canRead} canWrite={canWrite} />

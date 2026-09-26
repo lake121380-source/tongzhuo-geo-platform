@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { updaterConnectionLabel, updaterDoctorLabel, updaterReadinessLabel } from '../api/labels';
 import {
   AlertTriangle,
   ArchiveRestore,
@@ -265,8 +266,8 @@ export const SystemUpdatesView: React.FC<SystemUpdatesViewProps> = ({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="text-[12.5px] font-semibold opacity-70">{zh ? '独立 Updater 状态' : 'Independent updater status'}</div>
-              <div className="mt-2 text-xl font-bold">{String(updater.readiness || 'not_installed')}</div>
-              <div className="mt-1 text-[12.5px] opacity-80">{zh ? '连接' : 'Connection'}: {String(updater.connection || 'disconnected')} · Doctor: {String(updater.doctor_status || 'unavailable')} · {zh ? '版本' : 'Version'}: {String(updater.updater_version || '—')}</div>
+              <div className="mt-2 text-xl font-bold">{updaterReadinessLabel(updater.readiness || 'not_installed', lang)}</div>
+              <div className="mt-1 text-[12.5px] opacity-80">{zh ? '连接' : 'Connection'}: {updaterConnectionLabel(updater.connection || 'disconnected', lang)} · {zh ? '自检' : 'Self-check'}: {updaterDoctorLabel(updater.doctor_status || 'unavailable', lang)} · {zh ? '版本' : 'Version'}: {String(updater.updater_version || '—')}</div>
             </div>
             <a href={String(updater.project_url || 'https://github.com/yaojingang/geoflow-updater')} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[13px] underline underline-offset-4">桐灼GEO Updater <ExternalLink className="h-3.5 w-3.5" /></a>
           </div>

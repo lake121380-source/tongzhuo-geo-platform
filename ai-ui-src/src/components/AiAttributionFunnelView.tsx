@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AiReferralSourceMetric, AiTrafficFunnelStage, UtmCampaignPreset } from '../types';
 import { GeoFlowApiClient, GeoFlowApiError, ApiRecord } from '../api/geoflowClient';
+import { dataSourceLabel } from '../api/labels';
 import { LoadingState } from './LoadingState';
 import { PageHeader } from './PageHeader';
 
@@ -154,7 +155,7 @@ const RealAttributionView: React.FC<RealAttributionViewProps> = ({ lang, data, f
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <section className="rounded-2xl bg-slate-900/80 p-5">
-            <div className="mb-3 flex items-center justify-between"><h2 className="text-section-title">{lang === 'zh' ? '访问趋势' : 'Traffic trend'}</h2><span className="text-caption">{String(source.kind || 'geoflow_database')}</span></div>
+            <div className="mb-3 flex items-center justify-between"><h2 className="text-section-title">{lang === 'zh' ? '访问趋势' : 'Traffic trend'}</h2><span className="text-caption">{dataSourceLabel(source, lang)}</span></div>
             {trafficTrend.length === 0 ? <p className="text-[13px] text-slate-400">{lang === 'zh' ? '该时间范围暂无访问日志。' : 'No traffic logs in this range.'}</p> : <div className="overflow-x-auto"><table className="w-full text-left text-[13px] text-slate-300"><thead className="border-b border-slate-800 bg-slate-800/40 text-[12.5px] font-semibold text-slate-400"><tr><th className="px-3 py-3">{lang === 'zh' ? '日期' : 'Date'}</th><th className="px-3 py-3">PV</th><th className="px-3 py-3">UV</th><th className="px-3 py-3">AI Bot</th></tr></thead><tbody>{trafficTrend.slice(-10).map((row) => <tr key={String(row.date)} className="border-t border-slate-800 hover:bg-slate-800/40"><td className="px-3 py-4">{String(row.date || '')}</td><td className="px-3 py-4">{displayNumber(row.pv)}</td><td className="px-3 py-4">{displayNumber(row.unique_ip)}</td><td className="px-3 py-4 text-rose-300">{displayNumber(row.ai_bot_pv)}</td></tr>)}</tbody></table></div>}
           </section>
 

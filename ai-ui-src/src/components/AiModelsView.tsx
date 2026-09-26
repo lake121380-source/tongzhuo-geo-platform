@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Sliders, Bot, Code, Copy, Plus, Save, Trash2, Wifi } from 'lucide-react';
 import { AiModelConfig, PromptTemplate } from '../types';
 import { GeoFlowApiClient } from '../api/geoflowClient';
+import { modelStatusLabel, promptTypeLabel } from '../api/labels';
 import { AiSourceProvidersPanel } from './AiSourceProvidersPanel';
 import { JianduPanel } from './JianduPanel';
 import SpecialPromptsPanel from './SpecialPromptsPanel';
@@ -9,7 +10,8 @@ import AiSystemSettingsPanel from './AiSystemSettingsPanel';
 import ModelBindingsPanel from './ModelBindingsPanel';
 import PermissionNotice from './PermissionNotice';
 import { PageHeader } from './PageHeader';
-import { EmptyState, Modal } from './ui';
+import { EmptyState, Modal, useConfirm } from './ui';
+import { LoadingState } from './LoadingState';
 import { describeApiError } from '../api/permissions';
 
 interface AiModelsViewProps {
@@ -33,6 +35,17 @@ interface AiModelsViewProps {
   canWrite?: boolean;
   /** System source-provider configuration has an additional super-admin boundary. */
   canManageSourceProviders?: boolean;
+  /** 首轮数据是否还在路上：为 true 且列表为空时显示「正在读取…」而不是「API 里还没有模型」。 */
+  loading?: boolean;
+  /**
+   * 「见度对接」面板的能力位。
+   *
+   * ⚠️ 原来它复用 `canManageSourceProviders`（= `models:read+write`+超管），
+   * 而后端 `jiandu/*` 要的是 **`jiandu:read` / `jiandu:write`**——两码事：
+   * 没有 jiandu 权限的超管会看到整套管理界面、每个请求都 403；
+   * 有 jiandu:write 的人反而看不到入口。
+   */
+  canManageJiandu?: boolean;
   apiClient?: GeoFlowApiClient;
 }
 
@@ -41,7 +54,7 @@ const emptyModel = { name: '', version: '', model_id: '', model_type: 'chat', ap
 export const AiModelsView: React.FC<AiModelsViewProps> = ({
   models, prompts, onSelectDefaultModel, onCreateModel, onUpdateModel, onDeleteModel, onTestModel,
   onCreatePrompt, onUpdatePrompt, onDeletePrompt, onCopyPrompt, lang, apiMode = false,
-  canRead = true, canWrite = true, canManageSourceProviders = false, apiClient,
+  canRead = true, canWrite = true, canManageSourceProviders = false, canManageJiandu = false, apiClient, loading = false,
 }) => {
   const [selectedPrompt, setSelectedPrompt] = useState<PromptTemplate | null>(prompts[0] || null);
   const [creatingPrompt, setCreatingPrompt] = useState(false);
@@ -54,6 +67,7 @@ export const AiModelsView: React.FC<AiModelsViewProps> = ({
   const [promptDraft, setPromptDraft] = useState({ name: '', content: '', type: 'content' });
   const [busy, setBusy] = useState('');
   const [notice, setNotice] = useState('');
+  const confirmDialog = useConfirm();
 
   useEffect(() => {
     if (!creatingPrompt && (!selectedPrompt || !prompts.some((prompt) => prompt.id === selectedPrompt.id))) setSelectedPrompt(prompts[0] || null);
@@ -62,14 +76,53 @@ export const AiModelsView: React.FC<AiModelsViewProps> = ({
     if (selectedPrompt) setPromptDraft({ name: selectedPrompt.name, content: selectedPrompt.systemPrompt, type: selectedPrompt.type || selectedPrompt.category || 'content' });
   }, [selectedPrompt]);
 
-  const run = async (key: string, action: () => Promise<unknown>) => {
+  /**
+   * 通用动作执行器。`successText` 是给「非保存类动作」用的——删除/复制走同一个 `run()`，
+   * 成功时却统一弹「已保存」，用户会以为什么都没发生。
+   */
+  const run = async (key: string, action: () => Promise<unknown>, successText?: string) => {
     setBusy(key); setNotice('');
-    try { await action(); setNotice(lang === 'zh' ? '已保存' : 'Saved'); }
+    try { await action(); setNotice(successText ?? (lang === 'zh' ? '已保存' : 'Saved')); }
     catch (error) { setNotice(describeApiError(error, lang === 'zh' ? '操作失败' : 'Operation failed', lang)); }
     finally { setBusy(''); }
   };
   const modelValue = (key: string): string => String(modelForm?.[key] ?? '');
   const setModelValue = (key: string, value: string) => setModelForm((prev) => ({ ...(prev || emptyModel), [key]: value }));
+
+  /**
+   * 删除模型 / 删除提示词都要先确认。
+   *
+   * 这两处原本是**整个文件里唯二没有确认机制**的破坏性操作（直接 `run('delete-…')`）。
+   * 文案照实写：后端对「仍被任务或工作流引用」的模型（409 `model_in_use`）与
+   * 「仍被任务引用」的提示词（409 `prompt_in_use`）本来就拒绝删除，所以真正的损失是
+   * **未被引用的那份配置没了且不可恢复**——确认框要说的是这个，而不是吓唬「会删掉在用的」。
+   */
+  const removeModel = async (mod: AiModelConfig) => {
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? `删除模型「${mod.name}」？` : `Delete model "${mod.name}"?`,
+      description: lang === 'zh'
+        ? '不可撤销，删掉后要重新填模型与 API Key。仍被任务或工作流引用的模型服务端会拒绝删除（先改掉引用再删）。'
+        : 'This cannot be undone; you would have to re-enter the model and API key. The server refuses to delete a model still referenced by tasks or workflows — repoint those first.',
+      confirmLabel: lang === 'zh' ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
+    await run(`delete-${mod.id}`, () => onDeleteModel?.(mod.id) || Promise.resolve(),
+      lang === 'zh' ? '模型已删除' : 'Model deleted');
+  };
+
+  const removePrompt = async () => {
+    if (!selectedPrompt) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? `删除提示词「${selectedPrompt.name}」？` : `Delete prompt "${selectedPrompt.name}"?`,
+      description: lang === 'zh'
+        ? '不可撤销。仍被任务引用的提示词服务端会拒绝删除（先改掉引用再删）；系统内置提示词是只读的，删不掉。'
+        : 'This cannot be undone. The server refuses to delete a prompt still referenced by tasks — repoint those first. Built-in system prompts are read-only.',
+      confirmLabel: lang === 'zh' ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
+    await run('delete-prompt', () => onDeletePrompt?.(selectedPrompt.id) || Promise.resolve(),
+      lang === 'zh' ? '提示词已删除' : 'Prompt deleted');
+  };
 
   const closeModelForm = () => { setModelForm(null); setModelError(''); setModelTest(''); };
 
@@ -128,14 +181,14 @@ export const AiModelsView: React.FC<AiModelsViewProps> = ({
       {!canRead && <PermissionNotice lang={lang} mode="read" requiredScope="models:read" />}
       {canRead && !canWrite && <PermissionNotice lang={lang} requiredScope="models:write" />}
       {notice && <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-2 text-[13px] text-indigo-200">{notice}</div>}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 items-start lg:grid-cols-12 gap-6">
         <div className="lg:col-span-6 bg-slate-900/80 p-5 rounded-2xl space-y-4">
           <div className="flex items-center justify-between"><h3 className="text-section-title flex items-center gap-2"><Bot className="w-4 h-4 text-slate-400" />{lang === 'zh' ? 'AI 模型' : 'AI Models'}</h3>{apiMode && canRead && canWrite && <button onClick={() => setModelForm({ ...emptyModel })} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[12px] font-semibold text-slate-200 transition hover:bg-slate-800"><Plus className="w-3 h-3" />{lang === 'zh' ? '新增' : 'Add'}</button>}</div>
           <div className="space-y-3">
-            {!canRead ? <div className="text-[13px] text-slate-500">{lang === 'zh' ? '没有模型读取权限' : 'Model read access is not granted'}</div> : <>{models.length === 0 && <EmptyState compact icon={Bot} title={lang === 'zh' ? '还没有 AI 模型' : 'No models available from API'} description={lang === 'zh' ? '点右上角「新增」添加一个模型，填好 API 地址与密钥。' : 'Add one from the top-right button.'} />}
+            {!canRead ? <div className="text-[13px] text-slate-500">{lang === 'zh' ? '没有模型读取权限' : 'Model read access is not granted'}</div> : <>{models.length === 0 && (loading ? <div className="py-8 text-center"><LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取 AI 模型…' : 'Loading AI models…'} /></div> : <EmptyState compact icon={Bot} title={lang === 'zh' ? '还没有 AI 模型' : 'No models available from API'} description={lang === 'zh' ? '点右上角「新增」添加一个模型，填好 API 地址与密钥。' : 'Add one from the top-right button.'} />)}
             {models.map((mod) => <div key={mod.id} className="p-4 rounded-xl bg-slate-950/40">
-              <div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><span className="text-sm font-bold text-white">{mod.name}</span>{mod.isDefault && <span className="text-[12px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300">{lang === 'zh' ? '默认' : 'Default'}</span>}</div><div className="text-[13px] font-mono text-slate-400 mt-1">{mod.modelId || '—'} · {mod.type}</div></div><span className="text-[12px] text-slate-500">{mod.status || 'unknown'}</span></div>
-              <div className="flex items-center justify-between text-[13px] text-slate-400 pt-3 mt-3 border-t border-slate-800/80"><span>{mod.apiKeyConfigured ? 'API Key ✓' : 'API Key —'}</span><div className="flex gap-3">{canWrite && mod.isDefault !== true && mod.type === 'chat' && <button onClick={() => onSelectDefaultModel(mod.id)} className="text-indigo-400">{lang === 'zh' ? '设为默认' : 'Default'}</button>}{apiMode && canWrite && <><button onClick={() => setModelForm({ id: mod.id, name: mod.name, version: mod.version || '', model_id: mod.modelId || '', model_type: mod.type, api_url: mod.apiUrl || '', api_key: '', daily_limit: mod.dailyLimit || 0, max_tokens: mod.maxTokens || 4096, status: mod.status || 'active', access_scope: mod.accessScope || 'user_content', failover_priority: mod.failoverPriority || 100 })} className="text-slate-300">{lang === 'zh' ? '编辑' : 'Edit'}</button><button onClick={() => void testModel(String(mod.id))} className="text-emerald-300 flex items-center gap-1"><Wifi className="w-3 h-3" />{busy === 'test-' + mod.id ? '…' : (lang === 'zh' ? '测试' : 'Test')}</button><button onClick={() => run('delete-' + mod.id, () => onDeleteModel?.(mod.id) || Promise.resolve())} className="text-rose-400"><Trash2 className="w-3 h-3" /></button></>}</div></div>
+              <div className="flex items-start justify-between"><div><div className="flex items-center gap-2"><span className="text-sm font-bold text-white">{mod.name}</span>{mod.isDefault && <span className="text-[12px] px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-300">{lang === 'zh' ? '默认' : 'Default'}</span>}</div><div className="text-[13px] font-mono text-slate-400 mt-1">{mod.modelId || '—'} · {mod.type}</div></div><span className="text-[12px] text-slate-500">{modelStatusLabel(mod.status, lang)}</span></div>
+              <div className="flex items-center justify-between text-[13px] text-slate-400 pt-3 mt-3 border-t border-slate-800/80"><span>{mod.apiKeyConfigured ? 'API Key ✓' : 'API Key —'}</span><div className="flex gap-3">{canWrite && mod.isDefault !== true && mod.type === 'chat' && <button onClick={() => onSelectDefaultModel(mod.id)} className="text-indigo-400">{lang === 'zh' ? '设为默认' : 'Default'}</button>}{apiMode && canWrite && <><button onClick={() => setModelForm({ id: mod.id, name: mod.name, version: mod.version || '', model_id: mod.modelId || '', model_type: mod.type, api_url: mod.apiUrl || '', api_key: '', daily_limit: mod.dailyLimit || 0, max_tokens: mod.maxTokens || 4096, status: mod.status || 'active', access_scope: mod.accessScope || 'user_content', failover_priority: mod.failoverPriority || 100 })} className="text-slate-300">{lang === 'zh' ? '编辑' : 'Edit'}</button><button onClick={() => void testModel(String(mod.id))} className="text-emerald-300 flex items-center gap-1"><Wifi className="w-3 h-3" />{busy === 'test-' + mod.id ? '…' : (lang === 'zh' ? '测试' : 'Test')}</button><button onClick={() => void removeModel(mod)} className="text-rose-400"><Trash2 className="w-3 h-3" /></button></>}</div></div>
               {(testResults[String(mod.id)] || (mod.type === 'embedding' && mod.accessScope !== 'system_only')) && (
                 <p className={'mt-2 text-[12px] leading-relaxed ' + (testResults[String(mod.id)] && testResults[String(mod.id)].indexOf('失败') >= 0 ? 'text-rose-300' : 'text-amber-300')}>
                   {testResults[String(mod.id)]
@@ -199,8 +252,8 @@ export const AiModelsView: React.FC<AiModelsViewProps> = ({
               </label>
               <label className="text-[13px] text-slate-400">{lang === 'zh' ? '状态' : 'Status'}
                 <select value={modelValue('status')} onChange={(e) => setModelValue('status', e.target.value)} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500">
-                  <option value="active">{lang === 'zh' ? '启用' : 'active'}</option>
-                  <option value="inactive">{lang === 'zh' ? '停用' : 'inactive'}</option>
+                  <option value="active">{lang === 'zh' ? '启用' : 'Active'}</option>
+                  <option value="inactive">{lang === 'zh' ? '停用' : 'Inactive'}</option>
                 </select>
               </label>
             </div>
@@ -243,12 +296,12 @@ export const AiModelsView: React.FC<AiModelsViewProps> = ({
         <div className="lg:col-span-6 bg-slate-900/80 p-5 rounded-2xl space-y-4">
           <div className="flex items-center justify-between"><h3 className="text-section-title flex items-center gap-2"><Code className="w-4 h-4 text-slate-400" />{lang === 'zh' ? '提示词模板' : 'Prompt Templates'}</h3>{apiMode && canRead && canWrite && <button onClick={() => { setCreatingPrompt(true); setSelectedPrompt(null); setPromptDraft({ name: '', content: '', type: 'content' }); }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2.5 text-[12px] font-semibold text-slate-200 transition hover:bg-slate-800"><Plus className="w-3 h-3" />{lang === 'zh' ? '新增' : 'Add'}</button>}</div>
           <div className="flex flex-wrap gap-2">{prompts.map((p) => <button key={p.id} onClick={() => { setCreatingPrompt(false); setSelectedPrompt(p); }} className={'text-[13px] px-3 py-1.5 rounded-xl ' + (selectedPrompt?.id === p.id ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-300')}>{p.name}</button>)}</div>
-          {!canRead ? <div className="text-[13px] text-slate-500">{lang === 'zh' ? '没有提示词读取权限' : 'Prompt read access is not granted'}</div> : apiMode ? <div className="space-y-2"><input disabled={!canWrite} value={promptDraft.name} onChange={(e) => setPromptDraft((p) => ({ ...p, name: e.target.value }))} placeholder="提示词名称" className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500 disabled:opacity-60" /><select value={promptDraft.type} disabled={Boolean(selectedPrompt) || !canWrite} onChange={(e) => setPromptDraft((p) => ({ ...p, type: e.target.value }))} className="h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500 disabled:opacity-60"><option value="content">content</option><option value="quality_check">quality_check</option></select><textarea disabled={!canWrite} rows={12} value={promptDraft.content} onChange={(e) => setPromptDraft((p) => ({ ...p, content: e.target.value }))} className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-[13px] text-slate-300 font-mono outline-none transition focus:border-indigo-500 disabled:opacity-60" /><div className="flex gap-2"><button disabled={!canWrite || Boolean(selectedPrompt?.systemManaged)} onClick={() => void run('save-prompt', () => creatingPrompt ? onCreatePrompt?.(promptDraft) || Promise.resolve() : selectedPrompt ? onUpdatePrompt?.(selectedPrompt.id, promptDraft) || Promise.resolve() : Promise.resolve()).then(() => setCreatingPrompt(false))} className="inline-flex h-9 items-center gap-1 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-40"><Save className="w-3 h-3" />保存</button>{canWrite && selectedPrompt && !selectedPrompt.systemManaged && <button onClick={() => run('delete-prompt', () => onDeletePrompt?.(selectedPrompt.id) || Promise.resolve())} className="text-[13px] text-rose-400 flex items-center gap-1"><Trash2 className="w-3 h-3" />删除</button>}{canWrite && selectedPrompt && onCopyPrompt && <button onClick={() => run('copy-prompt', () => onCopyPrompt(selectedPrompt.id))} className="text-[13px] text-indigo-300 flex items-center gap-1" title={lang === 'zh' ? '复制成可编辑副本（系统内置提示词只能这样改）' : 'Copy into an editable duplicate'}><Copy className="w-3 h-3" />{lang === 'zh' ? '复制' : 'Copy'}</button>}</div></div> : <div className="text-[13px] text-slate-500">连接 API 后可编辑提示词</div>}
+          {!canRead ? <div className="text-[13px] text-slate-500">{lang === 'zh' ? '没有提示词读取权限' : 'Prompt read access is not granted'}</div> : apiMode ? <div className="space-y-2"><input disabled={!canWrite} value={promptDraft.name} onChange={(e) => setPromptDraft((p) => ({ ...p, name: e.target.value }))} placeholder="提示词名称" className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500 disabled:opacity-60" /><select value={promptDraft.type} disabled={Boolean(selectedPrompt) || !canWrite} onChange={(e) => setPromptDraft((p) => ({ ...p, type: e.target.value }))} className="h-10 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500 disabled:opacity-60"><option value="content">{promptTypeLabel('content', lang)}</option><option value="quality_check">{promptTypeLabel('quality_check', lang)}</option></select><textarea disabled={!canWrite} rows={12} value={promptDraft.content} onChange={(e) => setPromptDraft((p) => ({ ...p, content: e.target.value }))} className="w-full rounded-xl border border-slate-700 bg-slate-900 p-3 text-[13px] text-slate-300 font-mono outline-none transition focus:border-indigo-500 disabled:opacity-60" /><div className="flex gap-2"><button disabled={!canWrite || Boolean(selectedPrompt?.systemManaged) || (!creatingPrompt && !selectedPrompt)} title={!creatingPrompt && !selectedPrompt ? (lang === 'zh' ? '先点右上角「新增」新建一条提示词，或从上方选一条已有的' : 'Click "New" first, or pick an existing prompt above') : undefined} onClick={() => void run('save-prompt', () => creatingPrompt ? onCreatePrompt?.(promptDraft) || Promise.resolve() : selectedPrompt ? onUpdatePrompt?.(selectedPrompt.id, promptDraft) || Promise.resolve() : Promise.resolve()).then(() => setCreatingPrompt(false))} className="inline-flex h-9 items-center gap-1 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-40"><Save className="w-3 h-3" />保存</button>{canWrite && selectedPrompt && !selectedPrompt.systemManaged && <button onClick={() => void removePrompt()} className="text-[13px] text-rose-400 flex items-center gap-1"><Trash2 className="w-3 h-3" />删除</button>}{canWrite && selectedPrompt && onCopyPrompt && <button onClick={() => run('copy-prompt', () => onCopyPrompt(selectedPrompt.id))} className="text-[13px] text-indigo-300 flex items-center gap-1" title={lang === 'zh' ? '复制成可编辑副本（系统内置提示词只能这样改）' : 'Copy into an editable duplicate'}><Copy className="w-3 h-3" />{lang === 'zh' ? '复制' : 'Copy'}</button>}</div></div> : <div className="text-[13px] text-slate-500">连接 API 后可编辑提示词</div>}
         </div>
       </div>
       {apiMode && apiClient && <AiSourceProvidersPanel apiClient={apiClient} lang={lang} canManage={canManageSourceProviders} />}
       {/* 见度GEO 检测：第三方接入（连接一次 + 每日检测的问题集），与「来源提供者」同区 */}
-      {apiMode && apiClient && <JianduPanel apiClient={apiClient} lang={lang} canManage={canManageSourceProviders} />}
+      {apiMode && apiClient && <JianduPanel apiClient={apiClient} lang={lang} canManage={canManageJiandu} />}
       {apiMode && apiClient && (
         <div className="space-y-4">
           {/* 系统级配置（切片/默认向量，超管）与个人默认、运行概览 */}

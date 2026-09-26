@@ -356,6 +356,15 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
             const sources = records(latest?.sources);
             const ownedShare = citations.owned_share_percent;
             const mentionRate = mentions.mention_rate_percent;
+            /**
+             * 一条观测都没有时，不画五个空指标格：每张问题卡都画一遍
+             * 「未采集 / 0 / 不可计算」，五张卡就把这页撑到 2,000px，
+             * 却一个字的新信息都没有。有失败运行（run_count>0）仍算「有内容」——
+             * 「跑了 3 次全失败」本身是运营要看的信息。
+             */
+            const hasAnyObservation = numberValue(observations.completed_run_count) > 0
+              || numberValue(observations.run_count) > 0
+              || numberValue(citations.observation_count) > 0;
             return (
               <article key={item.id} className="rounded-xl border border-slate-800 bg-slate-900/90 p-5">
                 <div className="flex flex-col gap-4 lg:flex-row lg:justify-between">
@@ -366,6 +375,8 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
                       {item.sample.library_name && <span className="text-[10px] text-slate-500">{String(item.sample.library_name)}</span>}
                     </div>
 
+                    {hasAnyObservation ? (
+                      <>
                     <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                       <Metric label={lang === 'zh' ? '外部问题量' : 'External volume'} value={lang === 'zh' ? '未采集' : 'Not collected'} detail={lang === 'zh' ? '不使用内部次数冒充热度' : 'Internal counts are not search volume'} />
                       <Metric label={lang === 'zh' ? '采集运行' : 'Collection runs'} value={`${numberValue(observations.completed_run_count)} / ${numberValue(observations.run_count)}`} detail={`${lang === 'zh' ? '失败' : 'Failed'} ${numberValue(observations.failed_run_count)} · ${lang === 'zh' ? '等待' : 'Pending'} ${numberValue(observations.pending_run_count)}`} />
@@ -393,13 +404,21 @@ export const QueryRadarView: React.FC<QueryRadarViewProps> = ({
                         </div>
                       </details>
                     ) : <p className="mt-4 text-xs text-slate-500">{lang === 'zh' ? '当前时间窗没有已完成的真实回答。' : 'No completed persisted answer exists in this window.'}</p>}
+                      </>
+                    ) : (
+                      <p className="mt-3 text-[13px] text-slate-400">
+                        {lang === 'zh'
+                          ? '这个问题还没有采集过。点右侧「真实采集」，让 AI 真的回答一次——回来才会有提及率与引用数据。'
+                          : 'Not collected yet. Run a collection on the right to get mention and citation data.'}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex shrink-0 flex-row gap-2 lg:w-44 lg:flex-col">
                     <button type="button" disabled={!canCollect || Boolean(busyId)} onClick={() => void collectQuery(item)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-indigo-700 px-3 py-2 text-xs font-semibold text-indigo-200 disabled:opacity-40">
                       {busyId === `collect-${item.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}{lang === 'zh' ? '真实采集' : 'Collect'}
                     </button>
-                    <button type="button" disabled={!canDraft || !item.draft_ready || !draftCategoryId || !draftAuthorId || Boolean(busyId)} onClick={() => void generateDraft(item)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40" title={!item.draft_ready ? (lang === 'zh' ? '需要已完成回答和引用记录' : 'Requires a completed answer and citations') : (!draftCategoryId || !draftAuthorId ? (lang === 'zh' ? '请先选择分类和作者' : 'Select a category and author first') : '')}>
+                    <button type="button" disabled={!canDraft || !item.draft_ready || !draftCategoryId || !draftAuthorId || Boolean(busyId)} onClick={() => void generateDraft(item)} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:bg-slate-800 disabled:text-slate-500" title={!item.draft_ready ? (lang === 'zh' ? '需要已完成回答和引用记录' : 'Requires a completed answer and citations') : (!draftCategoryId || !draftAuthorId ? (lang === 'zh' ? '请先选择分类和作者' : 'Select a category and author first') : '')}>
                       {busyId === `draft-${item.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}{item.draft ? (lang === 'zh' ? '生成新证据草稿' : 'Create another draft') : (lang === 'zh' ? '生成证据草稿' : 'Create evidence draft')}
                     </button>
                     {!canCollect && <p className="text-[10px] text-slate-500">analytics:collect</p>}

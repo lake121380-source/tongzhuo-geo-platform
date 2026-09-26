@@ -548,6 +548,17 @@ export const TasksView: React.FC<TasksViewProps> = ({
           if (authorId) payload.author_id = Number(authorId);
           if (knowledgeBaseId) payload.knowledge_base_ids = [Number(knowledgeBaseId)];
           /*
+           * 质检开关与质检方案：**弹窗在编辑模式下也渲染这两个控件**（见下方 `{apiMode && …}`），
+           * 但这两行以前只在「建任务」分支里发，编辑分支压根不发——运营关掉「发布前做 AI 质检」
+           * 或换掉质检方案，点保存提示成功，任务实际一点没变（静默丢弃）。
+           * 后端 `UpdateTaskRequest` 早就接受这两个字段（:45 / :50），且它们同在
+           * `TaskLifecycleService` 的「质检配置」清单里，改了就吃下面的 config_version 乐观并发——
+           * 所以这里补上即可，不用动后端。
+           * 关掉开关时不发 prompt 字段：那个下拉此刻根本不可见，不该顺手清掉任务已有的方案。
+           */
+          payload.ai_quality_enabled = qualityEnabled;
+          if (qualityEnabled) payload.ai_quality_prompt_id = aiQualityPromptId ? Number(aiQualityPromptId) : null;
+          /*
            * 上面这些字段（need_review / knowledge_base_ids / ai_model_id / publish_scope /
            * title_library_id / prompt_id）都在后端的「质检配置」清单里，改它们必须带上
            * 当前版本号做乐观并发，否则服务端一律 409

@@ -85,8 +85,12 @@
   --color-primary-soft-2: #f2f2f0;
 
   /* ── 状态色（4 个，只表达状态，不当装饰色） ───────────────────────── */
-  /* 这四个保持不动：它们只表达状态、用量小，且对比度是上一轮审计过的。
-     换色系的收益远小于重新审计的成本。 */
+  /* ⚠️ 2026-09-26 实测修正：此前这里写着「对比度是上一轮审计过的」——**那句是错的**。
+     上一轮只覆盖了 `-400` 及更浅的档，而**真正当状态文字用的是 `-500`/`-600`**：
+     实测「已暂停」= `text-amber-600` #c77b12 在白底只有 **3.35:1**、
+     「已发布」= `text-emerald-600` #159a6b 只有 **3.58:1**，11.5px 正文需要 4.5:1。
+     底色本身不动（它们也当实底用，换色会牵动按钮），改的是「当文字用」时的收敛：
+     见下面「3c. 状态色中档当文字用」。 */
   --color-success: #159a6b;
   --color-success-soft: #ecf8f3;
   --color-warning: #c77b12;
@@ -533,6 +537,45 @@
 
 /*
  * ════════════════════════════════════════════════════════════════════════════
+ *  ⑥ 字号下限 与 点击目标下限（2026-09-26）
+ *
+ *  两个「地板」规则，都放在最外层（**不区分明暗**——可读性跟主题无关）。
+ *  它们不改类名、不改组件，只把越界的那一档拉回系统允许的范围，
+ *  和上面那批「亮色收敛规则」是同一种手法。
+ * ════════════════════════════════════════════════════════════════════════════
+ */
+
+/* ── 6a. 字号地板：低于 12.5px 的一律抬到 12.5px ─────────────────────────
+ * ⑤ 里定了五档语义字号，最小的 `.text-caption` = 12.5px，并写明「别再手写 text-[11px]」。
+ * 实测代码里仍有 **351 处**手写在 12.5px 以下（10px ×105、11px ×217、11.5px ×26、9px ×3），
+ * 整站渲染出来 **180 个元素小于 12px**——知识库一页就占 78 个（事实卡片的
+ * 「草稿/证据/编辑值/归档值」全是 10px）。
+ * `text-[12px]` 也一并抬：它同样低于 `.text-caption`，但只差 0.5px，视觉几乎无感。
+ * 选择器用类名子串匹配（和上面那批收敛规则同一手法），特异性 (0,2,0) 稳定压过工具类。
+ */
+:root [class*="text-[9px]"],
+:root [class*="text-[10px]"],
+:root [class*="text-[11px]"],
+:root [class*="text-[11.5px]"],
+:root [class*="text-[12px]"] {
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ── 6b. 点击目标下限 24×24（WCAG 2.5.8 目标尺寸，AA 是 24×24）───────────
+ * 实测 54 处小于 24px：主要是密集列表里的文字型小按钮（知识库事实卡片的
+ * 「编辑值/归档值」30×15、「挂载切片证据」60×15，各处 20px 高的「编辑/测试/删除」链接）
+ * 与几处 14×14 的纯图标按钮。
+ * 这里只加**最小尺寸**、不动 padding/字号：视觉基本不变，点得中的范围变大。
+ */
+:root button,
+:root a[href] {
+  min-height: 24px;
+  min-width: 24px;
+}
+
+/*
+ * ════════════════════════════════════════════════════════════════════════════
  *  亮色专属收敛规则
  *
  *  为什么用类名匹配（`[class*=…]`）而不是逐个改组件：这些写法在全仓库有上千处，
@@ -697,6 +740,45 @@
   :root:not(.dark) [class*="text-red-50/"], [class*="text-red-100/"], [class*="text-red-200/"], [class*="text-red-300/"], [class*="text-red-400/"],
   [class*="text-rose-50/"], [class*="text-rose-100/"], [class*="text-rose-200/"], [class*="text-rose-300/"], [class*="text-rose-400/"] {
     color: var(--color-red-800);
+  }
+
+  /* ── 3c. 状态色「中档」当文字用也不达标（2026-09-26 实测新增）─────────────
+   * 上面 3. 只压到 `-400`，但界面上真正当**状态文字**用的是 `-500`/`-600`：
+   * 实测白底 与 soft 底两处都不过 AA（amber-600 3.35/3.15、emerald-600 3.58/3.29、
+   * red-600 4.38/3.96，11.5px 需要 4.5:1）。
+   * **`-700` 起两处都过**：amber 4.90/4.60、emerald 5.33/4.90、red 6.04/5.46
+   * ——所以只往上压一档，不动底色、不动更深的 `-800`（那是浅色字用的）。
+   * 只作用于「当文字用」的场景（`text-*`）；`bg-*`/`border-*` 不受影响，
+   * 因为交互元素（按钮/进度条）用的是实底，白字在 `-600` 上是另一套判据，
+   * 那条已在 3b. 里按 `-700` 处理过。
+   */
+  :root:not(.dark) :where(
+    .text-amber-500, .text-amber-600, .text-yellow-500, .text-yellow-600,
+    .text-orange-500, .text-orange-600) {
+    color: var(--color-amber-700);
+  }
+  :root:not(.dark) :where(.text-emerald-500, .text-emerald-600, .text-lime-500, .text-lime-600,
+    .text-green-500, .text-green-600, .text-teal-500, .text-teal-600) {
+    color: var(--color-emerald-700);
+  }
+  :root:not(.dark) :where(.text-red-500, .text-red-600, .text-rose-500, .text-rose-600) {
+    color: var(--color-red-700);
+  }
+  /* 带透明度写法（`text-amber-600/80`）要单独一条：`:where(.text-amber-600)` 匹配不到它。 */
+  :root:not(.dark) [class*="text-amber-500/"], [class*="text-amber-600/"],
+  [class*="text-yellow-500/"], [class*="text-yellow-600/"],
+  [class*="text-orange-500/"], [class*="text-orange-600/"] {
+    color: var(--color-amber-700);
+  }
+  :root:not(.dark) [class*="text-emerald-500/"], [class*="text-emerald-600/"],
+  [class*="text-lime-500/"], [class*="text-lime-600/"],
+  [class*="text-green-500/"], [class*="text-green-600/"],
+  [class*="text-teal-500/"], [class*="text-teal-600/"] {
+    color: var(--color-emerald-700);
+  }
+  :root:not(.dark) [class*="text-red-500/"], [class*="text-red-600/"],
+  [class*="text-rose-500/"], [class*="text-rose-600/"] {
+    color: var(--color-red-700);
   }
 
   /* 品牌族：blue / sky / cyan / purple / violet / fuchsia / pink 已并入主色槽位，

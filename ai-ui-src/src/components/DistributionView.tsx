@@ -25,6 +25,7 @@ import { DistributionChannel } from '../types';
 import PermissionNotice from './PermissionNotice';
 import { PageHeader } from './PageHeader';
 import { EmptyState, useConfirm } from './ui';
+import { LoadingState } from './LoadingState';
 import { describeApiError } from '../api/permissions';
 
 interface DistributionViewProps {
@@ -32,6 +33,11 @@ interface DistributionViewProps {
   /** Hosted sites are a separate lifecycle domain, not ordinary channels. */
   hostedSites?: Array<Record<string, unknown>>;
   distributionJobs?: Array<Record<string, unknown>>;
+  /**
+   * 首轮数据是否还在路上。为 true 且列表为空时显示「正在读取…」而不是「还没有…」——
+   * 把「还没读到」画成「没有数据」，运营会以为分发渠道/任务全丢了。
+   */
+  loading?: boolean;
   /**
    * 重新拉取分发任务列表。
    *
@@ -81,6 +87,13 @@ interface DistributionViewProps {
   onHostedSiteAction?: (id: string, action: 'preflight' | 'activate' | 'pause' | 'maintenance' | 'indexing' | 'archive', payload?: Record<string, unknown>) => Promise<Record<string, unknown>>;
   onUpdateHostedSite?: (id: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
   onAssignHostedArticle?: (id: string, articleId: string) => Promise<Record<string, unknown>>;
+  /**
+   * 细粒度 Token 的能力位：后端 `POST distribution/jobs/{id}/retry` 与
+   * `POST distribution/hosted-sites/{id}/articles` **都同时要 `articles:publish` + `distribution:write`**，
+   * 而前端原来只判 `distribution:write`（重试）或什么都不判（分配文章）——
+   * 只有分发权限的账号点下去必吃 403。缺省 true 保持既有行为。
+   */
+  canPublishArticle?: boolean;
 }
 
 /**
@@ -92,6 +105,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
   channels,
   hostedSites = [],
   distributionJobs = [],
+  loading = false,
   onRefreshDistributionJobs,
   onAddChannel,
   onSyncChannel,
@@ -122,6 +136,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
   onHostedSiteAction,
   onUpdateHostedSite,
   onAssignHostedArticle,
+  canPublishArticle = true,
 }) => {
   const [activeTab, setActiveTab] = useState<'channels' | 'deployment'>('channels');
   const confirmDialog = useConfirm();
@@ -142,6 +157,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
     if (!articleId || !onLoadArticleSnapshot) return;
     try {
       const snapshot = await onLoadArticleSnapshot(articleId);
+      setJobEditError('');
       setJobEdit({
         id: jobId,
         articleId,
@@ -163,6 +179,14 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
   const [syncResult, setSyncResult] = useState<Record<string, unknown> | null>(null);
   const [jobEdit, setJobEdit] = useState<{ id: string; articleId: string; title: string; excerpt: string; content: string; keywords: string; meta_description: string } | null>(null);
   const [actionError, setActionError] = useState('');
+  /**
+   * 「修正分发内容」弹窗内部的错误。
+   *
+   * 原来保存是「先 `setJobEdit(null)` 关窗、再异步发请求」——失败时用户改的标题/正文
+   * 随关窗一起丢了，错误却显示在页面顶部（用户早就不在看那里）。现在**成功才关窗**，
+   * 失败留在表单里就地报错。
+   */
+  const [jobEditError, setJobEditError] = useState('');
   const [busyAction, setBusyAction] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -388,6 +412,28 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
     }
   };
 
+  /** 保存「修正分发内容」：**成功才关窗**，失败留在表单里就地报错。 */
+  const saveJobEdit = async () => {
+    if (!jobEdit) return;
+    const draft = jobEdit;
+    setBusyAction(`job-save-${draft.id}`);
+    setJobEditError('');
+    try {
+      await onUpdateDistributionJob?.(draft.id, {
+        title: draft.title,
+        excerpt: draft.excerpt,
+        content: draft.content,
+        keywords: draft.keywords,
+        meta_description: draft.meta_description,
+      });
+      setJobEdit(null);
+    } catch (error) {
+      setJobEditError(describeApiError(error, lang === 'zh' ? '修正分发内容失败' : 'Unable to correct this distribution', lang));
+    } finally {
+      setBusyAction('');
+    }
+  };
+
   const runChannelAction = async (key: string, action: () => Promise<void>, fallback: string) => {
     if (!canWrite) {
       setActionError(lang === 'zh' ? '权限不足（403）：此操作需要「distribution:write」权限。' : 'Permission denied (403): this action requires the “distribution:write” scope.');
@@ -571,7 +617,9 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                   className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"
                 ><Plus className="h-4 w-4" />{lang === 'zh' ? '新增 Hosted Site' : 'Add Hosted Site'}</button>
               </div>
-              {!canRead ? <div className="py-6 text-center text-[13px] text-slate-500">{lang === 'zh' ? '没有 Hosted Site 读取权限' : 'Hosted Site read access is not granted'}</div> : hostedSites.length === 0 ? (
+              {!canRead ? <div className="py-6 text-center text-[13px] text-slate-500">{lang === 'zh' ? '没有 Hosted Site 读取权限' : 'Hosted Site read access is not granted'}</div> : loading && hostedSites.length === 0 ? (
+                <div className="py-8 text-center"><LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取托管站点…' : 'Loading hosted sites…'} /></div>
+              ) : hostedSites.length === 0 ? (
                 <EmptyState
                   compact
                   icon={Globe2}
@@ -640,7 +688,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                             void runHostedAction(siteId, 'archive', { hostname: String(profile.hostname || site.domain || '') });
                           }} className="inline-flex h-8 items-center gap-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 text-[11.5px] font-semibold text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-50"><Archive className="h-3 w-3" />归档</button>}
                         </div>
-                        {onAssignHostedArticle && serving !== 'archived' && <div className="flex items-center gap-2 border-t border-slate-800 pt-3"><input value={hostedArticleIds[siteId] || ''} onChange={(event) => setHostedArticleIds((current) => ({ ...current, [siteId]: event.target.value }))} placeholder={lang === 'zh' ? '输入文章 ID 分配容量' : 'Article ID'} className="h-9 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /><button type="button" disabled={!canWrite || hostedBusy === `assign-${siteId}`} onClick={() => void assignHostedArticle(siteId)} className="inline-flex h-9 shrink-0 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50">分配文章</button></div>}
+                        {onAssignHostedArticle && canPublishArticle && serving !== 'archived' && <div className="flex items-center gap-2 border-t border-slate-800 pt-3"><input value={hostedArticleIds[siteId] || ''} onChange={(event) => setHostedArticleIds((current) => ({ ...current, [siteId]: event.target.value }))} placeholder={lang === 'zh' ? '输入文章 ID 分配容量' : 'Article ID'} className="h-9 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" /><button type="button" disabled={!canWrite || hostedBusy === `assign-${siteId}`} onClick={() => void assignHostedArticle(siteId)} className="inline-flex h-9 shrink-0 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:opacity-50">分配文章</button></div>}
                       </article>
                     );
                   })}
@@ -665,7 +713,9 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
 
           {/* Distribution Channels Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {!canRead ? <div className="md:col-span-3 text-center py-8 text-[13px] text-slate-500">{lang === 'zh' ? '没有分发渠道读取权限' : 'Distribution read access is not granted'}</div> : channels.filter((channel) => channel.type !== 'hosted_site').length === 0 ? (
+            {!canRead ? <div className="md:col-span-3 text-center py-8 text-[13px] text-slate-500">{lang === 'zh' ? '没有分发渠道读取权限' : 'Distribution read access is not granted'}</div> : loading && channels.filter((channel) => channel.type !== 'hosted_site').length === 0 ? (
+                <div className="md:col-span-3 py-8 text-center"><LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取分发渠道…' : 'Loading channels…'} /></div>
+              ) : channels.filter((channel) => channel.type !== 'hosted_site').length === 0 ? (
               <div className="md:col-span-3">
                 <EmptyState
                   compact
@@ -762,10 +812,20 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                           <button
                             type="button"
                             disabled={busyAction === `rotate-${channel.id}`}
-                            onClick={() => void runChannelAction(`rotate-${channel.id}`, async () => {
-                              const secret = await onRotateChannelSecret(channel.id);
-                              if (secret) setOneTimeSecret(secret);
-                            }, '轮换密钥失败')}
+                            onClick={async () => {
+                              if (!(await confirmDialog({
+                                title: lang === 'zh' ? `轮换「${channel.name}」的密钥？` : `Rotate the secret for "${channel.name}"?`,
+                                description: lang === 'zh'
+                                  ? '旧密钥立即失效——远端 Agent 没换上新密钥之前会连不上。新密钥只显示这一次，请立刻复制保存。'
+                                  : 'The old secret stops working immediately; the remote agent cannot connect until it has the new one. The new secret is shown once — copy it right away.',
+                                confirmLabel: lang === 'zh' ? '轮换' : 'Rotate',
+                                tone: 'danger',
+                              }))) return;
+                              await runChannelAction(`rotate-${channel.id}`, async () => {
+                                const secret = await onRotateChannelSecret(channel.id);
+                                if (secret) setOneTimeSecret(secret);
+                              }, '轮换密钥失败');
+                            }}
                             className="inline-flex h-8 items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 text-[11.5px] font-semibold text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-50"
                           >
                             <Key className="h-3 w-3" />轮换密钥
@@ -880,8 +940,10 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                 </button>
               </div>
 
-              {syncPreview && <pre className="max-h-40 overflow-auto rounded-xl bg-slate-950/40 p-3 text-[11.5px] text-slate-400">{JSON.stringify(syncPreview, null, 2)}</pre>}
-              {syncResult && <pre className="max-h-40 overflow-auto rounded-xl bg-emerald-950/20 p-3 text-[11.5px] text-emerald-200">{JSON.stringify(syncResult, null, 2)}</pre>}
+              {/* 原来这里把接口返回的 JSON 原样摊给运营看（`JSON.stringify(...)`）。
+                  改成人话摘要；原始数据收进 `<details>`，需要排查时仍然拿得到。 */}
+              {syncPreview && <SyncPreviewCard report={syncPreview} lang={lang} />}
+              {syncResult && <SyncResultCard result={syncResult} lang={lang} />}
             </div>
           )}
 
@@ -894,7 +956,9 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                 </div>
                 <span className="text-caption">{distributionJobs.length} 条</span>
               </div>
-              {distributionJobs.length === 0 ? (
+              {loading && distributionJobs.length === 0 ? (
+                <div className="py-8 text-center"><LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取分发任务…' : 'Loading distribution jobs…'} /></div>
+              ) : distributionJobs.length === 0 ? (
                 <EmptyState
                   compact
                   icon={Radio}
@@ -934,7 +998,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                               ? (lang === 'zh' ? '远端可能已发出但没收到回执：确认远端状态后，可「修正分发内容」重投，或删除该任务' : 'No receipt from the remote — verify it, then re-send or delete')
                               : String(job.remote_url || job.remote_id || (lang === 'zh' ? '等待 Worker 回执' : 'Waiting for receipt'))}
                         </div>
-                        {retryable && onRetryDistribution && canWrite && (
+                        {retryable && onRetryDistribution && canWrite && canPublishArticle && (
                           <button
                             type="button"
                             onClick={() => void handleRetry(String(job.id))}
@@ -955,7 +1019,15 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                         {canWrite && onDeleteDistributionJob && (
                           <button
                             type="button"
-                            onClick={() => void runChannelAction(`job-delete-${job.id}`, () => onDeleteDistributionJob(String(job.id)), '删除分发记录失败')}
+                            onClick={async () => {
+                              if (!(await confirmDialog({
+                                title: lang === 'zh' ? '删除这条分发记录？' : 'Delete this distribution record?',
+                                description: lang === 'zh' ? '删除后这条投递历史不再可查，不可恢复。' : 'Its delivery history is removed permanently.',
+                                confirmLabel: lang === 'zh' ? '删除' : 'Delete',
+                                tone: 'danger',
+                              }))) return;
+                              await runChannelAction(`job-delete-${job.id}`, () => onDeleteDistributionJob(String(job.id)), '删除分发记录失败');
+                            }}
                             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 text-[13px] font-semibold text-rose-200 transition hover:bg-rose-500/20"
                           >
                             <Trash2 className="w-3.5 h-3.5" /> 删除
@@ -1086,19 +1158,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
       {jobEdit && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              const draft = jobEdit;
-              setJobEdit(null);
-              void runChannelAction(`job-save-${draft.id}`, () => onUpdateDistributionJob?.(draft.id, {
-                title: draft.title,
-                excerpt: draft.excerpt,
-                content: draft.content,
-                keywords: draft.keywords,
-                meta_description: draft.meta_description,
-              }) ?? Promise.resolve(), '修正分发内容失败');
-            }}
-            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-3 shadow-2xl"
+            onSubmit={(event) => { event.preventDefault(); void saveJobEdit(); }}            className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-3 shadow-2xl"
           >
             <div className="flex items-center gap-2 text-white font-bold"><Pencil className="w-4 h-4" />{lang === 'zh' ? '修正这条分发的内容' : 'Correct this distribution'}
             </div>
@@ -1107,6 +1167,7 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
                 ? '这里改的是**这次分发推出去的内容快照**，不会改动文章本身。改完需要重新分发才生效。'
                 : 'This edits the content snapshot for this distribution only; the article itself is untouched.'}
             </p>
+            {jobEditError && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{jobEditError}</div>}
             <label className="block text-caption">
               {lang === 'zh' ? '标题' : 'Title'}
               <input value={jobEdit.title} onChange={(event) => setJobEdit({ ...jobEdit, title: event.target.value })} className="mt-1 h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />
@@ -1356,6 +1417,90 @@ export const DistributionView: React.FC<DistributionViewProps> = ({
           </form>
         </div>
       )}
+    </div>
+  );
+};
+
+const toRecord = (value: unknown): Record<string, unknown> => (value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {});
+
+/**
+ * 同步预览的人话摘要。
+ *
+ * 后端 `FrontendExperienceInspector::syncPreviewForChannels()` 的返回：
+ * `{totals:{channels,requires_confirmation,warnings}, channels:[{channel:{name,domain},
+ * warnings:[{severity,message}], requires_confirmation}]}`。
+ * 其中 `warnings[].message` 后端本来就写的是中文，直接拿来用。
+ */
+const SyncPreviewCard: React.FC<{ report: Record<string, unknown>; lang: 'zh' | 'en' }> = ({ report, lang }) => {
+  const zh = lang === 'zh';
+  const totals = toRecord(report.totals);
+  const channels = Array.isArray(report.channels) ? report.channels.map(toRecord) : [];
+  const channelCount = Number(totals.channels ?? channels.length);
+  const needConfirm = Number(totals.requires_confirmation ?? 0);
+  const warningCount = Number(totals.warnings ?? 0);
+
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-950/40 p-3 text-[12.5px] text-slate-300">
+      <p className="font-semibold text-slate-200">
+        {zh
+          ? `共 ${channelCount} 个渠道 · ${needConfirm} 个需要你先确认前台体验风险 · ${warningCount} 条提示`
+          : `${channelCount} channel(s) · ${needConfirm} need your sign-off · ${warningCount} notice(s)`}
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {channels.map((row, index) => {
+          const channel = toRecord(row.channel);
+          const warnings = Array.isArray(row.warnings) ? row.warnings.map(toRecord) : [];
+          const needs = row.requires_confirmation === true;
+          const name = String(channel.name || channel.domain || `#${String(channel.id ?? index)}`);
+          const domain = String(channel.domain || '');
+          return (
+            <li key={String(channel.id ?? index)}>
+              <span className="text-slate-200">{name}</span>
+              {domain && <span className="text-slate-500"> · {domain}</span>}
+              <span className={needs ? 'text-amber-300' : 'text-emerald-300'}>
+                {needs
+                  ? (zh ? ' — 需要确认' : ' — needs sign-off')
+                  : (zh ? ' — 可直接同步' : ' — ready to sync')}
+              </span>
+              {warnings.length > 0 && (
+                <ul className="ml-4 mt-0.5 space-y-0.5 text-slate-400">
+                  {warnings.map((warning, wi) => (
+                    <li key={wi}>· {String(warning.message || warning.code || '')}</li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[11.5px] text-slate-500">{zh ? '查看原始数据' : 'Raw response'}</summary>
+        <pre className="mt-1 max-h-40 overflow-auto rounded-lg bg-slate-950/60 p-2 text-[11px] text-slate-400">{JSON.stringify(report, null, 2)}</pre>
+      </details>
+    </div>
+  );
+};
+
+/** 同步结果的人话摘要（后端 `syncMany()` 只回 `{synced, failed, refresh_count}`）。 */
+const SyncResultCard: React.FC<{ result: Record<string, unknown>; lang: 'zh' | 'en' }> = ({ result, lang }) => {
+  const zh = lang === 'zh';
+  const synced = Number(result.synced ?? 0);
+  const failed = Number(result.failed ?? 0);
+  const refresh = Number(result.refresh_count ?? 0);
+  return (
+    <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-[12.5px] text-emerald-200">
+      <p>
+        {zh
+          ? `已同步 ${synced} 个渠道${failed > 0 ? `，${failed} 个失败` : ''}；已排入 ${refresh} 个内容刷新任务。`
+          : `Synced ${synced} channel(s)${failed > 0 ? `, ${failed} failed` : ''}; queued ${refresh} content refresh job(s).`}
+      </p>
+      {failed > 0 && (
+        <p className="mt-1 text-amber-300">{zh ? '失败的那些请到下方「真实分发任务与回执」里看原因。' : 'Check the history below for why the failed ones did not go through.'}</p>
+      )}
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[11.5px] text-emerald-300/70">{zh ? '查看原始数据' : 'Raw response'}</summary>
+        <pre className="mt-1 max-h-40 overflow-auto rounded-lg bg-slate-950/60 p-2 text-[11px] text-slate-400">{JSON.stringify(result, null, 2)}</pre>
+      </details>
     </div>
   );
 };

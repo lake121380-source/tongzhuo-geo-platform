@@ -3,6 +3,7 @@ import { Loader2, PackageCheck } from 'lucide-react';
 import { ApiRecord, GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import { LoadingState } from './LoadingState';
+import { useConfirm } from './ui';
 
 interface KnowledgeOfficialAdoptPanelProps {
   apiClient: GeoFlowApiClient;
@@ -29,6 +30,7 @@ const KnowledgeOfficialAdoptPanel: React.FC<KnowledgeOfficialAdoptPanelProps> = 
   const zh = lang === 'zh';
   const [item, setItem] = useState<ApiRecord | null>(null);
   const [busy, setBusy] = useState(false);
+  const confirmDialog = useConfirm();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -56,6 +58,23 @@ const KnowledgeOfficialAdoptPanel: React.FC<KnowledgeOfficialAdoptPanelProps> = 
   const health = record(item.system_health);
   const customized = text(health.customized_at) !== '' || health.customized === true;
   const updateAvailable = health.update_available === true;
+
+  /**
+   * 「采纳官方版本」会覆盖正文并作废相关文章的质检结论（面板自己的说明里就写着这句），
+   * 但按钮原来是点一下就走、没有任何确认。
+   */
+  const confirmAdopt = async () => {
+    if (busy || !canWrite) return;
+    if (!(await confirmDialog({
+      title: zh ? '采纳官方版本？' : 'Adopt the official version?',
+      description: zh
+        ? '正文会被重置为随包发布的官方内容；正文有变时，按旧内容得出的文章质检结论会一并作废。'
+        : 'The content is reset to the bundled official version; if it changes, existing article quality findings are invalidated.',
+      confirmLabel: zh ? '采纳' : 'Adopt',
+      tone: 'danger',
+    }))) return;
+    await adopt();
+  };
 
   const adopt = async () => {
     if (busy || !canWrite) return;
@@ -91,7 +110,7 @@ const KnowledgeOfficialAdoptPanel: React.FC<KnowledgeOfficialAdoptPanelProps> = 
       {error && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-[11px] text-rose-200">{error}</div>}
       {notice && <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 px-3 py-2 text-[11px] text-emerald-200">{notice}</div>}
       {canWrite && (
-        <button type="button" onClick={() => void adopt()} disabled={busy} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-500 disabled:opacity-50">
+        <button type="button" onClick={() => void confirmAdopt()} disabled={busy} className="inline-flex items-center gap-1 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-500 disabled:opacity-50">
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PackageCheck className="h-3.5 w-3.5" />}{zh ? '采纳官方版本' : 'Adopt official version'}
         </button>
       )}

@@ -123,6 +123,8 @@ export const AiWorkspaceView: React.FC<Props> = ({ apiClient, lang, canRead, can
   const [activeId, setActiveId] = useState('');
   const [messages, setMessages] = useState<WorkspaceMessage[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  /** 会话重命名的内联草稿：`null` = 不在重命名；字符串 = 正在编辑的名称。 */
+  const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingConversation, setLoadingConversation] = useState(false);
@@ -233,9 +235,23 @@ export const AiWorkspaceView: React.FC<Props> = ({ apiClient, lang, canRead, can
     }
   };
 
-  const renameConversation = async () => {
+  /**
+   * 重命名走**头部内联输入**，不用 `window.prompt`。
+   *
+   * 原来这里是 `window.prompt(...)`——本项目已经确认过：原生 dialog 在部分内嵌浏览器里
+   * **不渲染、1ms 返回 null**（全站 15 处 `window.confirm` 就是因此换成了 `ConfirmDialog`）。
+   * 在那类浏览器里点「重命名」等于没点，而且没有任何报错。
+   */
+  const startRename = () => {
     if (!activeConversation || !canWrite) return;
-    const title = window.prompt(lang === 'zh' ? '输入新的会话名称' : 'New conversation title', activeConversation.title)?.trim();
+    setError('');
+    setRenameDraft(activeConversation.title);
+  };
+
+  const commitRename = async () => {
+    if (!activeConversation || !canWrite) return;
+    const title = (renameDraft ?? '').trim();
+    setRenameDraft(null);
     if (!title || title === activeConversation.title) return;
     setError('');
     try {
@@ -343,7 +359,7 @@ export const AiWorkspaceView: React.FC<Props> = ({ apiClient, lang, canRead, can
   return <div className="flex min-h-[70vh] overflow-hidden rounded-2xl bg-slate-900/80">
     <aside className="flex w-72 shrink-0 flex-col border-r border-slate-800 bg-slate-950/60">
       <div className="flex items-center justify-between border-b border-slate-800 p-4">
-        <div><h2 className="font-bold text-white">{lang === 'zh' ? 'AI 工作台' : 'AI Workspace'}</h2><p className="text-xs text-slate-500">桐灼GEO persisted assistant</p></div>
+        <div><h2 className="font-bold text-white">{lang === 'zh' ? 'AI 工作台' : 'AI Workspace'}</h2><p className="text-xs text-slate-500">{lang === 'zh' ? '把后台能力、流程与口径说清楚的常驻助手' : 'A resident assistant for this admin’s capabilities and workflow'}</p></div>
         <button type="button" onClick={() => void createConversation()} disabled={!canWrite || sending} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-40" title={lang === 'zh' ? '新对话' : 'New conversation'}><MessageSquarePlus className="h-4 w-4" /></button>
       </div>
       <div className="flex-1 space-y-1 overflow-y-auto p-2">
@@ -355,9 +371,27 @@ export const AiWorkspaceView: React.FC<Props> = ({ apiClient, lang, canRead, can
     </aside>
 
     <section className="flex min-w-0 flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-        <div className="min-w-0"><h1 className="truncate text-section-title">{activeConversation?.title || (lang === 'zh' ? '桐灼GEO AI 助手' : '桐灼GEO AI Assistant')}</h1><p className="text-caption">{status?.ready ? (lang === 'zh' ? '模型、知识检索与持久化已就绪' : 'Model, retrieval and persistence ready') : status?.reason || ''}</p></div>
-        {activeConversation && <div className="flex gap-2"><button type="button" onClick={() => void renameConversation()} disabled={!canWrite || sending} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-40" title={lang === 'zh' ? '重命名' : 'Rename'}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => void archiveConversation()} disabled={!canWrite || sending} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40" title={lang === 'zh' ? '归档' : 'Archive'}><Archive className="h-4 w-4" /></button></div>}
+      <header className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
+        {renameDraft !== null ? (
+          <form
+            className="flex min-w-0 flex-1 items-center gap-2"
+            onSubmit={(event) => { event.preventDefault(); void commitRename(); }}
+          >
+            <input
+              autoFocus
+              value={renameDraft}
+              onChange={(event) => setRenameDraft(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Escape') setRenameDraft(null); }}
+              aria-label={lang === 'zh' ? '会话名称' : 'Conversation title'}
+              className="h-9 min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500"
+            />
+            <button type="submit" className="h-9 shrink-0 rounded-xl bg-indigo-600 px-3.5 text-[13px] font-bold text-white transition hover:bg-indigo-500">{lang === 'zh' ? '保存' : 'Save'}</button>
+            <button type="button" onClick={() => setRenameDraft(null)} className="h-9 shrink-0 rounded-xl border border-slate-700 px-3.5 text-[13px] font-semibold text-slate-300 transition hover:bg-slate-800">{lang === 'zh' ? '取消' : 'Cancel'}</button>
+          </form>
+        ) : (
+          <div className="min-w-0"><h1 className="truncate text-section-title">{activeConversation?.title || (lang === 'zh' ? '桐灼GEO AI 助手' : '桐灼GEO AI Assistant')}</h1><p className="text-caption">{status?.ready ? (lang === 'zh' ? '模型、知识检索与持久化已就绪' : 'Model, retrieval and persistence ready') : status?.reason || ''}</p></div>
+        )}
+        {activeConversation && renameDraft === null && <div className="flex shrink-0 gap-2"><button type="button" onClick={startRename} disabled={!canWrite || sending} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white disabled:opacity-40" title={lang === 'zh' ? '重命名' : 'Rename'}><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => void archiveConversation()} disabled={!canWrite || sending} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40" title={lang === 'zh' ? '归档' : 'Archive'}><Archive className="h-4 w-4" /></button></div>}
       </header>
 
       {error && <div role="alert" className="m-4 rounded-lg border border-red-500/30 bg-red-950/30 px-4 py-3 text-sm text-red-100">{error}</div>}

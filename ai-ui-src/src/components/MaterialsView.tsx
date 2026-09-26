@@ -211,20 +211,29 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
    */
   const [serverRows, setServerRows] = useState<Material[] | null>(null);
   const [serverSearching, setServerSearching] = useState(false);
+  /** 搜索失败的提示——不能静默回落成本地过滤（理由同上面的注释：界面会回「没有匹配结果」骗人）。 */
+  const [serverSearchError, setServerSearchError] = useState('');
   useEffect(() => {
     const term = search.trim();
     if (!canRead || term === '') {
       setServerRows(null);
+      setServerSearchError('');
       setServerSearching(false);
       return undefined;
     }
     let cancelled = false;
     setServerSearching(true);
+    setServerSearchError('');
     const timer = window.setTimeout(() => {
       apiClient.listMaterials(activeType, { page: 1, per_page: 100, search: term })
         // 与 `loadMaterials` 同一份投影，只是多了 `search`：类型断言只为对齐 `Material`。
-        .then((page) => { if (!cancelled) { setServerRows(pageItems(page) as unknown as Material[]); setServerSearching(false); } })
-        .catch(() => { if (!cancelled) { setServerRows(null); setServerSearching(false); } });
+        .then((page) => { if (!cancelled) { setServerRows(pageItems(page) as unknown as Material[]); setServerSearchError(''); setServerSearching(false); } })
+        .catch((error) => {
+          if (cancelled) return;
+          setServerRows(null);
+          setServerSearchError(describeApiError(error, lang === 'zh' ? '搜索请求失败' : 'Search request failed', lang));
+          setServerSearching(false);
+        });
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [apiClient, activeType, canRead, search]);
@@ -534,6 +543,20 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
 
   const deleteItems = async () => {
     if (!canWrite || !activeRecord || !activeItemsEnabled || selectedItemIds.size === 0) return;
+    /*
+     * 批量删除原本**没有确认**，而同文件里删单个素材（`deleteMaterial`）是有的——
+     * 越是批量的操作越不可逆，反而越没有拦一道，这是明确的反差。
+     */
+    const count = selectedItemIds.size;
+    const feedsTasks = activeType === 'title-libraries';
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? `删除选中的 ${count} 条？` : `Delete ${count} selected item(s)?`,
+      description: lang === 'zh'
+        ? `该操作不可撤销。${feedsTasks ? '标题库的条目被删会直接影响生成任务的选题来源。' : ''}`
+        : `This cannot be undone.${feedsTasks ? ' Title-library entries feed generation tasks.' : ''}`,
+      confirmLabel: lang === 'zh' ? '删除' : 'Delete',
+      tone: 'danger',
+    }))) return;
     setBusy('item-delete');
     setItemError('');
     try {
@@ -684,6 +707,15 @@ export const MaterialsView: React.FC<MaterialsViewProps> = ({
                 )}
               </div>
             </div>
+
+            {/* 搜索失败就别装作搜过了：说清下面这份是本地已加载的那批。 */}
+            {search.trim() !== '' && serverSearchError && (
+              <p role="status" className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
+                {lang === 'zh'
+                  ? `${serverSearchError}——下面是本地已加载的 ${localVisibleRecords.length} 条里筛出来的，不是全库结果。`
+                  : `${serverSearchError} — showing matches among the ${localVisibleRecords.length} locally loaded records, not the whole library.`}
+              </p>
+            )}
 
             {(formOpen && canWrite) && (
               <form onSubmit={saveMaterial} className="mb-4 rounded-2xl bg-slate-950/40 p-5">

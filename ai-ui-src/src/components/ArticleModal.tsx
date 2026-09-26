@@ -5,7 +5,7 @@ import { GeoFlowApiClient } from '../api/geoflowClient';
 import { describeApiError } from '../api/permissions';
 import { useConfirm } from './ui';
 import { ArticleQualityPanel } from './ArticleQualityPanel';
-import { StatusBadge, qualityStatusSpec } from './StatusBadge';
+import { StatusBadge, articleStatusSpec, qualityStatusSpec } from './StatusBadge';
 
 /** 内联助手在编辑器里需要的最小选项集（由 App 从真实 catalog 注入）。 */
 export interface EditorAssistantCatalog {
@@ -55,6 +55,14 @@ interface ArticleModalProps {
    * 绑定清单。传空数组时服务端按任务边界自己解析——这是唯一不会 409 的正确调用方式。
    */
   onPublishAndDistribute?: (articleId: string) => Promise<void>;
+  /**
+   * 细粒度 Token 的能力位。后端 `POST articles/{id}/publish|review` 要 `articles:publish`、
+   * `PATCH articles/{id}` 要 `articles:write`——**原来这两个按钮一个 scope 都不判**，
+   * 只有 `articles:read` 的账号看得到按钮、点下去 403。
+   * 缺省 true 保持既有行为（默认管理员登录两种 scope 都有）。
+   */
+  canPublish?: boolean;
+  canEdit?: boolean;
 }
 
 export const ArticleModal: React.FC<ArticleModalProps> = ({
@@ -75,6 +83,8 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   editorAssistantCatalog,
   hasDistributionChannels = false,
   onPublishAndDistribute,
+  canPublish = true,
+  canEdit = true,
 }) => {
   const [isPublishing, setIsPublishing] = useState(false);
   const confirmDialog = useConfirm();
@@ -85,6 +95,12 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [actionNotice, setActionNotice] = useState('');
+  /**
+   * `actionNotice` 的语义有两种：正常的成功回执，以及**风险扫描的结果**——
+   * 后者命中敏感词时后端会把已发布文章降级成草稿，是警告不是好消息。
+   * 用同一个色调渲染会把警告染成绿色，所以单独记一档。
+   */
+  const [actionNoticeTone, setActionNoticeTone] = useState<'success' | 'warning'>('success');
   const [actionBusy, setActionBusy] = useState<'risk' | 'wechat' | 'image' | 'publish-and-distribute' | null>(null);
   /** 「发布并分发」成功后延时关窗；卸载时清掉，免得定时器在已关闭的弹窗上再关一次。 */
   const closeTimer = useRef<number | null>(null);
@@ -285,6 +301,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     setPublishError('');
     try {
       await onPublishAndDistribute(article.id);
+      setActionNoticeTone('success');
       setActionNotice(lang === 'zh'
         ? '已发布，并已加入该任务已绑定渠道的分发队列。'
         : 'Published and queued for the task’s bound channels.');
@@ -328,6 +345,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
           ? '文章已被降级为草稿——改掉命中内容后重新扫描，再过质检才能重新发布。'
           : 'The article was downgraded to draft: fix the hits, re-scan and re-check before publishing.');
       }
+      setActionNoticeTone(matchCount > 0 || sealed ? 'warning' : 'success');
       setActionNotice(parts.join(lang === 'zh' ? ' ' : ' '));
     } catch (error) {
       setEditError(error instanceof Error ? error.message : (lang === 'zh' ? '风险扫描失败。' : 'Risk scan failed.'));
@@ -343,6 +361,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
       const html = String(value.html || '');
       if (!html) throw new Error(lang === 'zh' ? '转换接口未返回 HTML。' : 'The converter returned no HTML.');
       await navigator.clipboard?.writeText(html);
+      setActionNoticeTone('success');
       setActionNotice(lang === 'zh' ? '微信 HTML 已复制到剪贴板。' : 'WeChat HTML copied to clipboard.');
     } catch (error) {
       setEditError(error instanceof Error ? error.message : (lang === 'zh' ? '微信转换失败。' : 'WeChat export failed.'));
@@ -361,6 +380,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
       if (!url) throw new Error(lang === 'zh' ? '上传接口未返回图片地址。' : 'The upload returned no image URL.');
       setDraft((current) => ({ ...current, content: `${current.content}${current.content.endsWith('\n') ? '' : '\n\n'}![${file.name}](${url})\n` }));
       setIsEditing(true);
+      setActionNoticeTone('success');
       setActionNotice(lang === 'zh' ? '图片已上传并插入正文。' : 'Image uploaded and inserted into content.');
     } catch (error) {
       setEditError(error instanceof Error ? error.message : (lang === 'zh' ? '图片上传失败。' : 'Image upload failed.'));
@@ -389,7 +409,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                     : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                 }`}
               >
-                {article.status}
+                {articleStatusSpec(article.status).label[lang]}
               </span>
               {/* 质检徽标必须按「判定」显示：原来直接渲染 status（`completed`），
                   用户看到英文枚举，也分不清"跑完了"与"通过了"（2026-09-14）。 */}
@@ -567,13 +587,17 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                     ? (lang === 'zh' ? '去 AI 质检区放行 →' : 'Go to AI quality →')
                     : (lang === 'zh' ? '去 AI 质检区优化 →' : 'Go to AI quality →')}
                 </button>
-                <button
-                  type="button"
-                  onClick={beginEditing}
-                  className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700/60"
-                >
-                  {lang === 'zh' ? '编辑文章' : 'Edit article'}
-                </button>
+                {/* 这个入口和页脚那个都走 `beginEditing`，因此都要过同一个能力位——
+                    只门住页脚那个的话，无 `articles:write` 的账号仍然能从这里进编辑态。 */}
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={beginEditing}
+                    className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-700/60"
+                  >
+                    {lang === 'zh' ? '编辑文章' : 'Edit article'}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -582,9 +606,24 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
           <div className="p-4 border-t border-slate-800 bg-slate-950/40 flex items-center justify-between">
             <div className="text-xs text-slate-400">ID: {article.id}</div>
             <div className="flex items-center gap-2">
-              {(editError || actionNotice) && (
+              {editError && (
                 <div role="alert" aria-live="polite" className="max-w-xs rounded-lg border border-red-500/30 bg-red-950/40 px-3 py-1.5 text-xs text-red-200">
-                  {editError || actionNotice}
+                  {editError}
+                </div>
+              )}
+              {/* 回执不能再用红框：原来 `editError || actionNotice` 共用一个红色报错框，
+                  「微信 HTML 已复制到剪贴板」长得跟报错一模一样。 */}
+              {!editError && actionNotice && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`max-w-xs rounded-lg border px-3 py-1.5 text-xs ${
+                    actionNoticeTone === 'warning'
+                      ? 'border-amber-500/30 bg-amber-950/30 text-amber-200'
+                      : 'border-emerald-500/30 bg-emerald-950/30 text-emerald-200'
+                  }`}
+                >
+                  {actionNotice}
                 </div>
               )}
               {isEditing ? (
@@ -616,7 +655,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                         : 'This article is in the trash — restore it first.'}
                     </span>
                   )}
-                  {apiMode && onUpdateArticle && article.status !== 'trash' && (
+                  {apiMode && onUpdateArticle && canEdit && article.status !== 'trash' && (
                     <button
                       onClick={beginEditing}
                       className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5"
@@ -625,7 +664,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                       <span>{lang === 'zh' ? '编辑文章' : 'Edit article'}</span>
                     </button>
                   )}
-                  {article.status !== 'published' && article.status !== 'trash' && (
+                  {canPublish && article.status !== 'published' && article.status !== 'trash' && (
                     <>
                       <button
                         onClick={() => void handlePublish()}

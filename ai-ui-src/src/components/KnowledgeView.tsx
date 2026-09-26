@@ -9,7 +9,9 @@ import KnowledgeFactWorkbench from './KnowledgeFactWorkbench';
 import EnterpriseKnowledgeView from './EnterpriseKnowledgeView';
 import { StatusBadge, kbStatusSpec } from './StatusBadge';
 import { PageHeader } from './PageHeader';
-import { EmptyState } from './ui';
+import { EmptyState, useConfirm } from './ui';
+import { mediaFieldLabel } from '../api/labels';
+import { LoadingState } from './LoadingState';
 
 const EMPTY_KNOWLEDGE_BASES: KnowledgeBase[] = [];
 const EMPTY_KNOWLEDGE_CHUNKS: KnowledgeChunk[] = [];
@@ -25,6 +27,8 @@ interface KnowledgeViewProps {
   onSearchKnowledgeBase?: (knowledgeBaseId: string, query: string, limit?: number) => Promise<any[]>;
   /** Per-library errors while loading asynchronously generated chunks. */
   chunkLoadErrors?: Record<string, string>;
+  /** 首轮数据是否还在路上：为 true 且列表为空时显示「正在读取…」而不是一片空白。 */
+  loading?: boolean;
   /** Knowledge-base read/search scope. */
   canRead?: boolean;
   /** Knowledge-base and material write scope. */
@@ -51,6 +55,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
   chunkLoadErrors = {},
   canRead = true,
   canWrite = true,
+  loading = false,
   totalCount,
   chunkTotals,
   onEnsureAllChunks,
@@ -68,6 +73,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
   const [assetDetails, setAssetDetails] = useState<any>(null);
   const [assetError, setAssetError] = useState('');
   const [assetBusy, setAssetBusy] = useState('');
+  const confirmDialog = useConfirm();
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [selectedMediaId, setSelectedMediaId] = useState<number | null>(null);
   const [mediaForm, setMediaForm] = useState({ asset_key: '', section_key: '', route_name: '', title: '', alt_text: '', caption: '', keywords: '' });
@@ -298,6 +304,36 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
     } finally { setAssetBusy(''); }
   };
 
+  /**
+   * 「重建切片」与「恢复版本」原来都是点一下就走，没有确认。
+   * 两者都会替换当前切片/正文——重建还会让**以旧切片为依据的事实证据失效**，所以必须拦一道。
+   */
+  const confirmRebuildChunks = async () => {
+    if (!activeKb?.id) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? `重建「${activeKb.name}」的切片？` : `Rebuild chunks for "${activeKb.name}"?`,
+      description: lang === 'zh'
+        ? '会按当前正文重新切分并重新向量化，原切片被替换；以旧切片为依据的事实证据会失效，需要重新挂载。'
+        : 'Chunks are re-split and re-vectorised from the current text; the old chunks are replaced and fact evidence based on them is invalidated.',
+      confirmLabel: lang === 'zh' ? '重建' : 'Rebuild',
+      tone: 'danger',
+    }))) return;
+    await refreshActiveKnowledgeBase();
+  };
+
+  const confirmRestoreRevision = async (revisionId: number) => {
+    if (!activeKb?.id || !Number.isFinite(revisionId)) return;
+    if (!(await confirmDialog({
+      title: lang === 'zh' ? `把「${activeKb.name}」恢复到版本 #${revisionId}？` : `Restore "${activeKb.name}" to revision #${revisionId}?`,
+      description: lang === 'zh'
+        ? '当前正文会被这个版本覆盖（当前内容仍作为历史版本保留）。'
+        : 'The current text is overwritten by that revision; the current content stays in the revision history.',
+      confirmLabel: lang === 'zh' ? '恢复' : 'Restore',
+      tone: 'danger',
+    }))) return;
+    await restoreRevision(revisionId);
+  };
+
   const uploadMedia = async () => {
     if (!apiClient || !activeKb?.id || !mediaFile) return;
     setAssetBusy('media');
@@ -394,7 +430,11 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
           </div>
 
           <div className="space-y-2.5">
-            {visibleKnowledgeBases.map((kb) => {
+            {/* 首轮数据没到时画「正在读取」而不是一片空白：这页的列表本来就是空的，
+                看起来和「你的知识库全没了」一模一样。 */}
+            {loading && visibleKnowledgeBases.length === 0 ? (
+              <div className="py-8 text-center"><LoadingState lang={lang} variant="inline" label={lang === 'zh' ? '正在读取知识库…' : 'Loading repositories…'} /></div>
+            ) : visibleKnowledgeBases.map((kb) => {
               const isSelected = kb.id === selectedKbId;
               return (
                 <div
@@ -432,7 +472,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   </div>
                 </div>
               );
-            })}
+            })})
           </div>
         </div>
 
@@ -461,7 +501,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {apiMode && activeKb?.id && canWrite && <button type="button" onClick={() => void refreshActiveKnowledgeBase()} disabled={assetBusy !== ''} className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${assetBusy === 'refresh' ? 'animate-spin' : ''}`} />{lang === 'zh' ? '重建切片' : 'Rebuild chunks'}</button>}
+                {apiMode && activeKb?.id && canWrite && <button type="button" onClick={() => void confirmRebuildChunks()} disabled={assetBusy !== ''} className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${assetBusy === 'refresh' ? 'animate-spin' : ''}`} />{lang === 'zh' ? '重建切片' : 'Rebuild chunks'}</button>}
                 <span className="rounded-lg bg-slate-800 px-2 py-1 text-[12px] text-slate-300">
                   {apiMode
                     ? (lang === 'zh' ? '向量状态由后端同步任务决定' : 'Embedding state is owned by the backend')
@@ -519,7 +559,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                     {Array.isArray(assetDetails.revisions) && assetDetails.revisions.length > 0 ? assetDetails.revisions.map((revision: any) => (
                       <div key={revision.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900/50 px-2.5 py-2 text-[12px]">
                         <span className="text-slate-400">v{revision.revision_number} · {revision.source} · {revision.creator_username || 'system'}</span>
-                        {canWrite && canRestoreActiveKnowledgeBase && <button type="button" onClick={() => void restoreRevision(Number(revision.id))} disabled={assetBusy !== ''} className="rounded-lg border border-indigo-500/30 px-2 py-1 text-[12px] font-semibold text-indigo-300 hover:bg-indigo-500/10 disabled:opacity-50">{assetBusy === `restore-${revision.id}` ? '…' : (lang === 'zh' ? '恢复' : 'Restore')}</button>}
+                        {canWrite && canRestoreActiveKnowledgeBase && <button type="button" onClick={() => void confirmRestoreRevision(Number(revision.id))} disabled={assetBusy !== ''} className="rounded-lg border border-indigo-500/30 px-2 py-1 text-[12px] font-semibold text-indigo-300 hover:bg-indigo-500/10 disabled:opacity-50">{assetBusy === `restore-${revision.id}` ? '…' : (lang === 'zh' ? '恢复' : 'Restore')}</button>}
                       </div>
                     )) : <p className="text-[12px] text-slate-500">{lang === 'zh' ? '暂无历史版本' : 'No revisions yet'}</p>}
                   </div>
@@ -532,14 +572,14 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                     {Array.isArray(assetDetails.media) && assetDetails.media.length > 0 ? assetDetails.media.map((media: any) => (
                       <div key={media.id} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900/50 px-2.5 py-2 text-[12px]">
                         <button type="button" onClick={() => { setSelectedMediaId(Number(media.id)); setMediaForm((previous) => ({ ...previous, asset_key: String(media.asset_key || ''), section_key: String(media.section_key || ''), route_name: String(media.route_name || ''), title: String(media.title || ''), alt_text: String(media.alt_text || ''), caption: String(media.caption || ''), keywords: Array.isArray(media.keywords) ? media.keywords.join(', ') : String(media.keywords || '') })); }} className={`min-w-0 truncate text-left ${selectedMediaId === Number(media.id) ? 'text-indigo-300' : 'text-slate-400'}`}>{media.title || media.asset_key} · v{media.asset_version}</button>
-                        {canWrite && <div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => void toggleMedia(Number(media.id), !Boolean(media.is_active))} disabled={assetBusy !== ''} className={`inline-flex items-center gap-1 rounded border px-2 py-1 ${media.is_active ? 'border-emerald-500/30 text-emerald-300' : 'border-slate-700 text-slate-500'}`}><Power className="h-3 w-3" />{media.is_active ? (lang === 'zh' ? '启用' : 'Active') : (lang === 'zh' ? '停用' : 'Inactive')}</button>{mediaFile && <button type="button" onClick={() => void replaceMedia(Number(media.id))} disabled={assetBusy !== ''} className="rounded-lg border border-indigo-500/30 px-2 py-1 text-[12px] font-semibold text-indigo-300 disabled:opacity-50">{assetBusy === `replace-${media.id}` ? '…' : (lang === 'zh' ? '替换' : 'Replace')}</button>}</div>}
+                        {canWrite && <div className="flex shrink-0 items-center gap-1"><span className={`rounded px-1.5 py-0.5 text-[11px] ${media.is_active ? 'bg-emerald-500/10 text-emerald-300' : 'bg-slate-800 text-slate-500'}`}>{media.is_active ? (lang === 'zh' ? '已启用' : 'Enabled') : (lang === 'zh' ? '已停用' : 'Disabled')}</span><button type="button" onClick={() => void toggleMedia(Number(media.id), !Boolean(media.is_active))} disabled={assetBusy !== ''} title={media.is_active ? (lang === 'zh' ? '停用这条媒体资产' : 'Disable this media asset') : (lang === 'zh' ? '启用这条媒体资产' : 'Enable this media asset')} className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-slate-200 transition hover:bg-slate-800 disabled:opacity-50"><Power className="h-3 w-3" />{media.is_active ? (lang === 'zh' ? '停用' : 'Disable') : (lang === 'zh' ? '启用' : 'Enable')}</button>{mediaFile && <button type="button" onClick={() => void replaceMedia(Number(media.id))} disabled={assetBusy !== ''} className="rounded-lg border border-indigo-500/30 px-2 py-1 text-[12px] font-semibold text-indigo-300 disabled:opacity-50">{assetBusy === `replace-${media.id}` ? '…' : (lang === 'zh' ? '替换' : 'Replace')}</button>}</div>}
                       </div>
                     )) : <p className="text-[12px] text-slate-500">{lang === 'zh' ? '暂无媒体资产' : 'No media assets'}</p>}
                   </div>
                   {canWrite && activeKbIsSystemManaged && <div className="mt-3 space-y-2 border-t border-slate-800 pt-3">
                     <input type="file" accept="image/png,image/webp" onChange={(event) => setMediaFile(event.target.files?.[0] || null)} className="block w-full text-[12px] text-slate-400 file:mr-2 file:rounded file:border-0 file:bg-slate-800 file:px-2 file:py-1 file:text-[12px] file:text-slate-300" />
                     <div className="grid grid-cols-2 gap-2">
-                      {(['asset_key', 'section_key', 'route_name', 'title', 'alt_text', 'caption'] as const).map((field) => <input key={field} value={mediaForm[field]} onChange={(event) => setMediaForm((previous) => ({ ...previous, [field]: event.target.value }))} placeholder={field} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />)}
+                      {(['asset_key', 'section_key', 'route_name', 'title', 'alt_text', 'caption'] as const).map((field) => <input key={field} value={mediaForm[field]} onChange={(event) => setMediaForm((previous) => ({ ...previous, [field]: event.target.value }))} placeholder={mediaFieldLabel(field, lang)} className="h-10 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-[13px] text-white outline-none transition focus:border-indigo-500" />)}
                     </div>
                     <div className="flex flex-wrap gap-2"><button type="button" onClick={() => void uploadMedia()} disabled={!mediaFile || assetBusy !== ''} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">{assetBusy === 'media' ? (lang === 'zh' ? '上传中…' : 'Uploading…') : (lang === 'zh' ? '上传媒体' : 'Upload media')}</button>{selectedMediaId && <button type="button" onClick={() => void updateMediaMetadata()} disabled={assetBusy !== ''} className="inline-flex h-9 items-center rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50">{assetBusy === `update-media-${selectedMediaId}` ? '…' : (lang === 'zh' ? '保存元数据' : 'Save metadata')}</button>}</div>
                   </div>}

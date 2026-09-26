@@ -88,6 +88,11 @@ export const HOST_DEFAULT_VIEW: Record<string, string> = {
   attribution_funnel: 'funnel',
   seo_dashboard: 'overview',
   seo_foundation: 'site',
+  // 系统设置（2026-09-25）：这一页原本把「管理员账号 / 资料 / 密码 / API Token /
+  // 审计 / 浏览器客户端 / 站点与首页 / 敏感词」八块竖着摞成一页，实测 **39,172px**
+  // （其中 API Token 一块就 33,007px，因为登录一次铸一个 Token、单库积到 132 条）。
+  // 拆成页签后默认落在「账号与安全」。
+  'admin-settings': 'account',
 };
 
 /** 该页签属于哪个"页面"（合并子页签返回宿主，其它原样返回）。 */
