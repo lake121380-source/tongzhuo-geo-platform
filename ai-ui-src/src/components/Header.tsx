@@ -1,6 +1,7 @@
 import React from 'react';
 import { adminRoleLabel } from '../api/labels';
 import {
+  ChevronRight,
   Globe,
   Sparkles,
   Radio,
@@ -9,6 +10,7 @@ import {
   Sun,
 } from 'lucide-react';
 import { applyTheme, nextTheme, persistTheme, readStoredTheme } from '../theme';
+import { navCrumbFor } from './Sidebar';
 
 interface HeaderProps {
   lang: 'zh' | 'en';
@@ -20,6 +22,8 @@ interface HeaderProps {
   adminName?: string;
   adminRole?: string;
   onLogout?: () => void;
+  /** 当前页签 id：顶栏左端据此显示「分组 / 页面名」面包屑（与侧栏同一份导航定义）。 */
+  currentTab?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,6 +36,7 @@ export const Header: React.FC<HeaderProps> = ({
   adminName,
   adminRole,
   onLogout,
+  currentTab,
 }) => {
   const isApiMode = mode === 'geoflow';
 
@@ -45,10 +50,27 @@ export const Header: React.FC<HeaderProps> = ({
     applyTheme(following);
     persistTheme(following);
   };
+
+  const crumb = navCrumbFor(currentTab ?? 'dashboard', lang);
+
   return (
-    <header className="h-16 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-end sticky top-0 z-30">
-      {/* 品牌区 2026-09-18 已挪进侧栏（设计稿是「侧栏通高、品牌在侧栏顶部」）。
-          这里只留动作，不再重复标识。 */}
+    <header className="h-16 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between gap-3 sticky top-0 z-30">
+      {/* 左端：当前位置（面包屑）。设计稿的顶栏是「左边你在哪、右边能做什么」两端结构，
+          原来这里是 justify-end、左半屏整片空着。面包屑与侧栏共用一份导航定义
+          （Sidebar 的 navCrumbFor），且 `alsoMatches` 的子页签落在宿主入口上——
+          与侧栏高亮同一规则，深链进来也不会指向不存在的入口。 */}
+      <nav
+        aria-label={lang === 'zh' ? '当前位置' : 'Breadcrumb'}
+        className="flex min-w-0 items-center gap-1.5 text-xs"
+      >
+        {crumb.group && (
+          <>
+            <span className="truncate text-slate-400">{crumb.group}</span>
+            <ChevronRight className="h-3 w-3 shrink-0 text-slate-600" aria-hidden="true" />
+          </>
+        )}
+        <span className="truncate font-semibold text-slate-200">{crumb.label}</span>
+      </nav>
 
       {/* Center Actions / Status */}
       <div className="flex items-center gap-2 sm:gap-3">

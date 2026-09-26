@@ -275,7 +275,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           待办从「四张卡」改成「一份清单」：同一批数据，一屏能扫完。
           没有待办时给一条明确的「一切正常」，而不是空着让人猜。 */}
       <section className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-6 lg:col-span-2">
+        <div className="space-y-4 lg:col-span-2">
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-section-title flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-amber-500" />
@@ -325,7 +326,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
 
-        <div className="space-y-4">
+        {/* 生成任务与「今日待办」同属「要做/在做的事」，同列排——
+            原来它挂在右列、左列只放一张待办卡：数据一少，2/3 宽的左列就塌成空白。
+            右列留给「访问构成」这类状态面板（与设计稿「主区行动流 + 侧栏状态」同构）。 */}
         <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-section-title flex items-center gap-2">
@@ -395,6 +398,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           )}
         </div>
+        </div>
+
+        <div className="space-y-4">
 
         {/* 访问构成（横向条形）——数据来自 `traffic.bot_breakdown`，真访问日志。
             空的时候**整块不渲染**：一张空面板比不显示更让人困惑。 */}

@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
+import { hostTabOf } from '../tabs';
 
 interface SidebarProps {
   currentTab: string;
@@ -95,11 +96,111 @@ interface NavGroup {
   items: NavItem[];
 }
 
+/** 徽标计数按 key 注入：结构定义不持有数字，数字来自运行时 props。 */
+type BadgeKey = 'articles' | 'tasks' | 'channels';
+
+/** 不含徽标的纯结构定义（标签随语言）。 */
+type NavItemDef = Omit<NavItem, 'badge'> & { badgeKey?: BadgeKey };
+type NavGroupDef = Omit<NavGroup, 'items'> & { items: NavItemDef[] };
+
 /**
  * 一级导航按「用户要完成的任务」组织，不按系统实现分层。
  * 共 6 个一级入口：总览（单页）+ 5 个可折叠分组。
  * tab id 一律不动 —— 深链、权限 scope 与路由都挂在 id 上。
+ *
+ * **它是导航标签的唯一来源**：侧栏渲染与顶栏面包屑（`navCrumbFor`）都从这里派生，
+ * 两处各写一份就会漂移——页面改了名、面包屑还叫旧名，是这类「同源两写」的典型症状。
  */
+const buildNavGroups = (zh: boolean): NavGroupDef[] => [
+  {
+    groupKey: 'content',
+    label: zh ? '内容中心' : 'Content',
+    icon: FileText,
+    items: [
+      // 「写文章」= 生成流水线（原「生成任务」）。放内容中心，因为它是**写作**，
+      // 不是发布动作——原来挂在「发布中心」里，用户写文章时找不到它。
+      { id: 'tasks', label: zh ? '写文章' : 'Write', icon: Sparkles, badgeKey: 'tasks' },
+      // 「文章与审核」= 原「文章」（列表 + 审核 + 回收站）。
+      { id: 'articles', label: zh ? '文章与审核' : 'Articles & Review', icon: FileText, badgeKey: 'articles' },
+      { id: 'knowledge', label: zh ? '知识库' : 'Knowledge', icon: Database },
+      { id: 'materials', label: zh ? '素材库' : 'Materials', icon: FolderKanban },
+    ],
+  },
+  {
+    groupKey: 'publish',
+    label: zh ? '发布中心' : 'Publishing',
+    icon: Radio,
+    items: [
+      { id: 'distribution', label: zh ? '分发渠道' : 'Channels', icon: Radio, badgeKey: 'channels' },
+      { id: 'manual-publications', label: zh ? '手动发布' : 'Manual Publish', icon: ClipboardCheck },
+    ],
+  },
+  {
+    groupKey: 'results',
+    label: zh ? 'GEO 效果' : 'Results',
+    icon: TrendingUp,
+    items: [
+      // 三个"AI 怎么回答、引用了谁"的页面合成一个入口，内部 Tab 切换。
+      // 被并入的 competitor / sandbox 仍是有效深链（见 tabs.ts 的 MERGED_VIEWS）。
+      { id: 'query_radar', label: zh ? 'AI 引用监测' : 'AI Citations', icon: Search, alsoMatches: ['competitor', 'sandbox'] },
+      { id: 'analytics', label: zh ? '数据分析' : 'Analytics', icon: BarChart3 },
+      // 归因与线索说的是同一件事（AI 带来的访问有没有变成客户）。
+      { id: 'attribution_funnel', label: zh ? '转化与线索' : 'Conversion & Leads', icon: ContactRound, alsoMatches: ['leads'] },
+    ],
+  },
+  {
+    groupKey: 'diagnosis',
+    label: zh ? 'GEO 诊断' : 'Diagnosis',
+    icon: Activity,
+    items: [
+      // 检查类：总览 + 页面体检（原「SEO 总览」「页面体检」）
+      { id: 'seo_dashboard', label: zh ? '可发现性总览' : 'Discoverability', icon: Activity, alsoMatches: ['url_scanner'] },
+      // 配置类：站点 SEO（robots/sitemap/llms）+ 品牌实体
+      { id: 'seo_foundation', label: zh ? '站点与品牌设置' : 'Site & Brand', icon: Layers, alsoMatches: ['brand_entity', 'robots_policy', 'llmstxt'] },
+    ],
+  },
+  {
+    groupKey: 'settings',
+    label: zh ? '设置' : 'Settings',
+    icon: Settings,
+    items: [
+      { id: 'ai-models', label: zh ? 'AI 模型与提示词' : 'Models & Prompts', icon: Sliders },
+      { id: 'admin-settings', label: zh ? '系统设置' : 'System Settings', icon: Settings },
+      { id: 'system-updates', label: zh ? '备份与更新' : 'Backup & Update', icon: RefreshCw },
+      { id: 'preview', label: zh ? '站点预览' : 'Site Preview', icon: Eye },
+    ],
+  },
+];
+
+/** 顶层单项（不属于任何分组）：面包屑只显示页面名。 */
+const TOP_LEVEL_LABELS: Record<string, { zh: string; en: string }> = {
+  dashboard: { zh: '工作台', en: 'Workspace' },
+  'ai-workspace': { zh: 'AI 助手', en: 'AI Assistant' },
+};
+
+/**
+ * 顶栏面包屑：`tab` → { 分组名, 页面名 }。
+ *
+ * 与侧栏共用 `buildNavGroups`，改导航名时两处一起变。
+ * 归并入口（competitor / leads / jiandu …）先经 `tabs.ts` 的 `hostTabOf` 落到**宿主页签**
+ * ——那份 `MERGED_VIEWS` 才是权威清单，侧栏的 `alsoMatches` 只是它的渲染侧镜像
+ * （侧栏没有 jiandu 入口，靠它自己找不到）。这样深链进来看不到「不存在的入口名」。
+ */
+export function navCrumbFor(tab: string, lang: 'zh' | 'en'): { group: string | null; label: string } {
+  const resolved = hostTabOf(tab);
+  const zh = lang === 'zh';
+  const top = TOP_LEVEL_LABELS[resolved];
+  if (top) return { group: null, label: zh ? top.zh : top.en };
+  for (const group of buildNavGroups(zh)) {
+    for (const item of group.items) {
+      if (item.id === resolved || (item.alsoMatches ?? []).includes(resolved)) {
+        return { group: group.label, label: item.label };
+      }
+    }
+  }
+  return { group: null, label: tab };
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
@@ -113,66 +214,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const zh = lang === 'zh';
 
-  const navGroups: NavGroup[] = [
-    {
-      groupKey: 'content',
-      label: zh ? '内容中心' : 'Content',
-      icon: FileText,
-      items: [
-        // 「写文章」= 生成流水线（原「生成任务」）。放内容中心，因为它是**写作**，
-        // 不是发布动作——原来挂在「发布中心」里，用户写文章时找不到它。
-        { id: 'tasks', label: zh ? '写文章' : 'Write', icon: Sparkles, badge: badgeCounts.tasks },
-        // 「文章与审核」= 原「文章」（列表 + 审核 + 回收站）。
-        { id: 'articles', label: zh ? '文章与审核' : 'Articles & Review', icon: FileText, badge: badgeCounts.articles },
-        { id: 'knowledge', label: zh ? '知识库' : 'Knowledge', icon: Database },
-        { id: 'materials', label: zh ? '素材库' : 'Materials', icon: FolderKanban },
-      ],
-    },
-    {
-      groupKey: 'publish',
-      label: zh ? '发布中心' : 'Publishing',
-      icon: Radio,
-      items: [
-        { id: 'distribution', label: zh ? '分发渠道' : 'Channels', icon: Radio, badge: badgeCounts.channels },
-        { id: 'manual-publications', label: zh ? '手动发布' : 'Manual Publish', icon: ClipboardCheck },
-      ],
-    },
-    {
-      groupKey: 'results',
-      label: zh ? 'GEO 效果' : 'Results',
-      icon: TrendingUp,
-      items: [
-        // 三个"AI 怎么回答、引用了谁"的页面合成一个入口，内部 Tab 切换。
-        // 被并入的 competitor / sandbox 仍是有效深链（见 tabs.ts 的 MERGED_VIEWS）。
-        { id: 'query_radar', label: zh ? 'AI 引用监测' : 'AI Citations', icon: Search, alsoMatches: ['competitor', 'sandbox'] },
-        { id: 'analytics', label: zh ? '数据分析' : 'Analytics', icon: BarChart3 },
-        // 归因与线索说的是同一件事（AI 带来的访问有没有变成客户）。
-        { id: 'attribution_funnel', label: zh ? '转化与线索' : 'Conversion & Leads', icon: ContactRound, alsoMatches: ['leads'] },
-      ],
-    },
-    {
-      groupKey: 'diagnosis',
-      label: zh ? 'GEO 诊断' : 'Diagnosis',
-      icon: Activity,
-      items: [
-        // 检查类：总览 + 页面体检（原「SEO 总览」「页面体检」）
-        { id: 'seo_dashboard', label: zh ? '可发现性总览' : 'Discoverability', icon: Activity, alsoMatches: ['url_scanner'] },
-        // 配置类：站点 SEO（robots/sitemap/llms）+ 品牌实体
-        { id: 'seo_foundation', label: zh ? '站点与品牌设置' : 'Site & Brand', icon: Layers, alsoMatches: ['brand_entity', 'robots_policy', 'llmstxt'] },
-      ],
-    },
-    {
-      groupKey: 'settings',
-      label: zh ? '设置' : 'Settings',
-      icon: Settings,
-      items: [
-        { id: 'ai-models', label: zh ? 'AI 模型与提示词' : 'Models & Prompts', icon: Sliders },
-        { id: 'admin-settings', label: zh ? '系统设置' : 'System Settings', icon: Settings },
-        { id: 'system-updates', label: zh ? '备份与更新' : 'Backup & Update', icon: RefreshCw },
-        { id: 'preview', label: zh ? '站点预览' : 'Site Preview', icon: Eye },
-      ],
-    },
-  ];
+  // 结构来自 buildNavGroups（导航标签的唯一来源），这里只把运行时徽标注入进来。
+  const navGroups: NavGroup[] = buildNavGroups(zh).map((group) => ({
+    ...group,
+    items: group.items.map((item) => ({
+      ...item,
+      badge: item.badgeKey ? badgeCounts[item.badgeKey] : undefined,
+    })),
+  }));
 
   // 用户手动展开/收起会覆盖默认；默认只展开「当前页所在的那一组」。
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});

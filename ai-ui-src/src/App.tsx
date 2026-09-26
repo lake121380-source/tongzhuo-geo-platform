@@ -2186,6 +2186,7 @@ export default function App() {
         setLang={setLang}
         hasGeminiKey={hasGeminiKey}
         mode="geoflow"
+        currentTab={currentTab}
         adminName={apiSession?.admin.display_name || apiSession?.admin.username}
         adminRole={apiSession?.admin.role}
         onLogout={apiEnabled ? handleApiLogout : undefined}
