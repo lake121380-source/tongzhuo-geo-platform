@@ -412,7 +412,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
             </div>
           )}
           {growth !== null && (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               {growthMetricTiles.map((tile) => (
                 <div key={tile.label} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md">
                   <p className="text-caption">{tile.label}</p>
@@ -479,7 +479,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
 
       {busy && !data ? <LoadingState lang={lang} label={lang === 'zh' ? '正在读取真实分析数据…' : 'Loading persisted analytics…'} /> : data && section === 'overview' && (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
             {cards.map(({ label, value, icon: Icon, tone }) => <div key={label} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md"><div className="flex items-center justify-between text-caption"><span>{label}</span><Icon className={`h-[18px] w-[18px] ${tone}`} /></div><div className="mt-2 text-[30px] font-black leading-none tabular-nums text-white">{value}</div></div>)}
           </div>
 
@@ -508,7 +508,7 @@ export const AnalyticsApiView: React.FC<AnalyticsApiViewProps> = ({ apiClient, l
             <span>{record(data.source).estimated === false ? (lang === 'zh' ? '非估算数据' : 'Not estimated') : (lang === 'zh' ? '来源状态未知' : 'Unknown source status')}</span>
             {detailRoot.ready === false && <span className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">{lang === 'zh' ? '数据表或采集尚未就绪' : 'Data source is not ready'}</span>}
           </div>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
             {scalarEntries(detailKpis).map(([key, value]) => <div key={key} className="rounded-2xl bg-slate-900/80 p-5 transition hover:shadow-md"><div className="text-caption">{labelFor(key)}</div><div className="mt-1.5 text-[24px] font-black leading-none tabular-nums text-white">{displayScalar(value)}</div></div>)}
             {scalarEntries(detailKpis).length === 0 && <div className="col-span-full"><EmptyState compact icon={BarChart3} title={lang === 'zh' ? '当前接口没有 KPI 数据' : 'No KPI data is available'} description={lang === 'zh' ? '这个分区的接口没有返回指标；换个分区或点右上角刷新重试。' : 'This section returned no metrics; try another section or refresh.'} /></div>}
           </div>

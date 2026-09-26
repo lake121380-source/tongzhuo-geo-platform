@@ -423,10 +423,16 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Knowledge Bases List (4 cols) */}
-        <div className="lg:col-span-4 space-y-3">
+        {/* Left Column: Knowledge Bases List (4 cols)
+            ⚠️ 限高 + 内部滚动（lg 起）：库多时这一列会无限长，把整页撑得老高、
+            右侧详情反被甩在上面。滚动改到列表内部（sticky），整页高度由详情列决定。 */}
+        <div className="lg:col-span-4">
+        <div className="space-y-3 lg:sticky lg:top-8 lg:max-h-[calc(100vh-9rem)] lg:overflow-y-auto lg:pr-1">
           <div className="text-section-title px-1">
-            {lang === 'zh' ? '知识库列表' : 'Repositories'} ({formatCount(totalCount ?? (apiMode ? undefined : visibleKnowledgeBases.length))})
+            {/* 总数优先用后端统计；`stats.knowledge_bases` 缺失时回落到**列表实际条数**——
+                以前这里回落到 `undefined`、渲染成 `(—)`，用户看到的就是「页面坏了」。
+                本页列表是全量渲染、无分页，条数就是真实可见量。 */}
+            {lang === 'zh' ? '知识库列表' : 'Repositories'} ({formatCount(totalCount ?? visibleKnowledgeBases.length)})
           </div>
 
           <div className="space-y-2.5">
@@ -454,7 +460,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   <p className="mt-1.5 text-[13px] leading-relaxed text-slate-400 line-clamp-2">
                     {kb.description || (lang === 'zh' ? '暂无描述' : 'No description')}
                   </p>
-                  <div className="mt-3 flex items-center justify-between border-t border-slate-700/40 pt-3 text-caption">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-slate-700/40 pt-3 text-caption">
                     <span>
                       {/*
                         只显示**后端确实提供了**的计数。`/api/v1/materials/knowledge-bases` 的投影里
@@ -468,19 +474,20 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                         kb.embeddedCount === undefined ? null : `${formatCount(kb.embeddedCount)} ${lang === 'zh' ? '向量' : 'vectors'}`,
                       ].filter((part): part is string => part !== null).join(' · ')}
                     </span>
-                    <span>{kb.updatedAt}</span>
+                    <span className="shrink-0">{kb.updatedAt}</span>
                   </div>
                 </div>
               );
             })})
           </div>
         </div>
+        </div>
 
         {/* Right Column: Chunks & RAG Semantic Tester (8 cols) */}
         <div className="lg:col-span-8 space-y-6">
           {/* Active Knowledge Base Info & Chunks */}
           <div className="space-y-4 rounded-2xl bg-slate-900/80 p-5">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="flex items-center gap-2 text-section-title">
                   <Layers className="h-4 w-4 text-emerald-400" />
@@ -501,8 +508,8 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {apiMode && activeKb?.id && canWrite && <button type="button" onClick={() => void confirmRebuildChunks()} disabled={assetBusy !== ''} className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${assetBusy === 'refresh' ? 'animate-spin' : ''}`} />{lang === 'zh' ? '重建切片' : 'Rebuild chunks'}</button>}
-                <span className="rounded-lg bg-slate-800 px-2 py-1 text-[12px] text-slate-300">
+                {apiMode && activeKb?.id && canWrite && <button type="button" onClick={() => void confirmRebuildChunks()} disabled={assetBusy !== ''} className="inline-flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-xl border border-slate-700 bg-slate-800/60 px-3.5 text-[13px] font-semibold text-slate-200 hover:bg-slate-800 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${assetBusy === 'refresh' ? 'animate-spin' : ''}`} />{lang === 'zh' ? '重建切片' : 'Rebuild chunks'}</button>}
+                <span className="shrink-0 whitespace-nowrap rounded-lg bg-slate-800 px-2 py-1 text-[12px] text-slate-300">
                   {apiMode
                     ? (lang === 'zh' ? '向量状态由后端同步任务决定' : 'Embedding state is owned by the backend')
                     : '100% Vector Embedded'}
@@ -552,7 +559,7 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
             {apiMode && assetError && <div role="alert" className="rounded-lg border border-rose-500/30 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">{assetError}</div>}
 
             {apiMode && assetDetails && (
-              <div className="grid grid-cols-1 gap-4 border-t border-slate-800 pt-4 xl:grid-cols-2">
+              <div className="grid grid-cols-1 items-start gap-4 border-t border-slate-800 pt-4 xl:grid-cols-2">
                 <section className="rounded-xl bg-slate-950/40 px-4 py-3">
                   <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-slate-300"><History className="h-3.5 w-3.5 text-indigo-300" />{lang === 'zh' ? '知识库版本' : 'Revisions'}</div>
                   <div className="max-h-36 space-y-1.5 overflow-y-auto">
@@ -597,15 +604,15 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
 
           {/* RAG Semantic Retrieval Tester */}
           <div className="space-y-4 rounded-2xl bg-slate-900/80 p-5">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-section-title">
-                <Zap className="h-4 w-4 text-amber-400" />
-                <span>{lang === 'zh' ? '检索测试' : 'Retrieval test'}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex min-w-0 flex-wrap items-center gap-2 text-section-title">
+                <Zap className="h-4 w-4 shrink-0 text-amber-400" />
+                <span className="whitespace-nowrap">{lang === 'zh' ? '检索测试' : 'Retrieval test'}</span>
                 <span className="text-caption font-normal">
                   {lang === 'zh' ? '（问一个问题，看看 AI 会从知识库里找到哪几段）' : '(see which chunks the AI would retrieve)'}
                 </span>
               </h3>
-              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[12px] text-amber-400">
+              <span className="shrink-0 whitespace-nowrap rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[12px] text-amber-400">
                 {apiMode ? (lang === 'zh' ? '后端混合召回' : 'Backend hybrid retrieval') : 'Cosine Similarity'}
               </span>
             </div>

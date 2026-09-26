@@ -451,7 +451,9 @@ export const ArticlesView: React.FC<ArticlesViewProps> = ({
           （＝卡片白）配 `text-white`（＝主文字深色）——**不能写 `bg-white`**，
           亮色主题把 `--color-white` 重映射成了主文字色，会得到一块黑胶囊。 */}
       <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
-      <div className="flex flex-col gap-3 border-b border-slate-800 p-4 lg:flex-row lg:items-center lg:justify-between">
+      {/* 控制条横排的断点用 xl 而非 lg：1024 恰好在 lg 上，药丸组（含「回收站」）+ 分类 + 搜索
+          一行放不下，药丸组被压成内部横滚——「回收站」看着像被切掉。1280 起再横排。 */}
+      <div className="flex flex-col gap-3 border-b border-slate-800 p-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-center gap-1 overflow-x-auto rounded-lg bg-slate-800 p-1">
           {([
             { key: 'all' as const, label: lang === 'zh' ? '全部' : 'All', count: sourceArticles.length },
