@@ -1,5 +1,14 @@
 @extends('site.layout')
 
+@push('head')
+    {{--
+     * 404 不该被收录。此前这一页没有任何 robots 指令（2026-09-19 SEO 审计提的），
+     * 搜索引擎只能靠 HTTP 404 状态码自己判断——明确写出来更保险。
+     * 用 `follow` 而不是 `nofollow`：不收录这一页，但页内链接（回首页/归档）仍可被跟随。
+     */ --}}
+    <meta name="robots" content="noindex, follow">
+@endpush
+
 @section('content')
     @php
         /*

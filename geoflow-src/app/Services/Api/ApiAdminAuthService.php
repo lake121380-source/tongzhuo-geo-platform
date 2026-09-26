@@ -57,13 +57,29 @@ class ApiAdminAuthService
             $admin->forceFill(['last_login' => now()])->save();
             $this->loginLockService->clearFailedAttempts($username, $ipAddress);
 
+            $token = $this->tokenService->createToken(
+                ApiTokenService::LOGIN_TOKEN_PREFIX.$username.' '.date('Y-m-d H:i:s'),
+                $this->tokenService->getCliLoginScopes(),
+                (int) $admin->id
+            );
+
+            /*
+             * 回收这个管理员的旧登录令牌。
+             *
+             * 每次登录都铸一个新的全权限令牌，此前**没有任何回收**——实测半个月积到 130+ 条，
+             * 「系统设置 → API Token」那页被撑到 33,007px。策略是「保留最近的若干个」，
+             * 只碰自动铸的 `CLI Login *`，运营手工建的具名令牌一条都不动；
+             * 正在用的会话是最近登录的，不会被打断。条数由
+             * `geoflow.api_login_token_keep` 配（默认 5）。
+             */
+            $this->tokenService->pruneLoginTokens(
+                (int) $admin->id,
+                max(1, (int) config('geoflow.api_login_token_keep', 5)),
+            );
+
             return [
                 'admin' => $admin,
-                'token' => $this->tokenService->createToken(
-                    'CLI Login '.$username.' '.date('Y-m-d H:i:s'),
-                    $this->tokenService->getCliLoginScopes(),
-                    (int) $admin->id
-                ),
+                'token' => $token,
             ];
         });
         if (($loginResult['error'] ?? null) === 'account_locked') {

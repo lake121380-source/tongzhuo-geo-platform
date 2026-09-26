@@ -24,6 +24,8 @@ return [
     'archive_title' => '文章归档',
     'archive_month_title' => ':period 的文章',
     'archive_empty' => '该时段暂无文章。',
+    'archive_by_month' => '按月浏览',
+    'archive_meta_description' => ':site 的全部文章归档——按月份浏览已发布的内容。',
     'pagination_prev' => '上一页',
     'pagination_next' => '下一页',
     'search_placeholder' => '搜索文章标题或摘要…',

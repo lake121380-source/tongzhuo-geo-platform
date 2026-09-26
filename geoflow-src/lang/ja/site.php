@@ -22,6 +22,8 @@ return [
     'archive_title' => 'アーカイブ',
     'archive_month_title' => ':period の記事',
     'archive_empty' => 'この期間の記事はありません。',
+    'archive_by_month' => '月別に見る',
+    'archive_meta_description' => ':site の全記事アーカイブ。公開済みの記事を月別に閲覧できます。',
     'pagination_prev' => '前へ',
     'pagination_next' => '次へ',
     'search_placeholder' => 'タイトルまたは概要を検索…',

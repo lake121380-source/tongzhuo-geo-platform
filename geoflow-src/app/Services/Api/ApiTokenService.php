@@ -11,6 +11,14 @@ use Laravel\Sanctum\PersonalAccessToken;
 class ApiTokenService
 {
     /**
+     * 自动铸出来的登录令牌的前缀。
+     *
+     * ⚠️ 这个前缀是**回收策略的判据**（见 `pruneLoginTokens`）：只有以它开头的令牌才会被
+     * 自动回收，运营手工建的具名令牌一条都不碰。改文案时别把它当成普通字符串。
+     */
+    public const LOGIN_TOKEN_PREFIX = 'CLI Login ';
+
+    /**
      * 拉取 Token 列表（按创建时间倒序）。
      *
      * @return list<array<string,mixed>>
@@ -77,6 +85,47 @@ class ApiTokenService
     /**
      * 撤销指定 Token（Sanctum 语义为物理删除）。
      */
+    /**
+     * 回收这个管理员的**登录令牌**，避免只增不减。
+     *
+     * 背景：每次登录都会铸一个新的 `CLI Login <用户> <时间>` 全权限令牌（那是 SPA 的 bearer 凭据），
+     * 而此前**没有任何回收**——实测一个只用了半个月的部署积到 **130+ 条**，
+     * 把「系统设置 → API Token」那页撑到 33,007px。
+     * 令牌有默认 TTL（`geoflow.api_token_default_ttl_days`，默认 30 天），所以不是永久有效，
+     * 但**堆积量 = 登录频率 × TTL**，一样会失控。
+     *
+     * 只删**同时**满足这两条的（任一不满足就留着）：
+     *   ① 名字以 `LOGIN_TOKEN_PREFIX` 开头 —— 自动铸的；运营手工建的具名令牌一条都不碰；
+     *   ② 已经过期，**或者**按新→旧排序排在 `$keep` 名之后 —— 正在用的会话是最近登录的，
+     *      不会被这个策略打断。
+     *
+     * @return int 实际删掉的条数
+     */
+    public function pruneLoginTokens(int $adminId, int $keep = 5): int
+    {
+        $keep = max(1, $keep);
+        $rows = PersonalAccessToken::query()
+            ->where('tokenable_type', Admin::class)
+            ->where('tokenable_id', $adminId)
+            ->where('name', 'like', self::LOGIN_TOKEN_PREFIX.'%')
+            ->orderByDesc('id')
+            ->get(['id', 'expires_at']);
+
+        $now = now();
+        $removed = 0;
+        foreach ($rows as $index => $row) {
+            $expiresAt = $row->expires_at;
+            $expired = $expiresAt !== null && Carbon::parse((string) $expiresAt)->lessThan($now);
+            if (! $expired && $index < $keep) {
+                continue;
+            }
+            $row->delete();
+            $removed++;
+        }
+
+        return $removed;
+    }
+
     public function revokeToken(int $tokenId): void
     {
         $affected = PersonalAccessToken::query()

@@ -22,6 +22,8 @@ return [
     'archive_title' => 'Архив',
     'archive_month_title' => 'Статьи за :period',
     'archive_empty' => 'За этот период статей нет.',
+    'archive_by_month' => 'По месяцам',
+    'archive_meta_description' => 'Полный архив :site — просмотр опубликованных статей по месяцам.',
     'pagination_prev' => 'Назад',
     'pagination_next' => 'Далее',
     'search_placeholder' => 'Искать заголовок или выдержку…',

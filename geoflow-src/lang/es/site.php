@@ -22,6 +22,8 @@ return [
     'archive_title' => 'Archivo',
     'archive_month_title' => 'Artículos de :period',
     'archive_empty' => 'No hay artículos en este periodo.',
+    'archive_by_month' => 'Ver por mes',
+    'archive_meta_description' => 'Archivo completo de :site: explora los artículos publicados por mes.',
     'pagination_prev' => 'Anterior',
     'pagination_next' => 'Siguiente',
     'search_placeholder' => 'Buscar título o extracto…',

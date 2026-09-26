@@ -15,6 +15,8 @@
 
     <div class="tz-container tz-section">
         @if(count($tzArchives) > 0)
+            {{-- 这一页此前只有 h1、没有任何二级标题（2026-09-19 SEO 审计提的）。 --}}
+            <h2 class="tz-section-title">{{ __('site.archive_by_month') }}</h2>
             <ul class="tz-months">
                 @foreach($tzArchives as $tzMonth)
                     <li class="tz-month">

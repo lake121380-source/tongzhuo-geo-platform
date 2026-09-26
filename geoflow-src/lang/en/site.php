@@ -24,6 +24,8 @@ return [
     'archive_title' => 'Archive',
     'archive_month_title' => 'Articles in :period',
     'archive_empty' => 'No articles in this period.',
+    'archive_by_month' => 'Browse by month',
+    'archive_meta_description' => 'The full :site archive — browse published articles by month.',
     'pagination_prev' => 'Previous',
     'pagination_next' => 'Next',
     'search_placeholder' => 'Search title or excerpt…',

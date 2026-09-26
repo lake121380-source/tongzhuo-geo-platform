@@ -40,6 +40,9 @@
             'featuredArticles' => $featuredArticles,
             'hotArticles' => $hotArticles,
             'leadForms' => $leadForms ?? collect(),
+            // 本模板自己的 hero 已经是这一页的 h1（见上面的 home-hero-title），
+            // 所以模块标题不要再升级成 h1——否则首页会出两个 h1。
+            'heroHeadingAlreadyUsed' => $search === '' && ! $category && ! $categoryMissing && (int) request('page', 1) === 1,
         ])
 
         @if($search === '' && ! $category && ! $categoryMissing && (int) request('page', 1) === 1 && $featuredArticles->isNotEmpty())

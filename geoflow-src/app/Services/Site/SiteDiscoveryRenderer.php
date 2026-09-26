@@ -3,10 +3,12 @@
 namespace App\Services\Site;
 
 use App\Models\Category;
+use App\Models\SiteSetting;
 use App\Models\HostedSiteProfile;
 use App\Support\Site\CompanyProfile;
 use App\Support\Site\CurrentSite;
 use App\Support\Site\SiteSettingsBag;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 
 final class SiteDiscoveryRenderer
@@ -161,19 +163,28 @@ final class SiteDiscoveryRenderer
 
         $urls = [];
         if ($this->indexingAllowed()) {
-            $urls[] = ['loc' => $this->urls->home(), 'lastmod' => null];
+            // 静态页的 lastmod：这些页面是从站点设置渲染出来的，「这些键最后一次改动的时间」
+            // 就是页面最后一次真正变样的时间（详见 settingsLastmod 的注释）。
+            $urls[] = ['loc' => $this->urls->home(), 'lastmod' => $this->settingsLastmod([
+                'site_name', 'site_subtitle', 'site_description', 'homepage_modules', 'homepage_style', 'active_theme',
+            ])];
             /*
              * 静态页与分类页此前**完全不在 sitemap 里**（实测只有首页 + 文章两条），
              * 而 `/about` 是唯一讲"这家公司是谁"的页面、分类页是天然的落地页——
              * 等于自己放弃了这批入口。2026-09-16 补上。
              * `/services` 只在配置了服务清单时才有内容（否则该页 404），所以条件加入。
              */
-            $urls[] = ['loc' => $this->urls->about(), 'lastmod' => null];
-            // 联系我们（2026-09-25 新增的静态页），同样是没有 lastmod 语义的固定页。
-            $urls[] = ['loc' => $this->urls->contact(), 'lastmod' => null];
-            $urls[] = ['loc' => $this->urls->url('/archive'), 'lastmod' => null];
+            $urls[] = ['loc' => $this->urls->about(), 'lastmod' => $this->settingsLastmod(['about_title', 'about_content'])];
+            // 联系我们（2026-09-25 新增的静态页）：正文取自「公司实体」那份设置。
+            $urls[] = ['loc' => $this->urls->contact(), 'lastmod' => $this->settingsLastmod([
+                'company_legal_name', 'company_tagline', 'contact_email', 'contact_phone', 'company_address',
+            ])];
+            // 归档页列的是全部文章，所以它的更新信号就是**最新一篇**的 updated_at。
+            $urls[] = ['loc' => $this->urls->url('/archive'), 'lastmod' => $this->articlesLastmod()];
             if (CompanyProfile::fromSettings(SiteSettingsBag::all())->hasServices()) {
-                $urls[] = ['loc' => $this->urls->services(), 'lastmod' => null];
+                $urls[] = ['loc' => $this->urls->services(), 'lastmod' => $this->settingsLastmod([
+                    'company_services', 'company_services_title', 'company_legal_name',
+                ])];
             }
             if (Schema::hasTable('categories')) {
                 $categories = Category::query()
@@ -195,6 +206,37 @@ final class SiteDiscoveryRenderer
         }
 
         return $this->urlSetXml($urls);
+    }
+
+    /**
+     * 静态页的 `lastmod`。
+     *
+     * 这些页面没有自己的「更新时间」列——**它们是从站点设置渲染出来的**
+     * （站点名 / 副标题 / 关于页正文 / 服务清单 / 联系方式…），
+     * 所以「这些键最后一次改动的时间」就是这一页最后一次真正变样的时间。
+     *
+     * 原先这里一律写 `null`（注释的理由是「没有 lastmod 语义的固定页」），
+     * 结果是 sitemap 里只有文章与分类带更新信号、静态页一条都没有
+     * （2026-09-19 SEO 审计提的）。**取不到就返回 null**——宁可没有信号，也不编一个日期。
+     *
+     * @param  list<string>  $keys
+     */
+    private function settingsLastmod(array $keys): ?string
+    {
+        if (! Schema::hasTable('site_settings')) {
+            return null;
+        }
+        $latest = SiteSetting::query()->whereIn('setting_key', $keys)->max('updated_at');
+
+        return $latest ? Carbon::parse($latest)->toAtomString() : null;
+    }
+
+    /** 归档页列的是全部已发布文章，所以它的更新信号是**最新一篇**的 updated_at。 */
+    private function articlesLastmod(): ?string
+    {
+        $latest = $this->articles->query()->max('updated_at');
+
+        return $latest ? Carbon::parse($latest)->toAtomString() : null;
     }
 
     public function sitemapShardXml(int $page): string

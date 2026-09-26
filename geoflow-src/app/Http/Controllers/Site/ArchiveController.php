@@ -70,7 +70,9 @@ class ArchiveController extends Controller
             'siteDescription' => $siteDescription,
             'siteKeywords' => $siteKeywords,
             'pageTitle' => $pageTitle,
-            'pageDescription' => $siteDescription,
+            // 归档页此前用的是**公司简介**（站点级 description），和首页一字不差——
+            // 这一页该讲的是「这儿有什么」，不是「公司做什么」（2026-09-19 SEO 审计提的）。
+            'pageDescription' => __('site.archive_meta_description', ['site' => $siteTitle]),
             'pageKeywords' => $siteKeywords,
             'pageOgType' => 'website',
             'canonicalUrl' => $this->urls->url('/archive'),

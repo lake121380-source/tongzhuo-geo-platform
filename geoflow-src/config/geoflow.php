@@ -350,6 +350,8 @@ return [
     'api_login_rate_limit_decay_seconds' => (int) env('GEOFLOW_API_LOGIN_RATE_LIMIT_DECAY', 60),
     // API Token 默认有效期（天）
     'api_token_default_ttl_days' => (int) env('GEOFLOW_API_TOKEN_DEFAULT_TTL_DAYS', 30),
+    // 每个管理员的**登录令牌**保留条数（每次登录铸一个，超过就回收最旧的；只碰自动铸的 `CLI Login *`）
+    'api_login_token_keep' => (int) env('GEOFLOW_API_LOGIN_TOKEN_KEEP', 5),
     // 会话空闲超时（秒）
     'session_timeout_seconds' => (int) env('GEOFLOW_SESSION_TIMEOUT', 2592000),
 

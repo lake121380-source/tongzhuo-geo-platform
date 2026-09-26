@@ -81,7 +81,14 @@
         class="geo-home-modules {{ $containerClass }} {{ $spacingClass }} {{ $radiusClass }}"
         style="--geo-home-accent: {{ e($style['accent_color']) }}; --geo-home-bg: {{ e($style['background_color']) }}; --geo-home-surface: {{ e($style['surface_color']) }}; --geo-home-text: {{ e($style['text_color']) }}; --geo-home-muted: {{ e($style['muted_color']) }};"
     >
-        @php $heroHeadingUsed = false; @endphp
+        @php
+            /*
+             * 调用方可以声明「这一页上面已经有一个 h1 了」（例如兜底首页 site/home.blade.php
+             * 自己的 hero）。那种情况下模块标题一律用 h2，保证**一页只有一个 h1**。
+             * 26 个主题首页都不传这个参数 → 行为与以前完全一致。
+             */
+            $heroHeadingUsed = (bool) ($heroHeadingAlreadyUsed ?? false);
+        @endphp
         @foreach($modules as $module)
             @php
                 $type = (string) ($module['type'] ?? 'rich_text');
