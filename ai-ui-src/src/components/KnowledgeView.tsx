@@ -453,14 +453,18 @@ export const KnowledgeView: React.FC<KnowledgeViewProps> = ({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-card-title line-clamp-1">{kb.name}</h3>
+                    <h3 className="text-card-title line-clamp-2">{kb.name}</h3>
                     {/* 后端枚举（indexed / processing / failed / ready）翻成中文语义。 */}
                     <StatusBadge spec={kbBadgeSpec(kb)} lang={lang} className="!text-[12px] shrink-0" />
                   </div>
-                  <p className="mt-1.5 text-[13px] leading-relaxed text-slate-400 line-clamp-2">
-                    {kb.description || (lang === 'zh' ? '暂无描述' : 'No description')}
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-slate-700/40 pt-3 text-caption">
+                  {/* 描述**只在有内容时**渲染。原来回落成一行「暂无描述」：六张卡全印一遍，
+                      没有信息量还白占一行高度（哥哥 2026-09-26 看图后点出的）。 */}
+                  {kb.description && (
+                    <p className="mt-1.5 text-[13px] leading-relaxed text-slate-400 line-clamp-2">{kb.description}</p>
+                  )}
+                  {/* 底部计数行不再画分隔线（原来是 `border-t + pt-3`，每张卡多 13px）：
+                      标题/徽章已经把信息分层了，再加一条线是多余的分割。 */}
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-caption">
                     <span>
                       {/*
                         只显示**后端确实提供了**的计数。`/api/v1/materials/knowledge-bases` 的投影里
